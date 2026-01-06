@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBT调试工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: white;
+            padding: 15px 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 20px;
+            color: #333;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            padding: 20px;
+            gap: 20px;
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .panel-header {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: 600;
+            font-size: 14px;
+            color: #495057;
+        }
+        
+        .panel-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .left-panel {
+            width: 350px;
+        }
+        
+        .right-panel {
+            flex: 1;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 13px;
+            color: #495057;
+            font-weight: 500;
+        }
+        
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 13px;
+            transition: border-color 0.2s;
+        }
+        
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .form-textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+        }
+        
+        .session-info {
+            background: #e7f3ff;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-size: 12px;
+        }
+        
+        .session-info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        
+        .session-info-label {
+            color: #0066cc;
+            font-weight: 500;
+        }
+        
+        .session-info-value {
+            color: #333;
+        }
+        
+        .variable-list {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .variable-item {
+            padding: 6px 10px;
+            background: white;
+            border-radius: 3px;
+            margin-bottom: 5px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .variable-name {
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .variable-value {
+            color: #6c757d;
+        }
+        
+        .conversation-area {
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            min-height: 400px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        
+        .message.user .message-avatar {
+            background: #667eea;
+            color: white;
+        }
+        
+        .message.assistant .message-avatar {
+            background: #28a745;
+            color: white;
+        }
+        
+        .message.system .message-avatar {
+            background: #ffc107;
+            color: white;
+        }
+        
+        .message-content {
+            flex: 1;
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .message.user .message-content {
+            background: #667eea;
+            color: white;
+        }
+        
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #dee2e6;
+        }
+        
+        .message.system .message-content {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffc107;
+            text-align: center;
+        }
+        
+        .no-messages {
+            text-align: center;
+            color: #6c757d;
+            padding: 40px;
+            font-size: 14px;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #dee2e6;
+            background: #f8f9fa;
+        }
+        
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #6c757d;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .tab:hover {
+            color: #495057;
+            background: #e9ecef;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: white;
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 20px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .log-list {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .log-item {
+            padding: 8px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .log-time {
+            color: #6c757d;
+        }
+        
+        .log-message {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>CBT调试工具</h1>
+        <div class="header-actions">
+            <button class="btn btn-secondary" onclick="clearDebug()">清除调试</button>
+            <button class="btn" onclick="exportDebugData()">导出数据</button>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="panel left-panel">
+            <div class="panel-header">调试控制</div>
+            <div class="panel-body">
+                <div class="form-group">
+                    <label class="form-label">选择脚本</label>
+                    <select class="form-select" id="scriptSelect" onchange="onScriptChange()">
+                        <option value="">加载中...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">用户ID</label>
+                    <input type="text" class="form-input" id="userId" value="debug_user_001">
+                </div>
+                
+                <button class="btn" style="width: 100%; margin-bottom: 20px;" onclick="startDebugSession()">
+                    开始调试会话
+                </button>
+                
+                <div id="sessionInfoPanel" style="display: none;">
+                    <div class="session-info">
+                        <div class="session-info-item">
+                            <span class="session-info-label">会话ID:</span>
+                            <span class="session-info-value" id="sessionIdDisplay">-</span>
+                        </div>
+                        <div class="session-info-item">
+                            <span class="session-info-label">状态:</span>
+                            <span class="session-info-value" id="sessionStatusDisplay">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">变量状态</label>
+                        <div class="variable-list" id="variableList">
+                            <div style="text-align: center; color: #6c757d; padding: 10px; font-size: 12px;">
+                                暂无变量
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">模拟用户输入</label>
+                        <textarea class="form-textarea" id="userInput" placeholder="输入用户消息..."></textarea>
+                    </div>
+                    
+                    <button class="btn" style="width: 100%;" onclick="sendDebugMessage()">
+                        发送消息
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel right-panel">
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('conversation')">对话记录</div>
+                <div class="tab" onclick="switchTab('logs')">执行日志</div>
+                <div class="tab" onclick="switchTab('analysis')">分析报告</div>
+            </div>
+            
+            <div class="tab-content active" id="conversationTab">
+                <div class="conversation-area" id="conversationArea">
+                    <div class="no-messages">暂无对话记录，点击"开始调试会话"开始</div>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="logsTab">
+                <div class="log-list" id="logList">
+                    <div style="text-align: center; color: #6c757d; padding: 40px;">暂无日志</div>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="analysisTab">
+                <div id="analysisContent">
+                    <div style="text-align: center; color: #6c757d; padding: 40px;">暂无分析数据</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        let currentSessionId = null;
+        let currentScriptId = null;
+        let conversationLog = [];
+        let executionLogs = [];
+        
+        // 页面加载时获取脚本列表
+        window.onload = function() {
+            loadScriptList();
+        };
+        
+        async function loadScriptList() {
+            try {
+                const response = await fetch(`${API_BASE}/scripts`);
+                if (!response.ok) throw new Error('Failed to load scripts');
+                
+                const scripts = await response.json();
+                const select = document.getElementById('scriptSelect');
+                
+                select.innerHTML = '<option value="">-- 请选择脚本 --</option>' +
+                    scripts.map(s => `<option value="${s.script_id}">${s.script_name}</option>`).join('');
+            } catch (error) {
+                alert('加载脚本列表失败: ' + error.message);
+            }
+        }
+        
+        function onScriptChange() {
+            currentScriptId = document.getElementById('scriptSelect').value;
+        }
+        
+        async function startDebugSession() {
+            if (!currentScriptId) {
+                alert('请先选择脚本');
+                return;
+            }
+            
+            const userId = document.getElementById('userId').value.trim();
+            if (!userId) {
+                alert('请输入用户ID');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/sessions`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        user_id: userId,
+                        script_id: currentScriptId
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to create session');
+                
+                const data = await response.json();
+                currentSessionId = data.session_id;
+                
+                document.getElementById('sessionInfoPanel').style.display = 'block';
+                document.getElementById('sessionIdDisplay').textContent = 
+                    currentSessionId.substring(0, 8) + '...';
+                document.getElementById('sessionStatusDisplay').textContent = '活跃';
+                
+                addLog('会话已创建', `Session ID: ${currentSessionId}`);
+                clearConversation();
+                
+                // 发送初始消息触发第一个Action
+                await sendDebugMessage('你好');
+                
+            } catch (error) {
+                alert('创建调试会话失败: ' + error.message);
+            }
+        }
+        
+        async function sendDebugMessage(message = null) {
+            if (!currentSessionId) {
+                alert('请先开始调试会话');
+                return;
+            }
+            
+            const input = document.getElementById('userInput');
+            const userMessage = message || input.value.trim();
+            
+            if (!userMessage && !message) return;
+            
+            try {
+                if (!message) {
+                    addMessage('user', userMessage);
+                    input.value = '';
+                }
+                
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        script_id: currentScriptId,
+                        message: userMessage
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to send message');
+                
+                const data = await response.json();
+                
+                addLog('消息已发送', userMessage);
+                
+                if (data.ai_message) {
+                    addMessage('assistant', data.ai_message);
+                    addLog('收到AI回复', data.ai_message);
+                }
+                
+                if (data.variables) {
+                    updateVariables(data.variables);
+                }
+                
+                if (data.completed) {
+                    addMessage('system', '调试会话已完成');
+                    addLog('会话完成', '所有Action已执行完毕');
+                    document.getElementById('sessionStatusDisplay').textContent = '已完成';
+                }
+                
+                updateAnalysis();
+                
+            } catch (error) {
+                alert('发送消息失败: ' + error.message);
+            }
+        }
+        
+        function addMessage(role, content) {
+            const area = document.getElementById('conversationArea');
+            
+            if (area.querySelector('.no-messages')) {
+                area.innerHTML = '';
+            }
+            
+            const avatar = role === 'user' ? 'U' : role === 'assistant' ? 'AI' : '!';
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div class="message-content">${content}</div>
+            `;
+            
+            area.appendChild(messageDiv);
+            area.scrollTop = area.scrollHeight;
+            
+            conversationLog.push({role, content, time: new Date()});
+        }
+        
+        function updateVariables(variables) {
+            const list = document.getElementById('variableList');
+            
+            if (Object.keys(variables).length === 0) {
+                list.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 10px; font-size: 12px;">暂无变量</div>';
+                return;
+            }
+            
+            list.innerHTML = Object.entries(variables).map(([key, value]) => `
+                <div class="variable-item">
+                    <span class="variable-name">${key}</span>
+                    <span class="variable-value">${JSON.stringify(value)}</span>
+                </div>
+            `).join('');
+        }
+        
+        function addLog(action, detail) {
+            const time = new Date().toLocaleTimeString();
+            executionLogs.push({time, action, detail});
+            
+            const logList = document.getElementById('logList');
+            if (logList.querySelector('div[style*="center"]')) {
+                logList.innerHTML = '';
+            }
+            
+            const logItem = document.createElement('div');
+            logItem.className = 'log-item';
+            logItem.innerHTML = `
+                <span class="log-time">[${time}]</span>
+                <span class="log-message">${action}: ${detail}</span>
+            `;
+            
+            logList.appendChild(logItem);
+        }
+        
+        function updateAnalysis() {
+            const analysisContent = document.getElementById('analysisContent');
+            
+            const messageCount = conversationLog.length;
+            const userMessages = conversationLog.filter(m => m.role === 'user').length;
+            const aiMessages = conversationLog.filter(m => m.role === 'assistant').length;
+            
+            analysisContent.innerHTML = `
+                <h3 style="margin-bottom: 15px; font-size: 16px;">会话分析</h3>
+                <div style="margin-bottom: 20px;">
+                    <div style="margin-bottom: 10px;"><strong>总消息数:</strong> ${messageCount}</div>
+                    <div style="margin-bottom: 10px;"><strong>用户消息:</strong> ${userMessages}</div>
+                    <div style="margin-bottom: 10px;"><strong>AI消息:</strong> ${aiMessages}</div>
+                    <div style="margin-bottom: 10px;"><strong>执行操作:</strong> ${executionLogs.length}</div>
+                </div>
+                <h3 style="margin-bottom: 15px; font-size: 16px;">执行统计</h3>
+                <div>
+                    <div style="margin-bottom: 10px;"><strong>开始时间:</strong> ${conversationLog[0]?.time.toLocaleString() || '-'}</div>
+                    <div style="margin-bottom: 10px;"><strong>最后更新:</strong> ${conversationLog[conversationLog.length-1]?.time.toLocaleString() || '-'}</div>
+                </div>
+            `;
+        }
+        
+        function clearConversation() {
+            document.getElementById('conversationArea').innerHTML = 
+                '<div class="no-messages">调试会话开始</div>';
+            conversationLog = [];
+        }
+        
+        function clearDebug() {
+            if (!confirm('确定要清除所有调试数据吗？')) return;
+            
+            currentSessionId = null;
+            conversationLog = [];
+            executionLogs = [];
+            
+            document.getElementById('sessionInfoPanel').style.display = 'none';
+            clearConversation();
+            document.getElementById('logList').innerHTML = 
+                '<div style="text-align: center; color: #6c757d; padding: 40px;">暂无日志</div>';
+            document.getElementById('analysisContent').innerHTML = 
+                '<div style="text-align: center; color: #6c757d; padding: 40px;">暂无分析数据</div>';
+        }
+        
+        function exportDebugData() {
+            const data = {
+                sessionId: currentSessionId,
+                scriptId: currentScriptId,
+                conversation: conversationLog,
+                logs: executionLogs,
+                exportTime: new Date().toISOString()
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `debug_${currentSessionId || 'data'}_${Date.now()}.json`;
+            a.click();
+        }
+        
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName + 'Tab').classList.add('active');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+# 苏格拉底式提问技术脚本
+# 这是一个可复用的咨询技术脚本
+
+name: "苏格拉底式提问"
+version: "1.0"
+author: "HeartRule Team"
+description: "通过系统性提问帮助来访者检验和重构认知"
+technique_type: "认知重构"
+
+# 技术脚本结构：Topic → Action
+technique_id: "socratic_questioning"
+technique_name: "苏格拉底式提问"
+
+# 输入参数
+input_parameters:
+  - name: "target_belief"
+    description: "目标认知/信念"
+    required: true
+  - name: "context"
+    description: "认知产生的情境"
+    required: false
+
+# 输出结果
+output_variables:
+  - "alternative_thoughts"  # 替代性想法
+  - "evidence_for"  # 支持证据
+  - "evidence_against"  # 反对证据
+  - "reframed_belief"  # 重构后的信念
+
+# 执行步骤
+topic:
+  topic_id: "socratic_questioning_process"
+  topic_name: "苏格拉底式提问过程"
+  topic_goal: "通过提问引导来访者重新审视认知"
+  
+  actions:
+    # 步骤1：确认目标认知
+    - action_type: "ai_say"
+      action_id: "confirm_belief"
+      config:
+        content_template: |
+          我注意到你提到：${target_belief}
+          让我们一起来仔细审视一下这个想法。
+        say_goal: "确认并聚焦目标认知"
+        max_rounds: 1
+    
+    # 步骤2：寻找支持证据
+    - action_type: "ai_ask"
+      action_id: "ask_evidence_for"
+      config:
+        target_variable: "evidence_for"
+        question_template: "有什么证据支持这个想法吗？能具体说说吗？"
+        extraction_prompt: "提取用户提供的支持证据"
+        required: true
+        max_rounds: 3
+    
+    # 步骤3：寻找反对证据
+    - action_type: "ai_ask"
+      action_id: "ask_evidence_against"
+      config:
+        target_variable: "evidence_against"
+        question_template: "有没有什么证据或例子，可能与这个想法相矛盾？"
+        extraction_prompt: "提取用户提供的反对证据"
+        required: true
+        max_rounds: 3
+    
+    # 步骤4：探索替代性想法
+    - action_type: "ai_ask"
+      action_id: "explore_alternatives"
+      config:
+        target_variable: "alternative_thoughts"
+        question_template: |
+          如果是你的朋友遇到同样的情况，你会怎么看待这件事？
+          有没有其他角度可以理解这个情况？
+        extraction_prompt: "提取用户提出的替代性想法"
+        required: true
+        max_rounds: 4
+    
+    # 步骤5：生成重构后的信念
+    - action_type: "ai_think"
+      action_id: "generate_reframe"
+      config:
+        think_goal: "基于证据和替代想法，生成更平衡的认知"
+        input_variables:
+          - "target_belief"
+          - "evidence_for"
+          - "evidence_against"
+          - "alternative_thoughts"
+        output_variables:
+          - "reframed_belief"
+        prompt_template: |
+          原始信念：${target_belief}
+          支持证据：${evidence_for}
+          反对证据：${evidence_against}
+          替代想法：${alternative_thoughts}
+          
+          请生成一个更平衡、更合理的重构信念。
+    
+    # 步骤6：呈现重构结果
+    - action_type: "ai_say"
+      action_id: "present_reframe"
+      config:
+        content_template: |
+          基于我们刚才的讨论，我们可以尝试这样看待：
+          ${reframed_belief}
+          
+          这个新的想法对你来说感觉如何？
+        say_goal: "呈现重构后的认知，获得来访者反馈"
+        max_rounds: 2

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBT AI咨询师</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container {
+            width: 90%;
+            max-width: 800px;
+            height: 90vh;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .header {
+            padding: 20px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .chat-area {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f5f7fa;
+        }
+        
+        .message {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-start;
+        }
+        
+        .message.user {
+            flex-direction: row-reverse;
+        }
+        
+        .message-content {
+            max-width: 70%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+        
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin: 0 10px;
+        }
+        
+        .message.assistant .message-avatar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .message.user .message-avatar {
+            background: #e0e0e0;
+            color: #666;
+        }
+        
+        .input-area {
+            padding: 20px 30px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+        
+        #userInput {
+            flex: 1;
+            padding: 12px 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        
+        #userInput:focus {
+            border-color: #667eea;
+        }
+        
+        #sendButton {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        #sendButton:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        #sendButton:active {
+            transform: translateY(0);
+        }
+        
+        #sendButton:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 10px;
+            color: #666;
+        }
+        
+        .loading.active {
+            display: block;
+        }
+        
+        .session-info {
+            padding: 10px 30px;
+            background: #f5f7fa;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .init-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #666;
+        }
+        
+        .init-screen h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .init-button {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .init-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>CBT AI咨询师</h1>
+            <p>认知行为疗法 · 智能心理咨询</p>
+        </div>
+        
+        <div class="session-info" id="sessionInfo" style="display: none;">
+            <span>会话ID: <span id="sessionId">-</span></span>
+        </div>
+        
+        <div class="chat-area" id="chatArea">
+            <div class="init-screen" id="initScreen">
+                <h2>欢迎使用CBT AI咨询系统</h2>
+                <p style="margin-bottom: 30px;">点击下方按钮开始您的咨询之旅</p>
+                <button class="init-button" onclick="startSession()">开始咨询</button>
+            </div>
+        </div>
+        
+        <div class="loading" id="loading">AI正在思考中...</div>
+        
+        <div class="input-area" id="inputArea" style="display: none;">
+            <input 
+                type="text" 
+                id="userInput" 
+                placeholder="请输入您的回复..." 
+                onkeypress="handleKeyPress(event)"
+            >
+            <button id="sendButton" onclick="sendMessage()">发送</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        const DEFAULT_USER_ID = 'user_' + Math.random().toString(36).substr(2, 9);
+        const DEFAULT_SCRIPT_ID = 'cbt_depression_001';  // 需要在数据库中存在
+        
+        let currentSessionId = null;
+        let isWaitingResponse = false;
+        
+        async function startSession() {
+            try {
+                const response = await fetch(`${API_BASE}/sessions`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        user_id: DEFAULT_USER_ID,
+                        script_id: DEFAULT_SCRIPT_ID
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to create session');
+                
+                const data = await response.json();
+                currentSessionId = data.session_id;
+                
+                // 更新UI
+                document.getElementById('initScreen').style.display = 'none';
+                document.getElementById('inputArea').style.display = 'flex';
+                document.getElementById('sessionInfo').style.display = 'block';
+                document.getElementById('sessionId').textContent = currentSessionId.substr(0, 8) + '...';
+                
+                // 发送初始消息触发第一个Action
+                await sendMessage('你好');
+                
+            } catch (error) {
+                alert('启动会话失败: ' + error.message);
+            }
+        }
+        
+        async function sendMessage(message = null) {
+            if (isWaitingResponse) return;
+            
+            const input = document.getElementById('userInput');
+            const userMessage = message || input.value.trim();
+            
+            if (!userMessage && !message) return;
+            
+            // 显示用户消息（如果不是初始消息）
+            if (!message) {
+                addMessage('user', userMessage);
+                input.value = '';
+            }
+            
+            isWaitingResponse = true;
+            document.getElementById('sendButton').disabled = true;
+            document.getElementById('loading').classList.add('active');
+            
+            try {
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        script_id: DEFAULT_SCRIPT_ID,
+                        message: userMessage
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to send message');
+                
+                const data = await response.json();
+                
+                // 显示AI回复
+                if (data.ai_message) {
+                    addMessage('assistant', data.ai_message);
+                }
+                
+                // 检查是否完成
+                if (data.completed) {
+                    addMessage('system', '咨询会话已完成。感谢您的参与！');
+                    document.getElementById('inputArea').style.display = 'none';
+                }
+                
+            } catch (error) {
+                alert('发送消息失败: ' + error.message);
+            } finally {
+                isWaitingResponse = false;
+                document.getElementById('sendButton').disabled = false;
+                document.getElementById('loading').classList.remove('active');
+            }
+        }
+        
+        function addMessage(role, content) {
+            const chatArea = document.getElementById('chatArea');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            
+            if (role === 'system') {
+                messageDiv.innerHTML = `
+                    <div class="message-content" style="background: #ffc107; color: white; max-width: 100%; text-align: center;">
+                        ${content}
+                    </div>
+                `;
+            } else {
+                const avatar = role === 'assistant' ? 'AI' : 'U';
+                messageDiv.innerHTML = `
+                    <div class="message-avatar">${avatar}</div>
+                    <div class="message-content">${content}</div>
+                `;
+            }
+            
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+    </script>
+</body>
+</html>

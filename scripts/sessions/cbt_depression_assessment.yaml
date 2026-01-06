@@ -1,0 +1,164 @@
+# CBT抑郁症初次评估会谈脚本
+# 这是一个示例脚本，用于演示会谈流程的基本结构
+
+metadata:
+  name: "CBT抑郁症初次评估会谈"
+  version: "1.0"
+  author: "HeartRule Team"
+  description: "用于抑郁症患者的初次评估会谈，建立关系并收集基础信息"
+  target_audience: "抑郁症患者"
+  estimated_duration: "30-45分钟"
+
+# 会谈结构：Session → Phase → Topic → Action
+session:
+  session_id: "cbt_depression_assessment_v1"
+  session_name: "CBT抑郁症初次评估会谈"
+  
+  phases:
+    # ===== 阶段1：建立关系 =====
+    - phase_id: "phase_1_rapport"
+      phase_name: "建立关系阶段"
+      phase_goal: "与来访者建立初步信任关系，营造安全舒适的氛围"
+      
+      topics:
+        # 话题1.1：开场欢迎
+        - topic_id: "topic_1_1_welcome"
+          topic_name: "开场欢迎"
+          topic_goal: "向来访者表示欢迎，说明咨询流程"
+          
+          actions:
+            - action_type: "ai_say"
+              action_id: "welcome_greeting"
+              config:
+                content_template: |
+                  你好，欢迎来到心理咨询。我是AI咨询助手，会陪伴你完成今天的会谈。
+                  在开始之前，我想先了解一些基本信息，这将帮助我更好地理解你的情况。
+                  你可以放心，这里的所有对话都是保密的。
+                say_goal: "让来访者感到被欢迎和安全"
+                max_rounds: 2
+        
+        # 话题1.2：收集基本信息
+        - topic_id: "topic_1_2_basic_info"
+          topic_name: "收集基本信息"
+          topic_goal: "了解来访者的基本背景"
+          
+          actions:
+            - action_type: "ai_ask"
+              action_id: "ask_name"
+              config:
+                target_variable: "user_name"
+                question_template: "可以告诉我你的名字吗？我可以怎么称呼你？"
+                extraction_prompt: "从用户的回复中提取用户的名字或昵称"
+                required: true
+                max_rounds: 3
+            
+            - action_type: "ai_ask"
+              action_id: "ask_age"
+              config:
+                target_variable: "user_age"
+                question_template: "你今年多大了？"
+                extraction_prompt: "从用户的回复中提取年龄数字"
+                required: false
+                max_rounds: 2
+    
+    # ===== 阶段2：问题评估 =====
+    - phase_id: "phase_2_assessment"
+      phase_name: "问题评估阶段"
+      phase_goal: "了解来访者的主要问题和症状"
+      
+      topics:
+        # 话题2.1：了解主诉
+        - topic_id: "topic_2_1_chief_complaint"
+          topic_name: "了解主诉"
+          topic_goal: "收集来访者的主要困扰"
+          
+          actions:
+            - action_type: "ai_ask"
+              action_id: "ask_main_issue"
+              config:
+                target_variable: "chief_complaint"
+                question_template: |
+                  ${user_name}，能和我说说是什么原因让你来到这里吗？
+                  最近有什么困扰你的事情吗？
+                extraction_prompt: "提取用户描述的主要问题和困扰"
+                required: true
+                max_rounds: 5
+            
+            - action_type: "ai_think"
+              action_id: "analyze_complaint"
+              config:
+                think_goal: "分析主诉，初步判断症状类型"
+                input_variables:
+                  - "chief_complaint"
+                output_variables:
+                  - "symptom_category"  # 症状类别
+                  - "severity_level"  # 严重程度（初步评估）
+                prompt_template: |
+                  根据用户的主诉：${chief_complaint}
+                  请初步判断：
+                  1. 症状类别（如：情绪问题、睡眠问题、人际关系等）
+                  2. 严重程度（轻度/中度/重度）
+        
+        # 话题2.2：探索症状
+        - topic_id: "topic_2_2_symptoms"
+          topic_name: "探索症状"
+          topic_goal: "详细了解抑郁症状的表现"
+          
+          actions:
+            - action_type: "ai_ask"
+              action_id: "ask_mood"
+              config:
+                target_variable: "mood_description"
+                question_template: "最近你的心情怎么样？有感到持续的低落或悲伤吗？"
+                extraction_prompt: "提取用户对情绪状态的描述"
+                required: true
+                max_rounds: 3
+            
+            - action_type: "ai_ask"
+              action_id: "ask_interest"
+              config:
+                target_variable: "interest_loss"
+                question_template: "以前喜欢做的事情，现在还有兴趣吗？"
+                extraction_prompt: "判断用户是否存在兴趣丧失"
+                required: true
+                max_rounds: 3
+    
+    # ===== 阶段3：总结与计划 =====
+    - phase_id: "phase_3_summary"
+      phase_name: "总结与计划阶段"
+      phase_goal: "总结今天的会谈，制定下一步计划"
+      
+      topics:
+        # 话题3.1：会谈总结
+        - topic_id: "topic_3_1_summary"
+          topic_name: "会谈总结"
+          topic_goal: "总结收集到的信息"
+          
+          actions:
+            - action_type: "ai_think"
+              action_id: "generate_summary"
+              config:
+                think_goal: "生成会谈总结"
+                input_variables:
+                  - "user_name"
+                  - "chief_complaint"
+                  - "mood_description"
+                  - "interest_loss"
+                output_variables:
+                  - "session_summary"
+                prompt_template: |
+                  基于今天的会谈内容，生成一份简短的总结，包括：
+                  1. 来访者的主要困扰
+                  2. 当前的症状表现
+                  3. 初步评估结果
+            
+            - action_type: "ai_say"
+              action_id: "share_summary"
+              config:
+                content_template: |
+                  ${user_name}，感谢你今天的分享。让我来总结一下：
+                  ${session_summary}
+                  
+                  下次我们可以继续深入探讨这些问题，一起制定应对策略。
+                say_goal: "向来访者反馈总结，建立继续咨询的期待"
+                max_rounds: 2

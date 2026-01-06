@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBT脚本编辑器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: #252526;
+            padding: 10px 20px;
+            border-bottom: 1px solid #3e3e42;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 18px;
+            color: #cccccc;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 6px 16px;
+            background: #0e639c;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover {
+            background: #1177bb;
+        }
+        
+        .btn-secondary {
+            background: #3e3e42;
+        }
+        
+        .btn-secondary:hover {
+            background: #505050;
+        }
+        
+        .btn-success {
+            background: #16825d;
+        }
+        
+        .btn-success:hover {
+            background: #1a9d6d;
+        }
+        
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .sidebar {
+            width: 250px;
+            background: #252526;
+            border-right: 1px solid #3e3e42;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        
+        .script-list {
+            list-style: none;
+        }
+        
+        .script-item {
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: background 0.2s;
+        }
+        
+        .script-item:hover {
+            background: #2a2d2e;
+        }
+        
+        .script-item.active {
+            background: #094771;
+        }
+        
+        .script-item-name {
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+        
+        .script-item-type {
+            font-size: 11px;
+            color: #858585;
+        }
+        
+        .editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .editor-toolbar {
+            background: #252526;
+            padding: 8px 15px;
+            border-bottom: 1px solid #3e3e42;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .editor-info {
+            font-size: 12px;
+            color: #858585;
+        }
+        
+        .validation-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+        
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        
+        .status-valid {
+            background: #16825d;
+        }
+        
+        .status-invalid {
+            background: #f14c4c;
+        }
+        
+        .status-unknown {
+            background: #cccccc;
+        }
+        
+        #editor {
+            flex: 1;
+            padding: 20px;
+            background: #1e1e1e;
+            overflow: auto;
+            font-size: 14px;
+            line-height: 1.6;
+            border: none;
+            outline: none;
+            resize: none;
+            color: #d4d4d4;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .error-panel {
+            background: #252526;
+            border-top: 1px solid #3e3e42;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+        
+        .error-panel.show {
+            display: block;
+        }
+        
+        .error-item {
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            background: #1e1e1e;
+            border-left: 3px solid #f14c4c;
+            border-radius: 3px;
+            font-size: 13px;
+        }
+        
+        .error-title {
+            color: #f14c4c;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        
+        .error-message {
+            color: #d4d4d4;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.show {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: #252526;
+            padding: 25px;
+            border-radius: 6px;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .modal-title {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #cccccc;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 13px;
+            color: #cccccc;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 8px 12px;
+            background: #3c3c3c;
+            border: 1px solid #3e3e42;
+            border-radius: 3px;
+            color: #cccccc;
+            font-size: 13px;
+        }
+        
+        .form-select {
+            width: 100%;
+            padding: 8px 12px;
+            background: #3c3c3c;
+            border: 1px solid #3e3e42;
+            border-radius: 3px;
+            color: #cccccc;
+            font-size: 13px;
+        }
+        
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>CBT脚本编辑器</h1>
+        <div class="header-actions">
+            <button class="btn btn-secondary" onclick="newScript()">新建脚本</button>
+            <button class="btn btn-secondary" onclick="loadScripts()">刷新列表</button>
+            <button class="btn" onclick="validateScript()">验证脚本</button>
+            <button class="btn btn-success" onclick="saveScript()">保存脚本</button>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="sidebar">
+            <h3 style="padding: 8px 12px; font-size: 14px; color: #cccccc;">脚本列表</h3>
+            <ul class="script-list" id="scriptList">
+                <li style="padding: 20px; text-align: center; color: #858585; font-size: 12px;">
+                    加载中...
+                </li>
+            </ul>
+        </div>
+        
+        <div class="editor-container">
+            <div class="editor-toolbar">
+                <div class="editor-info">
+                    <span id="scriptName">未选择脚本</span>
+                </div>
+                <div class="validation-status">
+                    <div class="status-indicator status-unknown" id="statusIndicator"></div>
+                    <span id="statusText">未验证</span>
+                </div>
+            </div>
+            
+            <textarea id="editor" placeholder="在此编辑YAML脚本..."></textarea>
+            
+            <div class="error-panel" id="errorPanel">
+                <h4 style="margin-bottom: 10px; color: #f14c4c;">验证错误：</h4>
+                <div id="errorList"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 新建脚本模态框 -->
+    <div class="modal" id="newScriptModal">
+        <div class="modal-content">
+            <h2 class="modal-title">新建脚本</h2>
+            <div class="form-group">
+                <label class="form-label">脚本名称</label>
+                <input type="text" class="form-input" id="newScriptName" placeholder="例如：我的CBT会谈">
+            </div>
+            <div class="form-group">
+                <label class="form-label">脚本类型</label>
+                <select class="form-select" id="newScriptType">
+                    <option value="session">会谈流程脚本</option>
+                    <option value="technique">咨询技术脚本</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">作者</label>
+                <input type="text" class="form-input" id="newScriptAuthor" placeholder="作者名称">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+                <button class="btn btn-success" onclick="createScript()">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        let currentScriptId = null;
+        let scripts = [];
+        
+        // 页面加载时获取脚本列表
+        window.onload = function() {
+            loadScripts();
+        };
+        
+        // 加载脚本列表
+        async function loadScripts() {
+            try {
+                const response = await fetch(`${API_BASE}/scripts`);
+                if (!response.ok) throw new Error('Failed to load scripts');
+                
+                scripts = await response.json();
+                renderScriptList();
+            } catch (error) {
+                alert('加载脚本列表失败: ' + error.message);
+            }
+        }
+        
+        // 渲染脚本列表
+        function renderScriptList() {
+            const list = document.getElementById('scriptList');
+            
+            if (scripts.length === 0) {
+                list.innerHTML = '<li style="padding: 20px; text-align: center; color: #858585; font-size: 12px;">暂无脚本</li>';
+                return;
+            }
+            
+            list.innerHTML = scripts.map(script => `
+                <li class="script-item ${script.script_id === currentScriptId ? 'active' : ''}" 
+                    onclick="loadScript('${script.script_id}')">
+                    <div class="script-item-name">${script.script_name}</div>
+                    <div class="script-item-type">${getTypeLabel(script.script_type)}</div>
+                </li>
+            `).join('');
+        }
+        
+        function getTypeLabel(type) {
+            const labels = {
+                'session': '会谈流程',
+                'technique': '咨询技术',
+                'awareness': '意识脚本',
+                'variable': '变量脚本',
+                'form': '表单脚本'
+            };
+            return labels[type] || type;
+        }
+        
+        // 加载脚本内容
+        async function loadScript(scriptId) {
+            try {
+                const response = await fetch(`${API_BASE}/scripts/${scriptId}`);
+                if (!response.ok) throw new Error('Failed to load script');
+                
+                const script = await response.json();
+                currentScriptId = scriptId;
+                
+                document.getElementById('editor').value = script.script_content;
+                document.getElementById('scriptName').textContent = script.script_name;
+                
+                resetValidationStatus();
+                renderScriptList();
+            } catch (error) {
+                alert('加载脚本失败: ' + error.message);
+            }
+        }
+        
+        // 验证脚本
+        async function validateScript() {
+            const content = document.getElementById('editor').value;
+            
+            if (!content.trim()) {
+                showValidationError('脚本内容为空');
+                return;
+            }
+            
+            try {
+                // 简单的YAML语法检查（客户端）
+                const errors = [];
+                
+                // 检查基本结构
+                if (!content.includes('session:') && !content.includes('technique_id:')) {
+                    errors.push('缺少顶层字段 (session 或 technique_id)');
+                }
+                
+                // 检查缩进
+                const lines = content.split('\n');
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (line.trim() && line.match(/^\s+/) && line.match(/^\s+/).length % 2 !== 0) {
+                        errors.push(`第${i+1}行: 缩进应使用2个空格的倍数`);
+                    }
+                }
+                
+                if (errors.length > 0) {
+                    showValidationErrors(errors);
+                } else {
+                    showValidationSuccess();
+                }
+            } catch (error) {
+                showValidationError('验证失败: ' + error.message);
+            }
+        }
+        
+        function showValidationSuccess() {
+            document.getElementById('statusIndicator').className = 'status-indicator status-valid';
+            document.getElementById('statusText').textContent = '验证通过';
+            document.getElementById('errorPanel').classList.remove('show');
+        }
+        
+        function showValidationError(message) {
+            showValidationErrors([message]);
+        }
+        
+        function showValidationErrors(errors) {
+            document.getElementById('statusIndicator').className = 'status-indicator status-invalid';
+            document.getElementById('statusText').textContent = '验证失败';
+            
+            const errorList = document.getElementById('errorList');
+            errorList.innerHTML = errors.map(error => `
+                <div class="error-item">
+                    <div class="error-title">错误</div>
+                    <div class="error-message">${error}</div>
+                </div>
+            `).join('');
+            
+            document.getElementById('errorPanel').classList.add('show');
+        }
+        
+        function resetValidationStatus() {
+            document.getElementById('statusIndicator').className = 'status-indicator status-unknown';
+            document.getElementById('statusText').textContent = '未验证';
+            document.getElementById('errorPanel').classList.remove('show');
+        }
+        
+        // 保存脚本
+        async function saveScript() {
+            const content = document.getElementById('editor').value;
+            
+            if (!currentScriptId) {
+                alert('请先选择或创建一个脚本');
+                return;
+            }
+            
+            if (!content.trim()) {
+                alert('脚本内容不能为空');
+                return;
+            }
+            
+            try {
+                const script = scripts.find(s => s.script_id === currentScriptId);
+                script.script_content = content;
+                
+                const response = await fetch(`${API_BASE}/scripts`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(script)
+                });
+                
+                if (!response.ok) throw new Error('Failed to save script');
+                
+                alert('脚本保存成功！');
+                await loadScripts();
+            } catch (error) {
+                alert('保存失败: ' + error.message);
+            }
+        }
+        
+        // 新建脚本
+        function newScript() {
+            document.getElementById('newScriptModal').classList.add('show');
+        }
+        
+        function closeModal() {
+            document.getElementById('newScriptModal').classList.remove('show');
+        }
+        
+        async function createScript() {
+            const name = document.getElementById('newScriptName').value.trim();
+            const type = document.getElementById('newScriptType').value;
+            const author = document.getElementById('newScriptAuthor').value.trim();
+            
+            if (!name) {
+                alert('请输入脚本名称');
+                return;
+            }
+            
+            try {
+                const template = type === 'session' 
+                    ? getSessionTemplate(name)
+                    : getTechniqueTemplate(name);
+                
+                const response = await fetch(`${API_BASE}/scripts`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        script_name: name,
+                        script_type: type,
+                        script_content: template,
+                        author: author || '系统'
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to create script');
+                
+                const newScript = await response.json();
+                closeModal();
+                await loadScripts();
+                loadScript(newScript.script_id);
+            } catch (error) {
+                alert('创建失败: ' + error.message);
+            }
+        }
+        
+        function getSessionTemplate(name) {
+            return `session:
+  session_id: "new_session_001"
+  session_name: "${name}"
+  description: "新建会谈流程脚本"
+  
+  phases:
+    - phase_id: "phase_01"
+      phase_name: "第一阶段"
+      description: "阶段描述"
+      
+      topics:
+        - topic_id: "topic_01"
+          topic_name: "话题1"
+          description: "话题描述"
+          
+          actions:
+            - action_type: "ai_say"
+              action_id: "action_01"
+              content: "你好，欢迎来到咨询..."
+`;
+        }
+        
+        function getTechniqueTemplate(name) {
+            return `technique_id: "new_technique_001"
+technique_name: "${name}"
+description: "新建咨询技术脚本"
+
+topic:
+  topic_id: "technique_topic"
+  topic_name: "${name}"
+  description: "技术描述"
+  
+  actions:
+    - action_type: "ai_ask"
+      action_id: "action_01"
+      question: "请问...?"
+      extract_to: "variable_name"
+`;
+        }
+    </script>
+</body>
+</html>

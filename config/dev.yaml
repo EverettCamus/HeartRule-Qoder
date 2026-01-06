@@ -1,0 +1,68 @@
+# 开发环境配置
+
+# 应用配置
+app:
+  name: "HeartRule AI咨询引擎"
+  version: "0.1.0-mvp"
+  debug: true
+  log_level: "DEBUG"
+
+# 服务器配置
+server:
+  host: "127.0.0.1"
+  port: 8000
+  reload: true
+
+# 数据库配置（MVP使用SQLite）
+database:
+  type: "sqlite"
+  path: "./data/heartrule.db"
+  echo: true  # 打印SQL语句
+
+# LLM服务配置
+llm:
+  provider: "mock"  # mock, openai, volcano_deepseek
+  api_key: "${OPENAI_API_KEY}"  # 从环境变量读取
+  model: "gpt-4"
+  temperature: 0.7
+  max_tokens: 2000
+  timeout: 60  # 超时时间（秒）
+  max_retries: 3  # 最大重试次数
+  
+  # 火山引擎 DeepSeek 配置
+  volcano:
+    api_key: "${VOLCANO_API_KEY}"
+    endpoint_id: "${VOLCANO_ENDPOINT_ID}"
+    base_url: "https://ark.cn-beijing.volces.com/api/v3"
+
+# 脚本配置
+scripts:
+  base_path: "./scripts"
+  cache_enabled: true
+  validation_enabled: true
+
+# 记忆引擎配置
+memory:
+  short_term:
+    window_size: 20  # 短期记忆窗口大小（轮次）
+    max_tokens: 4000  # 最大tokens数
+  
+# 会话配置
+session:
+  pause_timeout: 1800  # 30分钟，超过则转为挂起
+  suspend_timeout: 86400  # 24小时，超过则归档
+  max_concurrent_sessions: 100
+
+# WebSocket配置
+websocket:
+  ping_interval: 30
+  ping_timeout: 10
+
+# CORS配置
+cors:
+  allow_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+  allow_credentials: true
+  allow_methods: ["*"]
+  allow_headers: ["*"]
