@@ -21,7 +21,7 @@ database:
 
 # LLM服务配置
 llm:
-  provider: "mock"  # mock, openai, volcano_deepseek
+  provider: "volcano_deepseek"  # mock, openai, volcano_deepseek
   api_key: "${OPENAI_API_KEY}"  # 从环境变量读取
   model: "gpt-4"
   temperature: 0.7

@@ -102,7 +102,28 @@ class ScriptExecutor:
                     execution_state.status = ExecutionStatus.WAITING_INPUT
                     return execution_state
                 
-                # Action完成，继续下一个
+                # Action完成，处理结果
+                if result.success:
+                    # 更新变量
+                    if result.extracted_variables:
+                        execution_state.variables.update(result.extracted_variables)
+                    
+                    # 添加AI消息到对话历史
+                    if result.ai_message:
+                        execution_state.conversation_history.append({
+                            'role': 'assistant',
+                            'content': result.ai_message,
+                            'action_id': execution_state.current_action.action_id,
+                            'metadata': result.metadata
+                        })
+                        execution_state.last_ai_message = result.ai_message
+                else:
+                    # Action执行失败
+                    execution_state.status = ExecutionStatus.ERROR
+                    execution_state.metadata['error'] = result.error
+                    return execution_state
+                
+                # 继续下一个
                 execution_state.current_action = None
                 execution_state.current_action_idx += 1
             
