@@ -1,0 +1,55 @@
+{
+  "name": "heartrule-ai-consulting-engine",
+  "version": "2.0.0",
+  "private": true,
+  "description": "AI Consulting Engine - TypeScript Monorepo",
+  "author": "HeartRule Team",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --filter api-server dev",
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky install",
+    "clean": "pnpm -r exec rm -rf dist node_modules",
+    "docker:dev": "docker-compose -f docker-compose.dev.yml up -d",
+    "docker:down": "docker-compose -f docker-compose.dev.yml down",
+    "db:migrate": "pnpm --filter api-server db:migrate",
+    "db:studio": "pnpm --filter api-server db:studio"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vitest/coverage-v8": "^1.2.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.2.4",
+    "typescript": "^5.9.2",
+    "vitest": "^1.2.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  }
+}

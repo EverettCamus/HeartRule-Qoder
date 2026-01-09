@@ -1,0 +1,33 @@
+{
+  "name": "@heartrule/core-engine",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Core AI Consulting Engine - Headless Six-Engine Architecture",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@heartrule/shared-types": "workspace:*",
+    "zod": "^3.22.4",
+    "js-yaml": "^4.1.0",
+    "uuid": "^9.0.1",
+    "ai": "^3.0.0",
+    "@ai-sdk/openai": "^0.0.20"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.1",
+    "typescript": "^5.9.2",
+    "@types/js-yaml": "^4.0.9",
+    "@types/uuid": "^9.0.7"
+  }
+}

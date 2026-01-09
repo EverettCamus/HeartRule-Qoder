@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 16数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: heartrule-postgres
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: heartrule
+      POSTGRES_PASSWORD: heartrule_dev_2024
+      POSTGRES_DB: heartrule_ai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U heartrule']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - heartrule-network
+
+  # Redis 7.2缓存
+  redis:
+    image: redis:7.2-alpine
+    container_name: heartrule-redis
+    ports:
+      - '6379:6379'
+    command: redis-server --appendonly yes --requirepass heartrule_redis_2024
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', 'heartrule_redis_2024', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - heartrule-network
+
+  # Adminer - PostgreSQL管理界面
+  adminer:
+    image: adminer:latest
+    container_name: heartrule-adminer
+    ports:
+      - '8080:8080'
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      - postgres
+    networks:
+      - heartrule-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  heartrule-network:
+    driver: bridge

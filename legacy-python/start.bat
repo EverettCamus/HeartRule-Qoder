@@ -35,16 +35,16 @@ if %errorlevel% neq 0 (
 )
 
 REM 检查数据库
-if not exist "data\cbt_engine.db" (
+if not exist "..\data\cbt_engine.db" (
     echo [初始化] 数据库不存在，正在初始化...
-    python scripts\init_database.py
+    python ..\scripts\init_database.py
     echo [完成] 数据库初始化完成
 )
 
 echo.
 echo [启动] 正在启动API服务器...
-echo [访问] API文档: http://localhost:8000/docs
-echo [访问] Web界面: 打开 web\index.html
+echo [访问] API文档: http://localhost:8001/docs
+echo [访问] Web界面: 打开 ..\web\index.html （需修改API地址为8001）
 echo.
 echo 按 Ctrl+C 停止服务器
 echo ========================================

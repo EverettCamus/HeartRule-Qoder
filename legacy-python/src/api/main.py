@@ -5,8 +5,9 @@ import sys
 from pathlib import Path
 
 # 将项目根目录添加到Python路径
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
+# legacy-python/src/api/main.py -> legacy-python/src/ -> legacy-python/ -> 根目录
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root / "legacy-python"))
 
 # 加载环境变量
 from dotenv import load_dotenv
@@ -129,7 +130,7 @@ def create_llm_provider():
         raise ValueError(f"Unknown LLM provider type: {provider_type}")
 
 # 初始化组件
-storage = SQLiteStorage("data/cbt_engine.db")
+storage = SQLiteStorage(str(project_root / "data" / "cbt_engine.db"))
 llm_provider = create_llm_provider()
 llm_orchestrator = LLMOrchestrator(llm_provider)
 script_executor = ScriptExecutor(ACTION_REGISTRY)
@@ -273,4 +274,5 @@ async def get_script(script_id: str):
 # app.mount("/", StaticFiles(directory="web", html=True), name="web")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Python版本使用端口8001避免与TypeScript版本冲突
+    uvicorn.run(app, host="0.0.0.0", port=8001)

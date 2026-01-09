@@ -8,7 +8,8 @@ from pathlib import Path
 
 # 将项目根目录添加到Python路径
 project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+legacy_python = project_root / "legacy-python"
+sys.path.insert(0, str(legacy_python))
 
 from src.infrastructure.storage.sqlite_storage import SQLiteStorage
 from src.core.domain.script import Script, ScriptType, ScriptStatus

@@ -1,67 +1,65 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+# TypeScript迁移项目 - 新增忽略规则
 
-# 虚拟环境
-venv/
-env/
-ENV/
-.venv
+# 构建输出
+/packages/*/dist/
+/packages/*/build/
+*.tsbuildinfo
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# TypeScript缓存
+*.tsbuildinfo
+
+# pnpm
+.pnpm-store/
+.pnpm-debug.log
+node_modules
+
+# 测试覆盖率
+coverage/
+.nyc_output/
 
 # 环境变量
-.env
 .env.local
-
-# 数据库
-*.db
-*.sqlite
-*.sqlite3
-data/
-
-# 日志
-*.log
-logs/
-
-# 测试
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# macOS
-.DS_Store
-
-# Windows
-Thumbs.db
-Desktop.ini
+.env.*.local
 
 # 临时文件
 *.tmp
 *.temp
-.qoder/quests/*
-!.qoder/quests/ai-consulting-engine-development.md
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+
+# Husky
+.husky/_
+
+# ========================================
+# Legacy Python (待弃用)
+# ========================================
+
+# Python虚拟环境
+legacy-python/venv/
+legacy-python/.venv/
+legacy-python/env/
+legacy-python/ENV/
+
+# Python字节码
+legacy-python/__pycache__/
+legacy-python/**/*.pyc
+legacy-python/**/*.pyo
+legacy-python/**/*.pyd
+
+# Python测试缓存
+legacy-python/.pytest_cache/
+legacy-python/.coverage
+legacy-python/htmlcov/
+
+# Python IDE
+legacy-python/.idea/
+legacy-python/*.swp
+legacy-python/*.swo
+
+# Python数据
+legacy-python/data/*.db
+legacy-python/data/*.sqlite
