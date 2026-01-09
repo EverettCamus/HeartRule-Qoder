@@ -18,7 +18,6 @@ interface ValidationRule {
 
 export class AiAskAction extends BaseAction {
   static actionType = 'ai_ask';
-  private extractedValue: string | null = null;
 
   constructor(actionId: string, config: Record<string, any>) {
     super(actionId, config);
@@ -135,7 +134,6 @@ export class AiAskAction extends BaseAction {
 
       // 重置状态
       this.currentRound = 0;
-      this.extractedValue = userInput!.trim();
 
       return {
         success: true,

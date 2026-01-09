@@ -15,7 +15,7 @@ export class AiThinkAction extends BaseAction {
     super(actionId, config);
   }
 
-  async execute(context: ActionContext, userInput?: string | null): Promise<ActionResult> {
+  async execute(_context: ActionContext, _userInput?: string | null): Promise<ActionResult> {
     try {
       // MVP: 直接返回成功，不实际执行推理
       // TODO: 后续实现真实的 LLM 推理逻辑

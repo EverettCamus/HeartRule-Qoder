@@ -214,9 +214,9 @@ export class VariableExtractor {
    * 获取默认Schema
    * Reserved for future use with streamObject
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private getDefaultSchema(config: VariableConfig): z.ZodType {
-    switch (config.type) {
+  /*
+  private _getDefaultSchema(_config: VariableConfig): z.ZodType {
+    switch (_config.type) {
       case 'text':
         return z.string();
       case 'number':
@@ -231,6 +231,7 @@ export class VariableExtractor {
         return z.unknown();
     }
   }
+  */
 
   /**
    * 解析LLM提取响应
