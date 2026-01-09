@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CBT AI咨询师</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>MoodlingVale v2.0</title>
     <style>
         * {
             margin: 0;
@@ -208,8 +211,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>CBT AI咨询师</h1>
-            <p>认知行为疗法 · 智能心理咨询</p>
+            <h1>MoodlingVale</h1>
+            <p>CBT · AI Mental Health Chatbot</p>
         </div>
         
         <div class="session-info" id="sessionInfo" style="display: none;">
@@ -218,9 +221,9 @@
         
         <div class="chat-area" id="chatArea">
             <div class="init-screen" id="initScreen">
-                <h2>欢迎使用CBT AI咨询系统</h2>
-                <p style="margin-bottom: 30px;">点击下方按钮开始您的咨询之旅</p>
-                <button class="init-button" onclick="startSession()">开始咨询</button>
+                <h2>Welcome to MoodlingVale CBT Counselor</h2>
+                <p style="margin-bottom: 30px;">Click the button below to begin your consultation journey.</p>
+                <button class="init-button" onclick="startSession()">Start Consultation</button>
             </div>
         </div>
         
@@ -240,7 +243,7 @@
     <script>
         const API_BASE = 'http://localhost:8000/api';
         const DEFAULT_USER_ID = 'user_' + Math.random().toString(36).substr(2, 9);
-        const DEFAULT_SCRIPT_ID = 'cbt_depression_001';  // 需要在数据库中存在
+        const DEFAULT_SCRIPT_ID = '550e8400-e29b-41d4-a716-446655440001';  // UUID格式
         
         let currentSessionId = null;
         let isWaitingResponse = false;
@@ -251,15 +254,20 @@
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        user_id: DEFAULT_USER_ID,
-                        script_id: DEFAULT_SCRIPT_ID
+                        userId: DEFAULT_USER_ID,
+                        scriptId: DEFAULT_SCRIPT_ID
                     })
                 });
                 
                 if (!response.ok) throw new Error('Failed to create session');
                 
                 const data = await response.json();
-                currentSessionId = data.session_id;
+                currentSessionId = data.sessionId;
+                
+                console.log('=== 会话创建成功 ===');
+                console.log('sessionId:', data.sessionId);
+                console.log('aiMessage:', data.aiMessage);
+                console.log('executionStatus:', data.executionStatus);
                 
                 // 更新UI
                 document.getElementById('initScreen').style.display = 'none';
@@ -267,8 +275,16 @@
                 document.getElementById('sessionInfo').style.display = 'block';
                 document.getElementById('sessionId').textContent = currentSessionId.substr(0, 8) + '...';
                 
-                // 发送初始消息触发第一个Action
-                await sendMessage('你好');
+                // 显示初始 AI 消息
+                if (data.aiMessage) {
+                    console.log('正在添加欢迎消息...');
+                    addMessage('assistant', data.aiMessage);
+                    console.log('欢迎消息已添加');
+                } else {
+                    console.warn('未接收到 aiMessage');
+                }
+                
+
                 
             } catch (error) {
                 alert('启动会话失败: ' + error.message);
@@ -298,8 +314,7 @@
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        session_id: currentSessionId,
-                        script_id: DEFAULT_SCRIPT_ID,
+                        sessionId: currentSessionId,
                         message: userMessage
                     })
                 });
@@ -309,12 +324,12 @@
                 const data = await response.json();
                 
                 // 显示AI回复
-                if (data.ai_message) {
-                    addMessage('assistant', data.ai_message);
+                if (data.aiMessage) {
+                    addMessage('assistant', data.aiMessage);
                 }
                 
                 // 检查是否完成
-                if (data.completed) {
+                if (data.sessionStatus === 'completed') {
                     addMessage('system', '咨询会话已完成。感谢您的参与！');
                     document.getElementById('inputArea').style.display = 'none';
                 }
@@ -329,7 +344,11 @@
         }
         
         function addMessage(role, content) {
+            console.log('addMessage 被调用:', { role, content });
+            
             const chatArea = document.getElementById('chatArea');
+            console.log('chatArea 元素:', chatArea);
+            
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
             
