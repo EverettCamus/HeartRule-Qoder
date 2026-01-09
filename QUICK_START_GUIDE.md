@@ -1,50 +1,22 @@
 # 快速启动指南
 
-**更新**: 2026-01-06
+**更新**: 2026-01-09
 
 ---
 
 ## 🎯 当前状态
 
-- ✅ **Python版本**：完全可用（端口8001）
-- ⚠️ **TypeScript版本**：95%就绪，需数据库初始化
+- ✅ **TypeScript版本**：已就绪，全功能可用
 
 ---
 
-## 🚀 方式1：使用Python版本（立即可用）
-
-### 启动服务器
-
-```bash
-# 进入Python目录
-cd legacy-python
-
-# 启动API服务器
-python src\api\main.py
-```
-
-**成功标志**：
-```
-Using Volcano DeepSeek LLM Provider (endpoint: deepseek-v3-250324)
-INFO:     Started server process [xxxx]
-INFO:     Uvicorn running on http://0.0.0.0:8001
-```
-
-### 访问系统
-
-1. **API文档**: http://localhost:8001/docs
-2. **Web界面**: 在浏览器中打开 `web/index.html`
-3. **测试对话**:
-   - 点击"开始咨询"
-   - 输入消息进行对话
-
----
-
-## 🚀 方式2：使用TypeScript版本（需Docker）
+## 🚀 快速启动（需Docker）
 
 ### 前置条件
+
 - ✅ Docker Desktop已安装
 - ✅ Docker Desktop正在运行
+- ✅ pnpm 已安装
 
 ### 启动步骤
 
@@ -58,58 +30,40 @@ cd packages\api-server
 pnpm db:migrate
 
 # 3. 启动API服务器
+cd packages\api-server
 pnpm dev
 ```
 
-### 修改Web客户端配置
+**成功标志**：
 
-编辑 `web/index.html`，修改API地址：
-
-```javascript
-// 从
-const API_BASE = 'http://localhost:8001/api';
-
-// 改为
-const API_BASE = 'http://localhost:8000/api';
+```
+Server listening on http://localhost:8000
+Database connected successfully
 ```
 
 ### 访问系统
 
 1. **API文档**: http://localhost:8000/docs
 2. **Web界面**: 在浏览器中打开 `web/index.html`
+3. **测试对话**：
+   - 点击“开始咨询”
+   - 输入消息进行对话
 
 ---
 
 ## 🔍 验证服务器状态
 
-### Python版本（8001端口）
-
 ```bash
-curl http://localhost:8001/
+curl http://localhost:8000/health
 ```
 
 **预期响应**：
+
 ```json
 {
-  "message": "CBT AI咨询引擎 API",
-  "version": "1.0.0",
-  "docs": "/docs"
-}
-```
-
-### TypeScript版本（8000端口）
-
-```bash
-curl http://localhost:8000/
-```
-
-**预期响应**：
-```json
-{
-  "message": "HeartRule AI咨询引擎 API",
-  "version": "2.0.0",
-  "docs": "/docs",
-  "health": "/health"
+  "status": "ok",
+  "timestamp": "2026-01-09T...",
+  "database": "connected"
 }
 ```
 
@@ -117,12 +71,20 @@ curl http://localhost:8000/
 
 ## 🧪 测试对话功能
 
+### 使用CLI测试脚本
+
+```bash
+# 运行完整流程测试
+cd packages\api-server
+pnpm test:flow
+```
+
 ### API方式测试
 
 #### 1. 创建会话
 
 ```bash
-curl -X POST http://localhost:8001/api/sessions \
+curl -X POST http://localhost:8000/api/sessions \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "test_user",
@@ -131,6 +93,7 @@ curl -X POST http://localhost:8001/api/sessions \
 ```
 
 **响应示例**：
+
 ```json
 {
   "session_id": "abc-123-def",
@@ -142,7 +105,7 @@ curl -X POST http://localhost:8001/api/sessions \
 #### 2. 发送消息
 
 ```bash
-curl -X POST http://localhost:8001/api/chat \
+curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
     "session_id": "abc-123-def",
@@ -152,6 +115,7 @@ curl -X POST http://localhost:8001/api/chat \
 ```
 
 **响应示例**：
+
 ```json
 {
   "ai_message": "可以告诉我你的名字吗？我可以怎么称呼你？",
@@ -177,52 +141,59 @@ curl -X POST http://localhost:8001/api/chat \
 ### 问题1：端口被占用
 
 **现象**：
+
 ```
-Error: listen EADDRINUSE: address already in use :::8001
+Error: listen EADDRINUSE: address already in use :::8000
 ```
 
 **解决**：
+
 ```bash
 # 查找占用端口的进程
-netstat -ano | findstr :8001
+netstat -ano | findstr :8000
 
 # 结束进程（替换PID）
 taskkill /PID <进程ID> /F
 ```
 
-### 问题2：Python服务器找不到模块
+### 问题2：Docker未启动
 
 **现象**：
-```
-ModuleNotFoundError: No module named 'fastapi'
-```
 
-**解决**：
-```bash
-cd legacy-python
-pip install -r requirements.txt
-```
-
-### 问题3：Docker未启动
-
-**现象**：
 ```
 error during connect: pipe/dockerDesktopLinuxEngine
 ```
 
 **解决**：
+
 1. 启动Docker Desktop
 2. 等待Docker完全启动（图标变绿）
 3. 重新执行 `pnpm docker:dev`
 
-### 问题4：Web界面无法连接API
+### 问题3：Web界面无法连接API
 
 **现象**：浏览器控制台显示CORS错误
 
 **检查**：
+
 1. 确认API服务器正在运行
-2. 确认 `web/index.html` 中的 `API_BASE` 地址正确
-3. Python版本用8001，TypeScript版本用8000
+2. 确认 `web/index.html` 中的 `API_BASE` 地址为 `http://localhost:8000/api`
+3. 检查浏览器控制台的具体错误信息
+
+### 问题4：数据库连接失败
+
+**现象**：
+
+```
+Database connection error
+```
+
+**解决**：
+
+1. 确认Docker正在运行
+2. 检查PostgreSQL容器状态：`docker ps`
+3. 查看数据库日志：`docker logs heartrule-postgres`
+4. 重启数据库：`pnpm docker:down; pnpm docker:dev`
 
 ---
 
@@ -230,29 +201,28 @@ error during connect: pipe/dockerDesktopLinuxEngine
 
 ```
 HeartRule-Qcoder/
-├── legacy-python/          # Python版本（8001端口）
-│   └── src/api/main.py     # 启动入口
 ├── packages/
-│   └── api-server/         # TypeScript版本（8000端口）
-│       └── src/index.ts    # 启动入口
+│   ├── api-server/         # TypeScript API服务器 (8000端口)
+│   │   └── src/index.ts    # 启动入口
+│   ├── core-engine/        # 核心引擎
+│   └── shared-types/       # 共享类型
 ├── web/
 │   └── index.html          # Web客户端
 ├── config/
 │   └── dev.yaml            # 配置文件
 ├── scripts/
-│   └── sessions/           # YAML脚本
-└── data/
-    └── cbt_engine.db       # SQLite数据库（Python版本）
+│   ├── sessions/           # YAML会话脚本
+│   └── techniques/         # YAML技术脚本
+└── docker-compose.dev.yml  # Docker配置
 ```
 
 ---
 
 ## 🔗 相关文档
 
-- [Python版本测试结果](PYTHON_VERSION_TEST_RESULTS.md)
-- [TypeScript设置状态](TYPESCRIPT_SETUP_STATUS.md)
-- [迁移完成总结](MIGRATION_COMPLETION_SUMMARY.md)
-- [技术架构设计](.qoder/quests/ai-consulting-engine-architecture.md)
+- [开发指南](docs/DEVELOPMENT_GUIDE.md)
+- [MVP实现状态](docs/MVP_IMPLEMENTATION_STATUS.md)
+- [技术架构设计](docs/design/SEQUENCE_DIAGRAMS.md)
 
 ---
 
@@ -260,15 +230,14 @@ HeartRule-Qcoder/
 
 ### 日常开发
 
-1. **使用Python版本测试功能**（更稳定）
-2. **在TypeScript版本开发新特性**
-3. **两个版本保持功能同步**
+1. **使用CLI测试脚本验证功能**：`pnpm test:flow`
+2. **通过Web界面进行交互测试**
+3. **查看服务器日志调试问题**
 
 ### 生产部署
 
-- **当前阶段**：推荐Python版本（已验证）
-- **未来**：切换到TypeScript版本（更好的类型安全和性能）
+- 基于TypeScript技术栈
+- 使用Docker Compose进行部署
+- PostgreSQL作为数据存储
 
 ---
-
-**需要帮助？** 查看 [MIGRATION_COMPLETION_SUMMARY.md](MIGRATION_COMPLETION_SUMMARY.md) 获取完整信息。

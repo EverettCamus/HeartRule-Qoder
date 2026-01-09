@@ -1,62 +1,86 @@
 # 开发指南
 
-本文档为开发者提供HeartRule AI咨询引擎的开发指南。
+本文档为开发者提供HeartRule AI咨询引擎的TypeScript开发指南。
 
 ## 环境准备
 
-### 1. Python环境
+### 1. Node.js 环境
 
-确保安装Python 3.10或更高版本：
+确保安装 Node.js 18+ 或更高版本：
 
 ```bash
-python --version
+node --version
 ```
 
-### 2. 创建虚拟环境
+### 2. 安装 pnpm
 
 ```bash
-# Windows
-python -m venv venv
-.\venv\Scripts\activate
-
-# Linux/Mac
-python3 -m venv venv
-source venv/bin/activate
+npm install -g pnpm
 ```
 
 ### 3. 安装依赖
 
 ```bash
-pip install -r requirements.txt
+cd c:\CBT\HeartRule-Qcoder
+pnpm install
 ```
 
 ### 4. 配置环境变量
 
-复制`.env.example`为`.env`并填写必要的配置：
+复制 `.env.example` 为 `.env` 并填写必要的配置：
 
 ```bash
 cp .env.example .env
 ```
 
-编辑`.env`文件，设置LLM API密钥：
+编辑 `.env` 文件，设置LLM API密钥和数据库配置：
 
 ```
-OPENAI_API_KEY=your_key_here
+# LLM 配置
+VOLCANO_API_KEY=your_volcano_key_here
+VOLCANO_ENDPOINT_ID=your_endpoint_id
+
+# 数据库配置
+DATABASE_URL=postgresql://user:password@localhost:5432/heartrule
+```
+
+### 5. 启动数据库
+
+```bash
+# 使用 Docker Compose 启动 PostgreSQL
+pnpm docker:dev
+```
+
+### 6. 初始化数据库
+
+```bash
+cd packages/api-server
+pnpm db:migrate
+pnpm db:init
 ```
 
 ## 项目结构
 
 ```
-src/
-├── core/                # 核心领域层
-│   ├── domain/          # 领域模型（Session, Message, Variable, Script）
-│   └── exceptions/      # 异常定义
-├── engines/             # 引擎层（6个核心引擎）
-├── actions/             # Action实现
-├── services/            # 应用服务层
-├── storage/             # 存储层
-├── api/                 # API层
-└── utils/               # 工具类
+packages/
+├── core-engine/         # 核心引擎包
+│   ├── src/
+│   │   ├── actions/         # Action 实现
+│   │   ├── domain/          # 领域模型
+│   │   └── engines/         # 六大引擎
+│   └── package.json
+├── api-server/          # API 服务器
+│   ├── src/
+│   │   ├── db/              # 数据库 (Drizzle ORM)
+│   │   ├── routes/          # API 路由
+│   │   └── services/        # 应用服务
+│   └── package.json
+└── shared-types/        # 共享类型定义
+    ├── src/
+    │   ├── api/             # API 类型
+    │   ├── domain/          # 领域类型
+    │   └── enums.ts         # 枚举定义
+    └── package.json
 ```
 
 ## 核心概念
@@ -65,8 +89,8 @@ src/
 
 - **Session（会话）**: 一次完整的咨询会话
 - **Message（消息）**: 会话中的单条消息
-- **VariableState（变量状态）**: 会话中的变量
-- **Script（脚本）**: YAML脚本定义
+- **Variable（变量）**: 会话中的变量状态
+- **Script（脚本）**: YAML 脚本定义
 
 ### 2. 脚本层次结构
 
@@ -77,7 +101,7 @@ Session（会谈）
           └── Action（咨询动作）
 ```
 
-### 3. Action类型（MVP阶段）
+### 3. Action 类型（MVP阶段）
 
 - `ai_say`: 向用户传达信息
 - `ai_ask`: 引导式提问收集信息
@@ -86,152 +110,240 @@ Session（会谈）
 
 ## 开发工作流
 
-### 1. 创建新的Action类型
+### 1. 创建新的 Action 类型
 
-在`src/actions/`目录下创建新文件：
+在 `packages/core-engine/src/actions/` 目录下创建新文件：
 
-```python
-from src.actions.base import BaseAction
+```typescript
+import { BaseAction } from './base-action';
+import { ActionContext, ActionResult } from '@heartrule/shared-types';
 
-class MyAction(BaseAction):
-    action_type = "my_action"
-    
-    async def execute(self, context):
-        # 实现Action逻辑
-        pass
+export class MyAction extends BaseAction {
+  async execute(context: ActionContext): Promise<ActionResult> {
+    // 实现 Action 逻辑
+    return {
+      success: true,
+      message: 'Action executed',
+    };
+  }
+}
 ```
 
-### 2. 编写YAML脚本
+在 `action-registry.ts` 中注册：
 
-会谈流程脚本示例（`scripts/sessions/`）：
+```typescript
+import { MyAction } from './my-action';
 
-```yaml
-session:
-  session_id: "my_session"
-  phases:
-    - phase_id: "phase_1"
-      topics:
-        - topic_id: "topic_1"
-          actions:
-            - action_type: "ai_say"
-              action_id: "greeting"
-              config:
-                content_template: "你好！"
+registry.register('my_action', MyAction);
 ```
 
-### 3. 运行测试
+### 2. 开发新的引擎功能
+
+引擎位于 `packages/core-engine/src/engines/` 目录：
+
+- `script-execution/`: 脚本执行引擎
+- `llm-orchestration/`: LLM 编排引擎
+- `variable-extraction/`: 变量提取引擎
+- `memory/`: 记忆引擎
+
+每个引擎都有独立的目录结构和入口文件 `index.ts`。
+
+### 3. 添加 API 端点
+
+在 `packages/api-server/src/routes/` 目录下添加路由：
+
+```typescript
+import { FastifyPluginAsync } from 'fastify';
+
+const myRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.post('/my-endpoint', async (request, reply) => {
+    // 处理请求
+    return { success: true };
+  });
+};
+
+export default myRoutes;
+```
+
+在 `app.ts` 中注册路由：
+
+```typescript
+await fastify.register(myRoutes, { prefix: '/api/my' });
+```
+
+### 4. 数据库 Schema 修改
+
+编辑 `packages/api-server/src/db/schema.ts`：
+
+```typescript
+export const myTable = pgTable('my_table', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+```
+
+生成并应用迁移：
 
 ```bash
-# 运行所有测试
-pytest
-
-# 运行特定测试
-pytest tests/unit/test_session.py
-
-# 生成覆盖率报告
-pytest --cov=src tests/
+cd packages/api-server
+pnpm db:generate
+pnpm db:migrate
 ```
 
-### 4. 代码格式化
+## 测试
+
+### 1. 运行单元测试
 
 ```bash
-# 格式化代码
-black src/ tests/
-
-# 检查代码风格
-flake8 src/ tests/
-
-# 排序导入
-isort src/ tests/
+pnpm test
 ```
 
-## 常用命令
-
-### 启动开发服务器
+### 2. 运行集成测试
 
 ```bash
-python -m src.api.rest.main
+cd packages/api-server
+pnpm test:flow
 ```
 
-### 运行示例会谈
+### 3. 手动测试
+
+启动开发服务器：
 
 ```bash
-python examples/run_session.py
+cd packages/api-server
+pnpm dev
 ```
 
-### 调试模式
+使用 Web 界面测试：
+
+- 打开 `web/index.html`
+- 点击"开始咨询"
+- 输入消息进行测试
+
+## 代码规范
+
+### TypeScript 风格
+
+- 使用严格模式 (`strict: true`)
+- 优先使用接口 (`interface`) 而非类型别名 (`type`)
+- 导出类型时使用 `export type` 或 `export interface`
+- 避免使用 `any`，使用 `unknown` 替代
+
+### 命名约定
+
+- 文件名：kebab-case (`my-action.ts`)
+- 类名：PascalCase (`MyAction`)
+- 函数/变量名：camelCase (`myFunction`)
+- 常量：UPPER_SNAKE_CASE (`MAX_RETRIES`)
+- 接口：PascalCase (`ActionContext`)
+
+### 代码组织
+
+- 一个文件一个主要导出
+- 相关功能组织在同一目录
+- 使用 barrel exports (`index.ts`)
+
+## 调试
+
+### 1. 使用 VSCode 调试
+
+创建 `.vscode/launch.json`：
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug API Server",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "cwd": "${workspaceFolder}/packages/api-server",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}
+```
+
+### 2. 查看日志
+
+服务器日志会输出到控制台，包含：
+
+- 请求信息
+- 脚本执行流程
+- LLM 调用详情
+- 错误堆栈
+
+### 3. 数据库调试
 
 ```bash
-# 启用详细日志
-export LOG_LEVEL=DEBUG
-python -m src.api.rest.main
+# 连接到 PostgreSQL
+docker exec -it heartrule-postgres psql -U postgres -d heartrule
+
+# 查看表
+\dt
+
+# 查询数据
+SELECT * FROM sessions;
 ```
-
-## 贡献指南
-
-### 提交代码前的检查清单
-
-- [ ] 代码通过所有测试
-- [ ] 添加了必要的单元测试
-- [ ] 代码符合PEP 8规范
-- [ ] 添加了文档字符串
-- [ ] 更新了相关文档
-
-### Git工作流
-
-```bash
-# 创建特性分支
-git checkout -b feature/my-feature
-
-# 提交更改
-git add .
-git commit -m "feat: 添加新功能"
-
-# 推送到远程
-git push origin feature/my-feature
-```
-
-## 调试技巧
-
-### 1. 查看执行日志
-
-日志文件位于`logs/`目录（如果启用了文件日志）。
-
-### 2. 使用调试器
-
-在代码中设置断点：
-
-```python
-import pdb; pdb.set_trace()
-```
-
-### 3. 查看LLM调用
-
-LLM调用日志包含完整的提示词和响应，可用于调试提示词工程。
 
 ## 常见问题
 
-### Q: 如何添加新的LLM服务提供商？
+### 问题1：类型错误
 
-在`src/engines/llm_orchestration/`中添加新的适配器。
+**现象**：TypeScript 编译报类型错误
 
-### Q: 如何修改脚本Schema？
+**解决**：
 
-修改`src/utils/yaml_parser.py`中的Schema定义。
+1. 检查 `shared-types` 包是否已构建：`cd packages/shared-types && pnpm build`
+2. 确保导入路径正确使用别名：`@heartrule/shared-types`
+3. 清理并重新构建：`pnpm clean && pnpm build`
 
-### Q: 如何调试脚本执行？
+### 问题2：数据库连接失败
 
-使用脚本调试服务，支持断点、单步执行、回滚等功能。
+**现象**：`Database connection error`
 
-## 资源链接
+**解决**：
 
-- [设计文档](.qoder/quests/ai-consulting-engine-development.md)
-- [API文档](docs/api/)
-- [脚本编写指南](docs/scripts/)
+1. 确认 Docker 正在运行
+2. 检查 `.env` 文件中的 `DATABASE_URL`
+3. 重启数据库容器：`pnpm docker:down && pnpm docker:dev`
 
-## 获取帮助
+### 问题3：LLM 调用失败
 
-如有问题，请：
-1. 查阅本文档
-2. 查看设计文档
-3. 提交Issue
+**现象**：`LLM provider error`
+
+**解决**：
+
+1. 检查 `.env` 中的 API 密钥配置
+2. 验证网络连接
+3. 查看具体错误日志
+
+## 贡献指南
+
+### 提交代码
+
+1. 创建功能分支：`git checkout -b feature/my-feature`
+2. 提交更改：`git commit -m "feat: add my feature"`
+3. 推送到远程：`git push origin feature/my-feature`
+4. 创建 Pull Request
+
+### Commit 信息规范
+
+使用 Conventional Commits：
+
+- `feat:` 新功能
+- `fix:` 修复 bug
+- `docs:` 文档更新
+- `refactor:` 重构
+- `test:` 测试相关
+- `chore:` 构建/工具相关
+
+## 相关资源
+
+- [TypeScript 官方文档](https://www.typescriptlang.org/docs/)
+- [Fastify 文档](https://www.fastify.io/docs/latest/)
+- [Drizzle ORM 文档](https://orm.drizzle.team/docs/overview)
+- [脚本示例](../scripts/)

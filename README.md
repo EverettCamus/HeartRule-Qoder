@@ -3,8 +3,7 @@
 > **基于"LLM + YAML脚本"的智能咨询框架**  
 > 首个应用场景：CBT心理咨询
 
-**当前版本**：2.0.0 (TypeScript Rewrite) 🚀  
-**旧版本**：[Python版本](legacy-python/) ⚠️ 已弃用
+**当前版本**：2.0.0 (TypeScript) 🚀
 
 ---
 
@@ -135,33 +134,33 @@ HeartRule-Qcoder/
 
 ### 后端核心
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| TypeScript | 5.9 | 编程语言 |
-| Node.js | 20 LTS | 运行时 |
-| Fastify | 4.x | Web框架（性能优于Express） |
-| Drizzle ORM | 0.29 | 数据库ORM（零运行时开销） |
-| PostgreSQL | 16 | 持久化数据库 |
-| Redis | 7.2 | 缓存与会话存储 |
-| Zod | 3.x | 运行时Schema验证 |
+| 技术        | 版本   | 用途                       |
+| ----------- | ------ | -------------------------- |
+| TypeScript  | 5.9    | 编程语言                   |
+| Node.js     | 20 LTS | 运行时                     |
+| Fastify     | 4.x    | Web框架（性能优于Express） |
+| Drizzle ORM | 0.29   | 数据库ORM（零运行时开销）  |
+| PostgreSQL  | 16     | 持久化数据库               |
+| Redis       | 7.2    | 缓存与会话存储             |
+| Zod         | 3.x    | 运行时Schema验证           |
 
 ### AI集成
 
-| 技术 | 用途 |
-|------|------|
-| Vercel AI SDK | 统一LLM调用接口 |
-| @ai-sdk/openai | OpenAI Provider |
+| 技术           | 用途                               |
+| -------------- | ---------------------------------- |
+| Vercel AI SDK  | 统一LLM调用接口                    |
+| @ai-sdk/openai | OpenAI Provider                    |
 | Volcengine Ark | 火山引擎DeepSeek（自定义Provider） |
 
 ### 开发工具
 
-| 工具 | 用途 |
-|------|------|
-| pnpm | Monorepo包管理器 |
-| tsup | TypeScript库构建工具 |
-| Vitest | 测试框架（Jest兼容） |
-| ESLint + Prettier | 代码质量与格式化 |
-| Husky | Git钩子（pre-commit、pre-push） |
+| 工具              | 用途                            |
+| ----------------- | ------------------------------- |
+| pnpm              | Monorepo包管理器                |
+| tsup              | TypeScript库构建工具            |
+| Vitest            | 测试框架（Jest兼容）            |
+| ESLint + Prettier | 代码质量与格式化                |
+| Husky             | Git钩子（pre-commit、pre-push） |
 
 ---
 
@@ -183,6 +182,7 @@ pnpm --filter @heartrule/core-engine typecheck
 ### 测试覆盖
 
 当前测试状态：
+
 - ✅ **15个测试**全部通过
 - ✅ Session领域模型测试（6个）
 - ✅ Script领域模型测试（4个）
@@ -223,35 +223,35 @@ docker-compose up -d
 
 ```yaml
 session:
-  session_id: "cbt_assessment"
+  session_id: 'cbt_assessment'
   phases:
-    - phase_id: "greeting"
+    - phase_id: 'greeting'
       topics:
-        - topic_id: "welcome"
+        - topic_id: 'welcome'
           actions:
-            - action_type: "ai_say"
-              action_id: "greeting"
+            - action_type: 'ai_say'
+              action_id: 'greeting'
               config:
-                content_template: "你好！欢迎使用AI咨询服务。"
-            
-            - action_type: "ai_ask"
-              action_id: "ask_name"
+                content_template: '你好！欢迎使用AI咨询服务。'
+
+            - action_type: 'ai_ask'
+              action_id: 'ask_name'
               config:
-                question_template: "请问怎么称呼您？"
+                question_template: '请问怎么称呼您？'
                 variables:
-                  - name: "user_name"
-                    type: "text"
-                    extraction_method: "direct"
+                  - name: 'user_name'
+                    type: 'text'
+                    extraction_method: 'direct'
 ```
 
 ### Action类型
 
-| Action类型 | 用途 | 示例 |
-|-----------|------|------|
-| `ai_say` | 向用户传达信息 | 问候、解释说明 |
-| `ai_ask` | 引导式提问收集信息 | 收集用户姓名、情绪评分 |
-| `ai_think` | 内部认知加工 | 分析用户情绪、生成评估 |
-| `use_skill` | 调用咨询技术脚本 | 苏格拉底式提问 |
+| Action类型  | 用途               | 示例                   |
+| ----------- | ------------------ | ---------------------- |
+| `ai_say`    | 向用户传达信息     | 问候、解释说明         |
+| `ai_ask`    | 引导式提问收集信息 | 收集用户姓名、情绪评分 |
+| `ai_think`  | 内部认知加工       | 分析用户情绪、生成评估 |
+| `use_skill` | 调用咨询技术脚本   | 苏格拉底式提问         |
 
 ### 六大核心引擎
 
@@ -269,6 +269,7 @@ session:
 ### 核心端点
 
 #### 会话管理
+
 - `POST /api/sessions` - 创建会话
 - `GET /api/sessions/:id` - 获取会话详情
 - `GET /api/sessions/:id/messages` - 获取消息历史
@@ -276,10 +277,12 @@ session:
 - `GET /api/users/:userId/sessions` - 列出用户会话
 
 #### 聊天交互
+
 - `POST /api/chat` - 发送消息（非流式）
 - `POST /api/chat/stream` - 发送消息（SSE流式）
 
 #### 脚本管理
+
 - `POST /api/scripts` - 创建脚本
 - `GET /api/scripts/:id` - 获取脚本详情
 - `GET /api/scripts` - 列出脚本
@@ -299,6 +302,7 @@ session:
 4. 在`registry.ts`中注册
 
 示例代码：
+
 ```typescript
 import { BaseAction, ActionContext, ActionResult } from './base.js';
 
@@ -317,6 +321,7 @@ export class MyAction extends BaseAction {
 ### 编写YAML脚本
 
 参考示例脚本：
+
 - [scripts/sessions/cbt_depression_assessment.yaml](scripts/sessions/cbt_depression_assessment.yaml)
 - [scripts/techniques/socratic_questioning.yaml](scripts/techniques/socratic_questioning.yaml)
 
@@ -388,6 +393,7 @@ git push origin feature/my-feature
 ## ⚠️ Python版本（已弃用）
 
 如需查看Python旧版本（不推荐）：
+
 - 目录：[legacy-python/](legacy-python/)
 - 文档：[legacy-python/README.md](legacy-python/README.md)
 - 状态：功能冻结，仅修复严重Bug
@@ -400,11 +406,13 @@ git push origin feature/my-feature
 ## 📞 支持与反馈
 
 ### 获取帮助
+
 1. 查看[开发指南](docs/DEVELOPMENT_GUIDE.md)
 2. 查看[API文档](http://localhost:8000/docs)
 3. 提交[GitHub Issue](https://github.com/your-org/heartrule/issues)
 
 ### 社区
+
 - GitHub Discussions
 - 开发者交流群
 
