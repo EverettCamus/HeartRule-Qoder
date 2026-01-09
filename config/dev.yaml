@@ -13,12 +13,6 @@ server:
   port: 8000
   reload: true
 
-# 数据库配置（MVP使用SQLite）
-database:
-  type: "sqlite"
-  path: "./data/heartrule.db"
-  echo: true  # 打印SQL语句
-
 # LLM服务配置
 llm:
   provider: "volcano_deepseek"  # mock, openai, volcano_deepseek

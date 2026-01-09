@@ -7,7 +7,7 @@
 import { ScriptExecutor, ExecutionStatus } from '@heartrule/core-engine';
 import type { ExecutionState } from '@heartrule/core-engine';
 import { db } from '../db/index.js';
-import { sessions, messages, scripts } from '../db/schema.js';
+import { sessions, messages, scripts, variables, type NewVariable } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
@@ -20,6 +20,48 @@ export class SessionManager {
 
   constructor() {
     this.scriptExecutor = new ScriptExecutor();
+  }
+
+  /**
+   * 推断变量的类型字符串，用于写入 value_type
+   */
+  private inferValueType(value: unknown): string {
+    if (value === null || value === undefined) return 'unknown';
+    if (Array.isArray(value)) return 'array';
+    const t = typeof value;
+    if (t === 'string' || t === 'number' || t === 'boolean') {
+      return t;
+    }
+    return 'object';
+  }
+
+  /**
+   * 根据旧值和新值，构造需要写入 variables 表的快照
+   */
+  private buildVariableSnapshots(
+    sessionId: string,
+    oldVars: Record<string, unknown> | null,
+    newVars: Record<string, unknown>
+  ): NewVariable[] {
+    const rows: NewVariable[] = [];
+
+    for (const [name, value] of Object.entries(newVars)) {
+      const prev = oldVars ? oldVars[name] : undefined;
+
+      // 简单对比：不同才记录快照
+      if (prev !== value) {
+        rows.push({
+          sessionId,
+          variableName: name,
+          value,
+          scope: 'session',                // 先全部按会话级变量处理
+          valueType: this.inferValueType(value),
+          source: 'script_executor',       // 后续可以细化来源
+        });
+      }
+    }
+
+    return rows;
   }
 
   /**
@@ -53,7 +95,7 @@ export class SessionManager {
 
     // 创建初始执行状态
     let executionState: ExecutionState = ScriptExecutor.createInitialState();
-    executionState.variables = (session.variables as Record<string, any>) || {};
+    executionState.variables = (session.variables as Record<string, unknown>) || {};
 
     // 转换 YAML 为 JSON
     const scriptContent = yaml.parse(script.scriptContent);
@@ -78,6 +120,19 @@ export class SessionManager {
         metadata: {},
         timestamp: new Date(),
       });
+    }
+
+    // 在更新 sessions 之前，记录变量变化快照
+    const previousVars =
+      (session.variables as Record<string, unknown> | null) || null;
+    const newVars = (executionState.variables || {}) as Record<
+      string,
+      unknown
+    >;
+
+    const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
+    if (snapshots.length > 0) {
+      await db.insert(variables).values(snapshots);
     }
 
     // 更新会话状态
@@ -148,13 +203,13 @@ export class SessionManager {
     // 恢复执行状态
     let executionState: ExecutionState = {
       status: (session.executionStatus as ExecutionStatus) || ExecutionStatus.RUNNING,
-      currentPhaseIdx: (session.position as any)?.phaseIndex || 0,
-      currentTopicIdx: (session.position as any)?.topicIndex || 0,
-      currentActionIdx: (session.position as any)?.actionIndex || 0,
+      currentPhaseIdx: (session.position as Record<string, unknown>)?.phaseIndex as number || 0,
+      currentTopicIdx: (session.position as Record<string, unknown>)?.topicIndex as number || 0,
+      currentActionIdx: (session.position as Record<string, unknown>)?.actionIndex as number || 0,
       currentAction: null, // 会在执行器中重建
-      variables: (session.variables as Record<string, any>) || {},
+      variables: (session.variables as Record<string, unknown>) || {},
       conversationHistory: [],
-      metadata: (session.metadata as Record<string, any>) || {},
+      metadata: (session.metadata as Record<string, unknown>) || {},
       lastAiMessage: null,
     };
 
@@ -181,6 +236,19 @@ export class SessionManager {
         metadata: {},
         timestamp: new Date(),
       });
+    }
+
+    // 在更新 sessions 之前，记录变量变化快照
+    const previousVars =
+      (session.variables as Record<string, unknown> | null) || null;
+    const newVars = (executionState.variables || {}) as Record<
+      string,
+      unknown
+    >;
+
+    const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
+    if (snapshots.length > 0) {
+      await db.insert(variables).values(snapshots);
     }
 
     // 更新会话状态
