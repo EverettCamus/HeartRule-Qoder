@@ -1,0 +1,139 @@
+# 来访者资料表单，主要是用存放来访者的基本资料，以及一些基本的情况记录。
+forms:
+- form: 来访者基础资料表
+  fields:
+  - text: 名称
+    value: 小白
+    placeholder: 你希望我们怎么称呼你，不必写真名
+    required: true
+  - combobox: 性别
+    value: null
+    placeholder: 来访者性别
+    required: true
+    choices:
+      - value: 男
+      - value: 女
+  - date: 出生年月
+    value: 1990-01-01
+    placeholder: 请输入您的出生年月 (YYYY-MM-DD)
+  - text: 情况描述
+    value: null
+    placeholder: 请描述您的主要问题和原因
+    required: true
+    multiline: true
+  - text: 过去治疗经历
+    value: null
+    placeholder: 请简要描述您的过去治疗经历
+    multiline: true
+  - text: 服务药物
+    value: null
+    placeholder: 请列出您当前正在服用的药物
+    multiline: true
+  python:
+    - return: 年龄
+      params:
+        - param: date_of_birth
+          value: {出生年月}
+      func: >
+        from datetime import datetime
+
+        def calculate_age(date_of_birth):
+            if date_of_birth is None:
+                return 0
+
+            current_date = datetime.now().date()
+            age = current_date.year - date_of_birth.year
+
+            # 检查是否已过生日
+            if (current_date.month, current_date.day) < (date_of_birth.month, date_of_birth.day):
+                age -= 1
+
+            return age
+    - return: 年龄段
+      params:
+        - param: date_of_birth
+          value: {出生年月}
+      func: >
+        from datetime import datetime
+
+        def get_age_group(date_of_birth):
+            current_date = datetime.now().date()
+            age = current_date.year - date_of_birth.year
+
+            # 检查是否已过生日
+            if (current_date.month, current_date.day) < (date_of_birth.month, date_of_birth.day):
+                age -= 1
+
+            age_group = ""
+            if age < 1:
+                age_group = "婴儿"
+            elif age < 3:
+                age_group = "幼儿"
+            elif age < 6:
+                age_group = "学龄前儿童"
+            elif age < 12:
+                age_group = "小学生"
+            elif age < 18:
+                age_group = "青少年"
+            elif age < 40:
+                age_group = "青年"
+            elif age < 60:
+                age_group = "中年"
+            else:
+                age_group = "老年"
+
+            return age_group
+
+- table: 关系要点记录表
+  format: # 这里fields相当于下面rows的格式定义，如果需要给用户填写，就需要这个格式。
+  - text: 对象类型
+    required: true
+  - combobox: 有此对象
+    choices:
+    - value: 未知
+    - value: 有
+    - value: 无
+  - combobox: 生存状态
+    choices:
+      - value: 未知
+      - value: 活着
+      - value: 死亡
+      - value: 残疾
+  - text: 情况记录
+    multiline: true
+  rows:
+  - {对象类型: '', 有此对象: '未知', 生存状态: '未知', 情况记录: ''}
+  - {对象类型: '', 有此对象: '未知', 生存状态: '未知', 情况记录: ''}
+  - {对象类型: '', 有此对象: '未知', 生存状态: '未知', 情况记录: ''}
+  - {对象类型: '', 有此对象: '未知', 生存状态: '未知', 情况记录: ''}
+
+- table: 过往咨询情况
+  format:
+  - text: 开始时间 # 描述性就好
+  - text: 咨询类型
+  - text: 持续时间
+  - text: 咨询目的
+  - text: 咨询效果
+  - text: 评估建议
+  rows: []
+
+- form: 情况记录表
+  fields:
+  - text: 学习情况
+  - text: 工作情况
+  - text: 居住情况
+  - text: 婚姻情况
+  - text: 个人情况
+  - text: 精神病史
+  - text: 身体病史
+  - text: 家族病史
+  - text: 既往治疗
+
+- table: 问题记录表
+  format:
+  - text: 临床表现
+  - text: 严重程度
+  - text: 病程
+  - text: 诱因
+  - text: 社会功能损害
+  rows: []
