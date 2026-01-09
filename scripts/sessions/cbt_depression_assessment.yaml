@@ -35,8 +35,8 @@ session:
                   在开始之前，我想先了解一些基本信息，这将帮助我更好地理解你的情况。
                   你可以放心，这里的所有对话都是保密的。
                 say_goal: "让来访者感到被欢迎和安全"
-                require_acknowledgment: true
-                max_rounds: 2
+                require_acknowledgment: false
+                max_rounds: 1
         
         # 话题1.2：收集基本信息
         - topic_id: "topic_1_2_basic_info"

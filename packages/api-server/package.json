@@ -13,7 +13,9 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push:pg",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:flow": "tsx test-full-flow.ts",
+    "test:welcome": "tsx test-full-welcome.ts"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.0",

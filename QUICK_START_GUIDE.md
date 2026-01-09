@@ -54,7 +54,7 @@ Database connected successfully
 ## 🔍 验证服务器状态
 
 ```bash
-curl http://localhost:8000/health
+curl.exe http://localhost:8000/health
 ```
 
 **预期响应**：
@@ -81,48 +81,100 @@ pnpm test:flow
 
 ### API方式测试
 
+> **注意**：Windows PowerShell 用户请使用 `curl.exe` 而不是 `curl`，或使用下方的 PowerShell 原生命令。
+
 #### 1. 创建会话
+
+**Linux/macOS (Bash)**:
 
 ```bash
 curl -X POST http://localhost:8000/api/sessions \
   -H "Content-Type: application/json" \
   -d '{
-    "user_id": "test_user",
-    "script_id": "cbt_depression_001"
+    "userId": "test_user",
+    "scriptId": "550e8400-e29b-41d4-a716-446655440001"
   }'
+```
+
+**Windows (PowerShell)**:
+
+```powershell
+# 方式1: 使用 curl.exe
+curl.exe -X POST http://localhost:8000/api/sessions `
+  -H "Content-Type: application/json" `
+  -d '{"userId":"test_user","scriptId":"550e8400-e29b-41d4-a716-446655440001"}'
+
+# 方式2: 使用 PowerShell 原生命令
+$body = @'
+{
+  "userId": "test_user",
+  "scriptId": "550e8400-e29b-41d4-a716-446655440001"
+}
+'@
+
+Invoke-RestMethod -Uri "http://localhost:8000/api/sessions" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
 ```
 
 **响应示例**：
 
 ```json
 {
-  "session_id": "abc-123-def",
+  "sessionId": "d6c375d7-de06-47e3-9ab2-b36f91fda21e",
   "status": "active",
-  "created_at": "2026-01-06T..."
+  "createdAt": "2026-01-09T14:10:23.456Z",
+  "aiMessage": "可以告诉我你的名字吗？我可以怎么称呼你？",
+  "executionStatus": "waiting_input"
 }
 ```
 
 #### 2. 发送消息
 
+**Linux/macOS (Bash)**:
+
 ```bash
 curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "session_id": "abc-123-def",
-    "script_id": "cbt_depression_001",
-    "message": "你好"
+    "sessionId": "d6c375d7-de06-47e3-9ab2-b36f91fda21e",
+    "message": "我叫 LEO"
   }'
+```
+
+**Windows (PowerShell)**:
+
+```powershell
+# 方式1: 使用 curl.exe
+curl.exe -X POST http://localhost:8000/api/chat `
+  -H "Content-Type: application/json" `
+  -d '{"sessionId":"d6c375d7-de06-47e3-9ab2-b36f91fda21e","message":"我叫 LEO"}'
+
+# 方式2: 使用 PowerShell 原生命令
+$chatBody = @'
+{
+  "sessionId": "d6c375d7-de06-47e3-9ab2-b36f91fda21e",
+  "message": "我叫 LEO"
+}
+'@
+
+Invoke-RestMethod -Uri "http://localhost:8000/api/chat" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $chatBody
 ```
 
 **响应示例**：
 
 ```json
 {
-  "ai_message": "可以告诉我你的名字吗？我可以怎么称呼你？",
-  "session_status": "active",
-  "variables": {},
-  "completed": false,
-  "waiting_for_input": true
+  "aiMessage": "你今年多大了？",
+  "sessionStatus": "active",
+  "executionStatus": "waiting_input",
+  "extractedVariables": {
+    "user_name": "我叫 LEO"
+  }
 }
 ```
 
@@ -201,20 +253,40 @@ Database connection error
 
 ```
 HeartRule-Qcoder/
-├── packages/
-│   ├── api-server/         # TypeScript API服务器 (8000端口)
-│   │   └── src/index.ts    # 启动入口
-│   ├── core-engine/        # 核心引擎
-│   └── shared-types/       # 共享类型
-├── web/
-│   └── index.html          # Web客户端
+├── packages/                  # TypeScript Monorepo 工作区
+│   ├── api-server/           # API服务器 (端口8000)
+│   │   └── src/index.ts      # 启动入口
+│   ├── core-engine/          # 核心引擎包
+│   └── shared-types/         # 共享类型定义
+│
+├── web/                       # 开发者Web调试工具（当前使用）
+│   ├── index.html            # Web客户端（测试对话）
+│   ├── debug.html            # 调试控制台
+│   └── script_editor.html    # 脚本编辑器
+│
+├── frontend/                  # 【预留】正式前端工程目录（暂未启用）
+│
 ├── config/
-│   └── dev.yaml            # 配置文件
-├── scripts/
-│   ├── sessions/           # YAML会话脚本
-│   └── techniques/         # YAML技术脚本
-└── docker-compose.dev.yml  # Docker配置
+│   └── dev.yaml              # 开发环境配置
+│
+├── scripts/                   # YAML脚本文件
+│   ├── sessions/             # 会话脚本（如CBT评估）
+│   └── techniques/           # 咨询技术脚本（如苏格拉底提问）
+│
+├── docs/                      # 项目文档
+│   ├── DEVELOPMENT_GUIDE.md
+│   ├── MVP_IMPLEMENTATION_STATUS.md
+│   └── design/               # 设计文档（时序图等）
+│
+└── docker-compose.dev.yml     # Docker服务编排配置
 ```
+
+**目录说明**：
+
+- **`packages/*`**：正式TypeScript包，纳入pnpm workspace管理
+- **`web/`**：轻量级静态Web客户端，供开发者快速测试API和对话流程
+- **`frontend/`**：预留给未来正式H5/Mobile前端工程（当前为空）
+- **`scripts/`**：YAML格式的会话脚本和咨询技术定义
 
 ---
 

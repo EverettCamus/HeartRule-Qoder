@@ -25,6 +25,9 @@ coverage/
 *.tmp
 *.temp
 
+# 测试用 JSON 文件
+packages/api-server/test-*.json
+
 # IDE
 .vscode/*
 !.vscode/settings.json
