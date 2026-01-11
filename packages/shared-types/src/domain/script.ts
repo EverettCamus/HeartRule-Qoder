@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import { ScriptType, ScriptTypeSchema, ScriptStatus, ScriptStatusSchema } from '../enums.js';
 
 /**

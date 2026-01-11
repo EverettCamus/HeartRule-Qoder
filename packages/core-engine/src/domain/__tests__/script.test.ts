@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { Script } from '../script.js';
 import { ScriptType, ScriptStatus } from '@heartrule/shared-types';
+import { describe, it, expect } from 'vitest';
+
+import { Script } from '../script.js';
 
 describe('Script Domain Model', () => {
   it('should create a new script', () => {

@@ -1,8 +1,9 @@
+import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
+import { v4 as uuidv4 } from 'uuid';
+
 import { db } from '../db/index.js';
 import { sessions, messages } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 import { SessionManager } from '../services/session-manager.js';
 
 // 创建SessionManager单例

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Form, Input, Button, Space, Typography, Divider, Card } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Space, Typography, Divider, Card } from 'antd';
+import React, { useState, useEffect } from 'react';
 import './style.css';
 
 const { Title, Text } = Typography;
@@ -79,9 +79,7 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
     return (
       <div className="phase-topic-property-panel">
         <div style={{ padding: '24px', textAlign: 'center' }}>
-          <Text type="secondary">
-            请选择一个 {type === 'phase' ? 'Phase' : 'Topic'}
-          </Text>
+          <Text type="secondary">请选择一个 {type === 'phase' ? 'Phase' : 'Topic'}</Text>
         </div>
       </div>
     );
@@ -90,49 +88,35 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
   return (
     <div className="phase-topic-property-panel">
       <div style={{ padding: '16px', height: '100%', overflowY: 'auto' }}>
-        <Title level={5}>
-          编辑 {type === 'phase' ? 'Phase' : 'Topic'} 属性
-        </Title>
+        <Title level={5}>编辑 {type === 'phase' ? 'Phase' : 'Topic'} 属性</Title>
 
         <Form form={form} layout="vertical">
-          <Form.Item
-            label="ID"
-            name="id"
-            rules={[{ required: true, message: '请输入ID' }]}
-          >
+          <Form.Item label="ID" name="id" rules={[{ required: true, message: '请输入ID' }]}>
             <Input placeholder="例如: phase_01 或 topic_01" />
           </Form.Item>
 
-          <Form.Item
-            label="名称"
-            name="name"
-            rules={[{ required: true, message: '请输入名称' }]}
-          >
+          <Form.Item label="名称" name="name" rules={[{ required: true, message: '请输入名称' }]}>
             <Input placeholder={`例如: ${type === 'phase' ? '开场阶段' : '初次见面'}`} />
           </Form.Item>
 
-          <Form.Item
-            label="说明"
-            name="description"
-          >
-            <TextArea
-              rows={3}
-              placeholder="描述这个阶段/主题的目的和内容..."
-            />
+          <Form.Item label="说明" name="description">
+            <TextArea rows={3} placeholder="描述这个阶段/主题的目的和内容..." />
           </Form.Item>
         </Form>
 
         <Divider />
 
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '12px',
+            }}
+          >
             <Text strong>局部变量定义</Text>
-            <Button
-              size="small"
-              type="dashed"
-              icon={<PlusOutlined />}
-              onClick={addVariable}
-            >
+            <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addVariable}>
               添加变量
             </Button>
           </div>
@@ -160,7 +144,9 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
                 >
                   <Space direction="vertical" style={{ width: '100%' }} size="small">
                     <div>
-                      <Text type="secondary" style={{ fontSize: '12px' }}>变量名</Text>
+                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                        变量名
+                      </Text>
                       <Input
                         size="small"
                         value={variable.name}
@@ -169,7 +155,9 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
                       />
                     </div>
                     <div>
-                      <Text type="secondary" style={{ fontSize: '12px' }}>类型</Text>
+                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                        类型
+                      </Text>
                       <Input
                         size="small"
                         value={variable.type}
@@ -178,7 +166,9 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
                       />
                     </div>
                     <div>
-                      <Text type="secondary" style={{ fontSize: '12px' }}>说明</Text>
+                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                        说明
+                      </Text>
                       <TextArea
                         size="small"
                         rows={2}

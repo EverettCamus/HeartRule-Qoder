@@ -7,11 +7,14 @@
 ## 主要特性
 
 ### 1. 双模式编辑
+
 - **YAML 模式**：传统的文本编辑器，适合熟悉 YAML 语法的用户
 - **可视化编辑模式**：图形化的节点配置界面，更直观友好
 
 ### 2. Action 节点列表
+
 每个 Action 节点显示为一个卡片，包含：
+
 - **节点图标**：不同类型有不同的图标和颜色
   - 💬 `ai_say`（蓝色）- AI 说话
   - ❓ `ai_ask`（绿色）- AI 提问
@@ -29,11 +32,13 @@
 ### 3. Action 属性配置面板
 
 #### ai_say 配置
+
 - **提示词内容**（必填）：AI 说话的提示词
 - **语气风格**（可选）：如温柔、鼓励、严肃等
 - **执行条件**（可选）：条件表达式
 
 #### ai_ask 配置
+
 - **提示词内容**（必填）：AI 提问的提示词
 - **语气风格**（可选）：语气设定
 - **退出条件**（可选）：何时退出此 Action
@@ -43,6 +48,7 @@
   - `define`：变量定义说明
 
 #### ai_think 配置
+
 - **思考提示词**（必填）：AI 思考的提示词
 - **输出变量配置**：可添加多个输出变量
   - `get`：提取操作
@@ -51,9 +57,22 @@
   - `value`：默认值
 
 ### 4. 实时同步
-- 在可视化模式下修改 Action 属性后，点击"保存"按钮
+
+- 在可视化模式下修改 Action 属性后,点击"保存"按钮
 - 系统自动将修改同步回 YAML 文本
 - 可以随时切换回 YAML 模式查看生成的代码
+
+### 5. 拖拽排序与自动滚动
+
+- **拖拽排序**：支持通过拖拽调整 Phase、Topic、Action 的顺序
+  - Phase 之间可以拖拽排序
+  - Topic 可以在同一 Phase 内或跨 Phase 拖拽
+  - Action 可以在同一 Topic 内或跨 Topic/Phase 拖拽
+- **自动滚动**：拖拽节点时自动滚动功能
+  - 当拖拽节点接近容器上边缘（80px）时，自动向上滚动
+  - 当拖拽节点接近容器下边缘（80px）时，自动向下滚动
+  - 松开鼠标或拖拽结束时，自动停止滚动
+  - 适用于节点数量超过界面垂直高度的场景
 
 ## 使用流程
 
@@ -89,26 +108,32 @@
 ### 核心组件
 
 #### 1. ActionNodeList
+
 位置：`src/components/ActionNodeList/index.tsx`
 
 负责渲染 Action 节点列表，提供：
+
 - 节点卡片渲染
 - 节点选择交互
 - 节点预览信息展示
 
 #### 2. ActionPropertyPanel
+
 位置：`src/components/ActionPropertyPanel/index.tsx`
 
 负责渲染 Action 属性编辑表单，提供：
+
 - 根据 Action 类型动态渲染表单字段
 - 输出变量的动态增删
 - 表单验证
 - 保存回调
 
 #### 3. 类型定义
+
 位置：`src/types/action.ts`
 
 定义了：
+
 - Action 类型接口（AiSayAction、AiAskAction、AiThinkAction 等）
 - 会谈脚本结构（SessionScript、Stage、Step 等）
 - 输出字段配置（OutputField）
@@ -116,8 +141,9 @@
 ### YAML 解析与同步
 
 #### 解析流程
+
 ```
-YAML 文本 
+YAML 文本
   ↓ (js-yaml.load)
 SessionScript 对象
   ↓ (提取 actions)
@@ -127,6 +153,7 @@ Action[] 数组
 ```
 
 #### 同步流程
+
 ```
 属性表单修改
   ↓ (onSave)
@@ -140,6 +167,7 @@ Action[] 数组
 ## 示例
 
 ### ai_say 节点示例
+
 ```yaml
 - ai_say: |
     你正在和心旅者进行首次评估会谈。
@@ -149,6 +177,7 @@ Action[] 数组
 ```
 
 ### ai_ask 节点示例
+
 ```yaml
 - ai_ask: |
     能跟我讲讲你遇到了什么困扰吗？
@@ -161,6 +190,7 @@ Action[] 数组
 ```
 
 ### ai_think 节点示例
+
 ```yaml
 - think: 预设定心旅者信息
   output:

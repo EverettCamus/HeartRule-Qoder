@@ -1,13 +1,13 @@
 /**
  * Action 注册表
- * 
+ *
  * 参照: legacy-python/src/actions/registry.py
  */
 
-import { BaseAction } from './base-action.js';
-import { AiSayAction } from './ai-say-action.js';
 import { AiAskAction } from './ai-ask-action.js';
+import { AiSayAction } from './ai-say-action.js';
 import { AiThinkAction } from './ai-think-action.js';
+import { BaseAction } from './base-action.js';
 
 export type ActionClass = new (actionId: string, config: Record<string, any>) => BaseAction;
 
@@ -32,7 +32,11 @@ export function registerAction(actionType: string, actionClass: ActionClass): vo
 /**
  * 创建 Action 实例
  */
-export function createAction(actionType: string, actionId: string, config: Record<string, any>): BaseAction {
+export function createAction(
+  actionType: string,
+  actionId: string,
+  config: Record<string, any>
+): BaseAction {
   const ActionClass = ACTION_REGISTRY[actionType];
   if (!ActionClass) {
     throw new Error(`Unknown action type: ${actionType}`);

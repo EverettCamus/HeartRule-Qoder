@@ -23,6 +23,7 @@
 ## 技术栈
 
 **前端**:
+
 - React 18
 - TypeScript 5
 - Ant Design 5
@@ -32,6 +33,7 @@
 - Vite (构建工具)
 
 **后端**:
+
 - Fastify
 - Drizzle ORM
 - PostgreSQL 16
@@ -66,7 +68,7 @@ pnpm --filter api-server db:migrate
 ### 启动开发服务器
 
 ```bash
-# 启动后端API服务器（端口3001）
+# 启动后端API服务器（端口8000）
 pnpm --filter api-server dev
 
 # 启动前端开发服务器（端口3000）

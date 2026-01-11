@@ -1,5 +1,3 @@
-import React, { useState } from 'react';
-import { Card, Typography, Tag, Space, Tooltip, Collapse, Button, Popconfirm, Dropdown, Menu } from 'antd';
 import {
   MessageOutlined,
   QuestionCircleOutlined,
@@ -14,6 +12,20 @@ import {
   FormOutlined,
   PictureOutlined,
 } from '@ant-design/icons';
+import {
+  Card,
+  Typography,
+  Tag,
+  Space,
+  Tooltip,
+  Collapse,
+  Button,
+  Popconfirm,
+  Dropdown,
+  Menu,
+} from 'antd';
+import React, { useState, useRef, useEffect } from 'react';
+
 import type { Action } from '../../types/action';
 import './style.css';
 
@@ -48,8 +60,20 @@ interface ActionNodeListProps {
   onDeleteTopic?: (phaseIndex: number, topicIndex: number) => void;
   onDeleteAction?: (phaseIndex: number, topicIndex: number, actionIndex: number) => void;
   onMovePhase?: (fromIndex: number, toIndex: number) => void;
-  onMoveTopic?: (fromPhaseIndex: number, fromTopicIndex: number, toPhaseIndex: number, toTopicIndex: number) => void;
-  onMoveAction?: (fromPhaseIndex: number, fromTopicIndex: number, fromActionIndex: number, toPhaseIndex: number, toTopicIndex: number, toActionIndex: number) => void;
+  onMoveTopic?: (
+    fromPhaseIndex: number,
+    fromTopicIndex: number,
+    toPhaseIndex: number,
+    toTopicIndex: number
+  ) => void;
+  onMoveAction?: (
+    fromPhaseIndex: number,
+    fromTopicIndex: number,
+    fromActionIndex: number,
+    toPhaseIndex: number,
+    toTopicIndex: number,
+    toActionIndex: number
+  ) => void;
 }
 
 /**
@@ -160,9 +184,7 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
     phases.map((_, i) => `phase-${i}`)
   );
   const [expandedTopics, setExpandedTopics] = useState<string[]>(
-    phases.flatMap((phase, pi) => 
-      phase.topics.map((_, ti) => `phase-${pi}-topic-${ti}`)
-    )
+    phases.flatMap((phase, pi) => phase.topics.map((_, ti) => `phase-${pi}-topic-${ti}`))
   );
 
   // 拖拽状态
@@ -173,6 +195,68 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
     actionIndex?: number;
   } | null>(null);
 
+  // 滚动容器引用和自动滚动
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollAnimationFrameRef = useRef<number | null>(null);
+
+  // 清理滚动动画
+  useEffect(() => {
+    return () => {
+      if (scrollAnimationFrameRef.current) {
+        cancelAnimationFrame(scrollAnimationFrameRef.current);
+      }
+    };
+  }, []);
+
+  // 自动滚动处理函数
+  const handleAutoScroll = (e: React.DragEvent) => {
+    if (!containerRef.current) return;
+
+    const container = containerRef.current;
+    const rect = container.getBoundingClientRect();
+    const mouseY = e.clientY;
+    const scrollThreshold = 80; // 边缘阈值（px）
+    const scrollSpeed = 15; // 滚动速度（px/frame）
+
+    // 停止之前的滚动动画
+    if (scrollAnimationFrameRef.current) {
+      cancelAnimationFrame(scrollAnimationFrameRef.current);
+      scrollAnimationFrameRef.current = null;
+    }
+
+    // 向上滚动
+    if (mouseY - rect.top < scrollThreshold && container.scrollTop > 0) {
+      const scroll = () => {
+        if (container.scrollTop > 0) {
+          container.scrollTop -= scrollSpeed;
+          scrollAnimationFrameRef.current = requestAnimationFrame(scroll);
+        }
+      };
+      scrollAnimationFrameRef.current = requestAnimationFrame(scroll);
+    }
+    // 向下滚动
+    else if (
+      rect.bottom - mouseY < scrollThreshold &&
+      container.scrollTop < container.scrollHeight - container.clientHeight
+    ) {
+      const scroll = () => {
+        if (container.scrollTop < container.scrollHeight - container.clientHeight) {
+          container.scrollTop += scrollSpeed;
+          scrollAnimationFrameRef.current = requestAnimationFrame(scroll);
+        }
+      };
+      scrollAnimationFrameRef.current = requestAnimationFrame(scroll);
+    }
+  };
+
+  // 停止自动滚动
+  const stopAutoScroll = () => {
+    if (scrollAnimationFrameRef.current) {
+      cancelAnimationFrame(scrollAnimationFrameRef.current);
+      scrollAnimationFrameRef.current = null;
+    }
+  };
+
   if (!phases || phases.length === 0) {
     return (
       <div className="action-node-list-empty">
@@ -182,8 +266,13 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
   }
 
   // 渲染单个 Action 卡片
-  const renderActionCard = (action: Action, phaseIndex: number, topicIndex: number, actionIndex: number) => {
-    const isSelected = 
+  const renderActionCard = (
+    action: Action,
+    phaseIndex: number,
+    topicIndex: number,
+    actionIndex: number
+  ) => {
+    const isSelected =
       selectedActionPath?.phaseIndex === phaseIndex &&
       selectedActionPath?.topicIndex === topicIndex &&
       selectedActionPath?.actionIndex === actionIndex;
@@ -205,19 +294,30 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
         }}
         onDragOver={(e) => {
           if (!onMoveAction || !draggedItem) return;
-          e.preventDefault();
-          e.stopPropagation();
-          e.dataTransfer.dropEffect = 'move';
+          // Action 卡片支持：action 拖到 action（同级排序）
+          if (draggedItem.type === 'action') {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'move';
+            handleAutoScroll(e);
+          }
         }}
         onDrop={(e) => {
           if (!onMoveAction || !draggedItem) return;
           e.preventDefault();
           e.stopPropagation();
-          
-          if (draggedItem.type === 'action' && draggedItem.actionIndex !== undefined && draggedItem.topicIndex !== undefined) {
-            if (draggedItem.phaseIndex !== phaseIndex || 
-                draggedItem.topicIndex !== topicIndex || 
-                draggedItem.actionIndex !== actionIndex) {
+          stopAutoScroll();
+
+          if (
+            draggedItem.type === 'action' &&
+            draggedItem.actionIndex !== undefined &&
+            draggedItem.topicIndex !== undefined
+          ) {
+            if (
+              draggedItem.phaseIndex !== phaseIndex ||
+              draggedItem.topicIndex !== topicIndex ||
+              draggedItem.actionIndex !== actionIndex
+            ) {
               onMoveAction(
                 draggedItem.phaseIndex,
                 draggedItem.topicIndex,
@@ -230,7 +330,10 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
           }
           setDraggedItem(null);
         }}
-        onDragEnd={() => setDraggedItem(null)}
+        onDragEnd={() => {
+          stopAutoScroll();
+          setDraggedItem(null);
+        }}
         style={{ marginBottom: 8, cursor: onMoveAction ? 'move' : 'pointer' }}
       >
         <Space direction="vertical" style={{ width: '100%' }} size="small">
@@ -312,16 +415,11 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
   };
 
   return (
-    <div className="action-node-list">
+    <div ref={containerRef} className="action-node-list">
       {/* 顶部添加 Phase 按钮 */}
       {onAddPhase && (
         <div style={{ padding: '0 0 16px 0' }}>
-          <Button
-            type="dashed"
-            icon={<PlusOutlined />}
-            onClick={onAddPhase}
-            block
-          >
+          <Button type="dashed" icon={<PlusOutlined />} onClick={onAddPhase} block>
             添加 Phase
           </Button>
         </div>
@@ -347,76 +445,109 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
                   e.dataTransfer.effectAllowed = 'move';
                 }}
                 onDragOver={(e) => {
-                  if (!onMovePhase || !draggedItem) return;
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.dataTransfer.dropEffect = 'move';
+                  if (!draggedItem) return;
+                  // Phase header 支持：phase 拖到 phase（同级排序）+ topic 拖到 phase（追加）
+                  if (
+                    (onMovePhase && draggedItem.type === 'phase') ||
+                    (onMoveTopic && draggedItem.type === 'topic')
+                  ) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.dataTransfer.dropEffect = 'move';
+                    handleAutoScroll(e);
+                  }
                 }}
                 onDrop={(e) => {
-                  if (!onMovePhase || !draggedItem) return;
+                  if (!draggedItem) return;
                   e.preventDefault();
                   e.stopPropagation();
-                  
-                  if (draggedItem.type === 'phase' && draggedItem.phaseIndex !== phaseIndex) {
+                  stopAutoScroll();
+
+                  // Phase 拖到 Phase → 同级排序
+                  if (
+                    draggedItem.type === 'phase' &&
+                    onMovePhase &&
+                    draggedItem.phaseIndex !== phaseIndex
+                  ) {
                     onMovePhase(draggedItem.phaseIndex, phaseIndex);
+                  }
+                  // Topic 拖到 Phase → 追加到该 Phase 末尾
+                  else if (
+                    draggedItem.type === 'topic' &&
+                    onMoveTopic &&
+                    draggedItem.topicIndex !== undefined
+                  ) {
+                    const targetTopicIndex = phase.topics.length; // 追加到末尾
+                    if (
+                      draggedItem.phaseIndex !== phaseIndex ||
+                      draggedItem.topicIndex !== targetTopicIndex
+                    ) {
+                      onMoveTopic(
+                        draggedItem.phaseIndex,
+                        draggedItem.topicIndex,
+                        phaseIndex,
+                        targetTopicIndex
+                      );
+                    }
                   }
                   setDraggedItem(null);
                 }}
-                onDragEnd={() => setDraggedItem(null)}
+                onDragEnd={() => {
+                  stopAutoScroll();
+                  setDraggedItem(null);
+                }}
                 style={{ cursor: onMovePhase ? 'move' : 'default' }}
               >
-              <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                <Space
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelectPhase({ phaseIndex });
-                  }}
-                  style={{ cursor: 'pointer', flex: 1 }}
-                >
-                  <Text strong style={{ fontSize: 16 }}>
-                    {phase.phase_name || phase.phase_id || `Phase ${phaseIndex + 1}`}
-                  </Text>
-                  <Tag color="blue">{phase.topics.length} Topics</Tag>
-                  {selectedPhasePath?.phaseIndex === phaseIndex && (
-                    <Tag color="cyan">已选中</Tag>
-                  )}
-                </Space>
-                <Space onClick={(e) => e.stopPropagation()}>
-                  {onAddTopic && (
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<PlusOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddTopic(phaseIndex);
-                      }}
-                    >
-                      添加Topic
-                    </Button>
-                  )}
-                  {onDeletePhase && phases.length > 1 && (
-                    <Popconfirm
-                      title="确认删除此 Phase 及其所有内容？"
-                      onConfirm={(e) => {
-                        e?.stopPropagation();
-                        onDeletePhase(phaseIndex);
-                      }}
-                      onCancel={(e) => e?.stopPropagation()}
-                      okText="确认"
-                      cancelText="取消"
-                    >
+                <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                  <Space
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectPhase({ phaseIndex });
+                    }}
+                    style={{ cursor: 'pointer', flex: 1 }}
+                  >
+                    <Text strong style={{ fontSize: 16 }}>
+                      {phase.phase_name || phase.phase_id || `Phase ${phaseIndex + 1}`}
+                    </Text>
+                    <Tag color="blue">{phase.topics.length} Topics</Tag>
+                    {selectedPhasePath?.phaseIndex === phaseIndex && <Tag color="cyan">已选中</Tag>}
+                  </Space>
+                  <Space onClick={(e) => e.stopPropagation()}>
+                    {onAddTopic && (
                       <Button
                         type="text"
                         size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </Popconfirm>
-                  )}
+                        icon={<PlusOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddTopic(phaseIndex);
+                        }}
+                      >
+                        添加Topic
+                      </Button>
+                    )}
+                    {onDeletePhase && phases.length > 1 && (
+                      <Popconfirm
+                        title="确认删除此 Phase 及其所有内容？"
+                        onConfirm={(e) => {
+                          e?.stopPropagation();
+                          onDeletePhase(phaseIndex);
+                        }}
+                        onCancel={(e) => e?.stopPropagation()}
+                        okText="确认"
+                        cancelText="取消"
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </Popconfirm>
+                    )}
+                  </Space>
                 </Space>
-              </Space>
               </div>
             }
             className="phase-panel"
@@ -441,18 +572,34 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
                         e.dataTransfer.effectAllowed = 'move';
                       }}
                       onDragOver={(e) => {
-                        if (!onMoveTopic || !draggedItem) return;
-                        e.preventDefault();
-                        e.stopPropagation();
-                        e.dataTransfer.dropEffect = 'move';
+                        if (!draggedItem) return;
+                        // Topic header 支持：topic 拖到 topic（同级排序）+ action 拖到 topic（追加）
+                        if (
+                          (onMoveTopic && draggedItem.type === 'topic') ||
+                          (onMoveAction && draggedItem.type === 'action')
+                        ) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          e.dataTransfer.dropEffect = 'move';
+                          handleAutoScroll(e);
+                        }
                       }}
                       onDrop={(e) => {
-                        if (!onMoveTopic || !draggedItem) return;
+                        if (!draggedItem) return;
                         e.preventDefault();
                         e.stopPropagation();
-                        
-                        if (draggedItem.type === 'topic' && draggedItem.topicIndex !== undefined) {
-                          if (draggedItem.phaseIndex !== phaseIndex || draggedItem.topicIndex !== topicIndex) {
+                        stopAutoScroll();
+
+                        // Topic 拖到 Topic → 同级排序
+                        if (
+                          draggedItem.type === 'topic' &&
+                          onMoveTopic &&
+                          draggedItem.topicIndex !== undefined
+                        ) {
+                          if (
+                            draggedItem.phaseIndex !== phaseIndex ||
+                            draggedItem.topicIndex !== topicIndex
+                          ) {
                             onMoveTopic(
                               draggedItem.phaseIndex,
                               draggedItem.topicIndex,
@@ -461,77 +608,117 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
                             );
                           }
                         }
+                        // Action 拖到 Topic → 追加到该 Topic 末尾
+                        else if (
+                          draggedItem.type === 'action' &&
+                          onMoveAction &&
+                          draggedItem.actionIndex !== undefined &&
+                          draggedItem.topicIndex !== undefined
+                        ) {
+                          const targetActionIndex = topic.actions.length; // 追加到末尾
+                          if (
+                            draggedItem.phaseIndex !== phaseIndex ||
+                            draggedItem.topicIndex !== topicIndex ||
+                            draggedItem.actionIndex !== targetActionIndex
+                          ) {
+                            onMoveAction(
+                              draggedItem.phaseIndex,
+                              draggedItem.topicIndex,
+                              draggedItem.actionIndex,
+                              phaseIndex,
+                              topicIndex,
+                              targetActionIndex
+                            );
+                          }
+                        }
                         setDraggedItem(null);
                       }}
-                      onDragEnd={() => setDraggedItem(null)}
+                      onDragEnd={() => {
+                        stopAutoScroll();
+                        setDraggedItem(null);
+                      }}
                       style={{ cursor: onMoveTopic ? 'move' : 'default' }}
                     >
-                    <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                      <Space
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectTopic({ phaseIndex, topicIndex });
-                        }}
-                        style={{ cursor: 'pointer', flex: 1 }}
-                      >
-                        <Text strong style={{ fontSize: 14 }}>
-                          {topic.topic_name || topic.topic_id || `Topic ${topicIndex + 1}`}
-                        </Text>
-                        <Tag color="green">{topic.actions.length} Actions</Tag>
-                        {selectedTopicPath?.phaseIndex === phaseIndex &&
-                         selectedTopicPath?.topicIndex === topicIndex && (
-                          <Tag color="cyan">已选中</Tag>
-                        )}
-                      </Space>
-                      <Space onClick={(e) => e.stopPropagation()}>
-                        {onAddAction && (
-                          <Dropdown
-                            overlay={
-                              <Menu onClick={({ key }) => {
-                                onAddAction(phaseIndex, topicIndex, key as string);
-                              }}>
-                                <Menu.Item key="ai_say" icon={<MessageOutlined />}>AI 说话</Menu.Item>
-                                <Menu.Item key="ai_ask" icon={<QuestionCircleOutlined />}>AI 提问</Menu.Item>
-                                <Menu.Item key="ai_think" icon={<BulbOutlined />}>AI 思考</Menu.Item>
-                                <Menu.Item key="use_skill" icon={<ThunderboltOutlined />}>使用技能</Menu.Item>
-                                <Menu.Item key="show_form" icon={<FormOutlined />}>展示表单</Menu.Item>
-                                <Menu.Item key="show_pic" icon={<PictureOutlined />}>展示图片</Menu.Item>
-                              </Menu>
-                            }
-                            trigger={['click']}
-                          >
-                            <Button
-                              type="text"
-                              size="small"
-                              icon={<PlusOutlined />}
-                              onClick={(e) => e.stopPropagation()}
+                      <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                        <Space
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectTopic({ phaseIndex, topicIndex });
+                          }}
+                          style={{ cursor: 'pointer', flex: 1 }}
+                        >
+                          <Text strong style={{ fontSize: 14 }}>
+                            {topic.topic_name || topic.topic_id || `Topic ${topicIndex + 1}`}
+                          </Text>
+                          <Tag color="green">{topic.actions.length} Actions</Tag>
+                          {selectedTopicPath?.phaseIndex === phaseIndex &&
+                            selectedTopicPath?.topicIndex === topicIndex && (
+                              <Tag color="cyan">已选中</Tag>
+                            )}
+                        </Space>
+                        <Space onClick={(e) => e.stopPropagation()}>
+                          {onAddAction && (
+                            <Dropdown
+                              overlay={
+                                <Menu
+                                  onClick={({ key }) => {
+                                    onAddAction(phaseIndex, topicIndex, key as string);
+                                  }}
+                                >
+                                  <Menu.Item key="ai_say" icon={<MessageOutlined />}>
+                                    AI 说话
+                                  </Menu.Item>
+                                  <Menu.Item key="ai_ask" icon={<QuestionCircleOutlined />}>
+                                    AI 提问
+                                  </Menu.Item>
+                                  <Menu.Item key="ai_think" icon={<BulbOutlined />}>
+                                    AI 思考
+                                  </Menu.Item>
+                                  <Menu.Item key="use_skill" icon={<ThunderboltOutlined />}>
+                                    使用技能
+                                  </Menu.Item>
+                                  <Menu.Item key="show_form" icon={<FormOutlined />}>
+                                    展示表单
+                                  </Menu.Item>
+                                  <Menu.Item key="show_pic" icon={<PictureOutlined />}>
+                                    展示图片
+                                  </Menu.Item>
+                                </Menu>
+                              }
+                              trigger={['click']}
                             >
-                              添加Action <DownOutlined />
-                            </Button>
-                          </Dropdown>
-                        )}
-                        {onDeleteTopic && phase.topics.length > 1 && (
-                          <Popconfirm
-                            title="确认删除此 Topic 及其所有 Actions？"
-                            onConfirm={(e) => {
-                              e?.stopPropagation();
-                              onDeleteTopic(phaseIndex, topicIndex);
-                            }}
-                            onCancel={(e) => e?.stopPropagation()}
-                            okText="确认"
-                            cancelText="取消"
-                          >
-                            <Button
-                              type="text"
-                              size="small"
-                              danger
-                              icon={<DeleteOutlined />}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </Popconfirm>
-                        )}
+                              <Button
+                                type="text"
+                                size="small"
+                                icon={<PlusOutlined />}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                添加Action <DownOutlined />
+                              </Button>
+                            </Dropdown>
+                          )}
+                          {onDeleteTopic && phase.topics.length > 1 && (
+                            <Popconfirm
+                              title="确认删除此 Topic 及其所有 Actions？"
+                              onConfirm={(e) => {
+                                e?.stopPropagation();
+                                onDeleteTopic(phaseIndex, topicIndex);
+                              }}
+                              onCancel={(e) => e?.stopPropagation()}
+                              okText="确认"
+                              cancelText="取消"
+                            >
+                              <Button
+                                type="text"
+                                size="small"
+                                danger
+                                icon={<DeleteOutlined />}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </Popconfirm>
+                          )}
+                        </Space>
                       </Space>
-                    </Space>
                     </div>
                   }
                   className="topic-panel"
@@ -545,15 +732,29 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
                     {onAddAction && (
                       <Dropdown
                         overlay={
-                          <Menu onClick={({ key }) => {
-                            onAddAction(phaseIndex, topicIndex, key as string);
-                          }}>
-                            <Menu.Item key="ai_say" icon={<MessageOutlined />}>AI 说话</Menu.Item>
-                            <Menu.Item key="ai_ask" icon={<QuestionCircleOutlined />}>AI 提问</Menu.Item>
-                            <Menu.Item key="ai_think" icon={<BulbOutlined />}>AI 思考</Menu.Item>
-                            <Menu.Item key="use_skill" icon={<ThunderboltOutlined />}>使用技能</Menu.Item>
-                            <Menu.Item key="show_form" icon={<FormOutlined />}>展示表单</Menu.Item>
-                            <Menu.Item key="show_pic" icon={<PictureOutlined />}>展示图片</Menu.Item>
+                          <Menu
+                            onClick={({ key }) => {
+                              onAddAction(phaseIndex, topicIndex, key as string);
+                            }}
+                          >
+                            <Menu.Item key="ai_say" icon={<MessageOutlined />}>
+                              AI 说话
+                            </Menu.Item>
+                            <Menu.Item key="ai_ask" icon={<QuestionCircleOutlined />}>
+                              AI 提问
+                            </Menu.Item>
+                            <Menu.Item key="ai_think" icon={<BulbOutlined />}>
+                              AI 思考
+                            </Menu.Item>
+                            <Menu.Item key="use_skill" icon={<ThunderboltOutlined />}>
+                              使用技能
+                            </Menu.Item>
+                            <Menu.Item key="show_form" icon={<FormOutlined />}>
+                              展示表单
+                            </Menu.Item>
+                            <Menu.Item key="show_pic" icon={<PictureOutlined />}>
+                              展示图片
+                            </Menu.Item>
                           </Menu>
                         }
                         trigger={['click']}

@@ -1,5 +1,5 @@
-import { v4 as uuidv4 } from 'uuid';
 import { ScriptType, ScriptStatus } from '@heartrule/shared-types';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * 脚本领域模型

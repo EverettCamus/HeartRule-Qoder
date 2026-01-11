@@ -4,7 +4,8 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
-    project: './tsconfig.json',
+    project: ['./tsconfig.json', './packages/*/tsconfig.json'],
+    tsconfigRootDir: __dirname,
   },
   plugins: ['@typescript-eslint', 'import'],
   extends: [
@@ -28,14 +29,33 @@ module.exports = {
       },
     ],
     'no-console': ['warn', { allow: ['warn', 'error'] }],
+    'import/no-unresolved': 'off',
+    'import/namespace': 'off',
+    'import/export': 'off',
   },
   settings: {
     'import/resolver': {
       typescript: {
         alwaysTryTypes: true,
-        project: './tsconfig.json',
+        project: ['./tsconfig.json', './packages/*/tsconfig.json'],
+        noWarnOnMultipleProjects: true,
+      },
+      node: {
+        extensions: ['.js', '.jsx', '.ts', '.tsx'],
       },
     },
+    'import/parsers': {
+      '@typescript-eslint/parser': ['.ts', '.tsx'],
+    },
   },
-  ignorePatterns: ['dist', 'node_modules', '*.config.js', '*.config.ts'],
+  ignorePatterns: [
+    'dist',
+    'node_modules',
+    '*.config.js',
+    '*.config.ts',
+    'drizzle',
+    '**/import-script.ts',
+    '**/update-sample-script.ts',
+    '**/test-*.ts',
+  ],
 };

@@ -1,4 +1,4 @@
-import React from 'react';
+import { PlusOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import {
   Form,
   Input,
@@ -12,7 +12,8 @@ import {
   Col,
   Collapse,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
+import React from 'react';
+
 import type { Action } from '../../types/action';
 import './style.css';
 
@@ -154,11 +155,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                 name="ai_say"
                 rules={[{ required: true, message: '请输入提示词内容' }]}
               >
-                <TextArea
-                  rows={8}
-                  placeholder="输入 AI 说话的提示词..."
-                  showCount
-                />
+                <TextArea rows={8} placeholder="输入 AI 说话的提示词..." showCount />
               </Form.Item>
 
               <Form.Item label="语气风格" name="tone">
@@ -175,11 +172,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                 name="ai_ask"
                 rules={[{ required: true, message: '请输入提示词内容' }]}
               >
-                <TextArea
-                  rows={8}
-                  placeholder="输入 AI 提问的提示词..."
-                  showCount
-                />
+                <TextArea rows={8} placeholder="输入 AI 提问的提示词..." showCount />
               </Form.Item>
 
               <Row gutter={16}>
@@ -196,10 +189,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
               </Row>
 
               <Form.Item label="退出条件" name="exit">
-                <TextArea
-                  rows={2}
-                  placeholder="描述何时退出此 Action..."
-                />
+                <TextArea rows={2} placeholder="描述何时退出此 Action..." />
               </Form.Item>
 
               <Divider orientation="left">输出变量配置</Divider>
@@ -239,12 +229,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                         </Form.Item>
                       </Card>
                     ))}
-                    <Button
-                      type="dashed"
-                      onClick={() => add()}
-                      block
-                      icon={<PlusOutlined />}
-                    >
+                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
                       添加输出变量
                     </Button>
                   </>
@@ -261,11 +246,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                 name="think"
                 rules={[{ required: true, message: '请输入思考提示词' }]}
               >
-                <TextArea
-                  rows={8}
-                  placeholder="输入 AI 思考的提示词..."
-                  showCount
-                />
+                <TextArea rows={8} placeholder="输入 AI 思考的提示词..." showCount />
               </Form.Item>
 
               <Divider orientation="left">输出变量配置</Divider>
@@ -327,12 +308,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                         </Form.Item>
                       </Card>
                     ))}
-                    <Button
-                      type="dashed"
-                      onClick={() => add()}
-                      block
-                      icon={<PlusOutlined />}
-                    >
+                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
                       添加输出变量
                     </Button>
                   </>
@@ -389,12 +365,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                         </Form.Item>
                       </Card>
                     ))}
-                    <Button
-                      type="dashed"
-                      onClick={() => add()}
-                      block
-                      icon={<PlusOutlined />}
-                    >
+                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
                       添加输入参数
                     </Button>
                   </>
@@ -438,12 +409,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                         </Form.Item>
                       </Card>
                     ))}
-                    <Button
-                      type="dashed"
-                      onClick={() => add()}
-                      block
-                      icon={<PlusOutlined />}
-                    >
+                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
                       添加输出变量
                     </Button>
                   </>
@@ -500,12 +466,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                         </Form.Item>
                       </Card>
                     ))}
-                    <Button
-                      type="dashed"
-                      onClick={() => add()}
-                      block
-                      icon={<PlusOutlined />}
-                    >
+                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
                       添加输出变量
                     </Button>
                   </>
@@ -526,10 +487,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
               </Form.Item>
 
               <Form.Item label="图片说明" name="description">
-                <TextArea
-                  rows={3}
-                  placeholder="输入图片的说明文字（可选）..."
-                />
+                <TextArea rows={3} placeholder="输入图片的说明文字（可选）..." />
               </Form.Item>
             </>
           )}
@@ -539,10 +497,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
           <Collapse ghost>
             <Panel header="执行条件（可选）" key="condition">
               <Form.Item name="condition" style={{ marginBottom: 0 }}>
-                <TextArea
-                  rows={3}
-                  placeholder="例如: {变量名} == 'true'"
-                />
+                <TextArea rows={3} placeholder="例如: {变量名} == 'true'" />
               </Form.Item>
             </Panel>
           </Collapse>

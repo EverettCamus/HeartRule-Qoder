@@ -1,8 +1,9 @@
+import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
+import { v4 as uuidv4 } from 'uuid';
+
 import { db } from '../db/index.js';
 import { sessions, messages, scripts } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 import { SessionManager } from '../services/session-manager.js';
 
 /**
@@ -13,7 +14,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
   app.post(
     '/api/sessions',
     {
-      schema: {  
+      schema: {
         tags: ['sessions'],
         description: '创建新的咨询会话',
         body: {
@@ -80,11 +81,14 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         const initResult = await sessionManager.initializeSession(sessionId);
 
         // 调试日志
-        app.log.info({ 
-          aiMessage: initResult.aiMessage,
-          executionStatus: initResult.executionStatus,
-          fullResult: initResult 
-        }, 'Session initialized');
+        app.log.info(
+          {
+            aiMessage: initResult.aiMessage,
+            executionStatus: initResult.executionStatus,
+            fullResult: initResult,
+          },
+          'Session initialized'
+        );
 
         const responseData = {
           sessionId,
@@ -95,7 +99,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         };
 
         app.log.info({ responseData }, 'Returning response');
-        
+
         return responseData;
       } catch (error) {
         app.log.error(error);

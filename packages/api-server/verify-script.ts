@@ -2,10 +2,10 @@
  * 验证脚本更新结果
  */
 
+import { eq } from 'drizzle-orm';
+
 import { db } from './src/db/index.js';
 import { scriptFiles } from './src/db/schema.js';
-import { eq } from 'drizzle-orm';
-import yaml from 'js-yaml';
 
 async function main() {
   console.log('🔍 验证脚本更新结果...\n');
@@ -38,7 +38,7 @@ async function main() {
       console.log(`${pIndex + 1}. Phase: ${phase.phase_name} (${phase.phase_id})`);
       phase.topics?.forEach((topic: any, tIndex: number) => {
         console.log(`   ${pIndex + 1}.${tIndex + 1} Topic: ${topic.topic_name}`);
-        topic.actions?.forEach((action: any, aIndex: number) => {
+        topic.actions?.forEach((action: any, _aIndex: number) => {
           actionCount++;
           console.log(`      [${actionCount}] ${action.action_type} - ${action.action_id}`);
           if (action.action_type === 'ai_say') {
@@ -64,7 +64,6 @@ async function main() {
       console.log(lines.slice(0, 20).join('\n'));
       console.log(`... (共 ${lines.length} 行)\n`);
     }
-
   } catch (error) {
     console.error('❌ 验证失败:', error);
     throw error;

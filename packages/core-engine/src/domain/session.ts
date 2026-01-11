@@ -1,9 +1,5 @@
+import { SessionStatus, ExecutionStatus, type ExecutionPosition } from '@heartrule/shared-types';
 import { v4 as uuidv4 } from 'uuid';
-import {
-  SessionStatus,
-  ExecutionStatus,
-  type ExecutionPosition,
-} from '@heartrule/shared-types';
 
 /**
  * 会话领域模型

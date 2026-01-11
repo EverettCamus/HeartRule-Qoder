@@ -1,16 +1,17 @@
 /**
  * 会话管理服务
- * 
+ *
  * 集成脚本执行引擎，提供基于 YAML 脚本的会话管理
  */
 
 import { ScriptExecutor, ExecutionStatus } from '@heartrule/core-engine';
 import type { ExecutionState } from '@heartrule/core-engine';
-import { db } from '../db/index.js';
-import { sessions, messages, scripts, variables, type NewVariable } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
+
+import { db } from '../db/index.js';
+import { sessions, messages, scripts, variables, type NewVariable } from '../db/schema.js';
 
 /**
  * 会话管理器
@@ -54,9 +55,9 @@ export class SessionManager {
           sessionId,
           variableName: name,
           value,
-          scope: 'session',                // 先全部按会话级变量处理
+          scope: 'session', // 先全部按会话级变量处理
           valueType: this.inferValueType(value),
-          source: 'script_executor',       // 后续可以细化来源
+          source: 'script_executor', // 后续可以细化来源
         });
       }
     }
@@ -67,9 +68,7 @@ export class SessionManager {
   /**
    * 初始化会话 - 获取初始 AI 消息
    */
-  async initializeSession(
-    sessionId: string
-  ): Promise<{
+  async initializeSession(sessionId: string): Promise<{
     aiMessage: string;
     sessionStatus: string;
     executionStatus: string;
@@ -123,12 +122,8 @@ export class SessionManager {
     }
 
     // 在更新 sessions 之前，记录变量变化快照
-    const previousVars =
-      (session.variables as Record<string, unknown> | null) || null;
-    const newVars = (executionState.variables || {}) as Record<
-      string,
-      unknown
-    >;
+    const previousVars = (session.variables as Record<string, unknown> | null) || null;
+    const newVars = (executionState.variables || {}) as Record<string, unknown>;
 
     const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
     if (snapshots.length > 0) {
@@ -203,9 +198,9 @@ export class SessionManager {
     // 恢复执行状态
     let executionState: ExecutionState = {
       status: (session.executionStatus as ExecutionStatus) || ExecutionStatus.RUNNING,
-      currentPhaseIdx: (session.position as Record<string, unknown>)?.phaseIndex as number || 0,
-      currentTopicIdx: (session.position as Record<string, unknown>)?.topicIndex as number || 0,
-      currentActionIdx: (session.position as Record<string, unknown>)?.actionIndex as number || 0,
+      currentPhaseIdx: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
+      currentTopicIdx: ((session.position as Record<string, unknown>)?.topicIndex as number) || 0,
+      currentActionIdx: ((session.position as Record<string, unknown>)?.actionIndex as number) || 0,
       currentAction: null, // 会在执行器中重建
       variables: (session.variables as Record<string, unknown>) || {},
       conversationHistory: [],
@@ -239,12 +234,8 @@ export class SessionManager {
     }
 
     // 在更新 sessions 之前，记录变量变化快照
-    const previousVars =
-      (session.variables as Record<string, unknown> | null) || null;
-    const newVars = (executionState.variables || {}) as Record<
-      string,
-      unknown
-    >;
+    const previousVars = (session.variables as Record<string, unknown> | null) || null;
+    const newVars = (executionState.variables || {}) as Record<string, unknown>;
 
     const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
     if (snapshots.length > 0) {

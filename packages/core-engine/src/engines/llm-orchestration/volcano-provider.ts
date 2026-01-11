@@ -1,10 +1,11 @@
-import { BaseLLMProvider, type LLMConfig } from './orchestrator.js';
-import type { LanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import type { LanguageModel } from 'ai';
+
+import { BaseLLMProvider, type LLMConfig } from './orchestrator.js';
 
 /**
  * 火山引擎DeepSeek Provider
- * 
+ *
  * 基于OpenAI兼容接口实现，通过自定义baseURL和model参数适配火山引擎Ark API
  */
 export class VolcanoDeepSeekProvider extends BaseLLMProvider {

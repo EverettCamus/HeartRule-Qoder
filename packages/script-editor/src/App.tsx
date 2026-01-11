@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import ProjectList from './pages/ProjectList';
+
 import ProjectEditor from './pages/ProjectEditor';
+import ProjectList from './pages/ProjectList';
 import './App.css';
 
 function App() {

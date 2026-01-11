@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { Session } from '../session.js';
 import { SessionStatus, ExecutionStatus } from '@heartrule/shared-types';
+import { describe, it, expect } from 'vitest';
+
+import { Session } from '../session.js';
 
 describe('Session Domain Model', () => {
   it('should create a new session with default values', () => {

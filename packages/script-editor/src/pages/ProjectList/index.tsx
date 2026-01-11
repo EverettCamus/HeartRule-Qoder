@@ -1,5 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import {
+  PlusOutlined,
+  SearchOutlined,
+  EditOutlined,
+  PlayCircleOutlined,
+  CloudUploadOutlined,
+  MoreOutlined,
+  FolderOpenOutlined,
+  CopyOutlined,
+  DeleteOutlined,
+} from '@ant-design/icons';
 import {
   Layout,
   Card,
@@ -15,18 +24,10 @@ import {
   Dropdown,
   Spin,
 } from 'antd';
-import {
-  PlusOutlined,
-  SearchOutlined,
-  EditOutlined,
-  PlayCircleOutlined,
-  CloudUploadOutlined,
-  MoreOutlined,
-  FolderOpenOutlined,
-  CopyOutlined,
-  DeleteOutlined,
-} from '@ant-design/icons';
 import type { MenuProps } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import { projectsApi } from '../../api/projects';
 import type { Project } from '../../api/projects';
 import './style.css';
@@ -52,15 +53,21 @@ const ProjectList: React.FC = () => {
   const loadProjects = async () => {
     setLoading(true);
     try {
+      console.log('正在请求工程列表...');
       const response = await projectsApi.getProjects({
         status: statusFilter === 'all' ? undefined : statusFilter,
         search: searchText || undefined,
       });
+      console.log('API 响应:', response);
       if (response.success) {
+        console.log('工程数据:', response.data);
         setProjects(response.data);
+      } else {
+        console.error('API 返回 success=false');
       }
     } catch (error) {
-      message.error('加载工程列表失败');
+      console.error('加载工程列表失败:', error);
+      message.error('加载工程列表失败: ' + (error as any).message);
     } finally {
       setLoading(false);
     }
@@ -166,7 +173,11 @@ const ProjectList: React.FC = () => {
             咨询脚本编辑器
           </Title>
           <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsCreateModalVisible(true)}>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setIsCreateModalVisible(true)}
+            >
               新建工程
             </Button>
           </Space>
@@ -203,10 +214,7 @@ const ProjectList: React.FC = () => {
                 onClick={() => handleEditProject(project.id)}
                 extra={
                   <div onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                    <Dropdown
-                      menu={{ items: getProjectMenuItems(project) }}
-                      trigger={['click']}
-                    >
+                    <Dropdown menu={{ items: getProjectMenuItems(project) }} trigger={['click']}>
                       <Button type="text" icon={<MoreOutlined />} />
                     </Dropdown>
                   </div>
@@ -229,9 +237,7 @@ const ProjectList: React.FC = () => {
 
                   <div className="project-meta">
                     <Space size="small" wrap>
-                      <Text type="secondary">
-                        🔧 引擎 {project.engineVersion}
-                      </Text>
+                      <Text type="secondary">🔧 引擎 {project.engineVersion}</Text>
                       <Text type="secondary">•</Text>
                       <Text type="secondary">{project.author}</Text>
                       <Text type="secondary">•</Text>

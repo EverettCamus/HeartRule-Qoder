@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>脚本工程编辑器 - 启动向导</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 600px;
+            width: 90%;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .info-box {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .info-box h3 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        .info-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+        }
+        .label {
+            font-weight: bold;
+            color: #333;
+            display: inline-block;
+            width: 120px;
+        }
+        .value {
+            color: #666;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #4caf50;
+            color: white;
+        }
+        .status.error {
+            background: #f44336;
+            color: white;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+        }
+        #apiStatus {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 咨询脚本工程编辑器</h1>
+        <p class="subtitle">HeartRule 可视化脚本编辑平台</p>
+        
+        <div class="info-box">
+            <h3>系统状态</h3>
+            <div class="info-item">
+                <span class="label">前端服务器:</span>
+                <span class="value">http://localhost:3000</span>
+                <span class="status success" id="frontendStatus">运行中</span>
+            </div>
+            <div class="info-item">
+                <span class="label">API 服务器:</span>
+                <span class="value">http://localhost:8000</span>
+                <span class="status" id="apiStatusBadge">检查中...</span>
+            </div>
+            <div id="apiStatus"></div>
+        </div>
+
+        <div class="info-box">
+            <h3>✨ 新版本特性</h3>
+            <ul>
+                <li>📁 <strong>工程管理</strong>：支持多文件脚本工程（global、roles、skills、forms、rules、sessions）</li>
+                <li>🎨 <strong>可视化编辑</strong>：Session → Phase → Topic → Action 四层结构清晰展示</li>
+                <li>🔄 <strong>版本控制</strong>：草稿保存、版本发布、历史回滚</li>
+                <li>🚀 <strong>拖拽排序</strong>：支持节点拖拽重排，自动滚动</li>
+                <li>🔧 <strong>引擎版本</strong>：工程与引擎版本兼容性管理</li>
+            </ul>
+        </div>
+
+        <div class="actions">
+            <a href="http://localhost:3000" class="btn" target="_blank">
+                打开工程编辑器
+            </a>
+            <button class="btn btn-secondary" onclick="checkStatus()">
+                刷新状态
+            </button>
+        </div>
+    </div>
+
+    <script>
+        async function checkStatus() {
+            const apiStatusBadge = document.getElementById('apiStatusBadge');
+            const apiStatus = document.getElementById('apiStatus');
+            
+            apiStatusBadge.textContent = '检查中...';
+            apiStatusBadge.className = 'status';
+            apiStatus.innerHTML = '';
+
+            try {
+                const response = await fetch('http://localhost:8000/api/projects');
+                const data = await response.json();
+                
+                if (data.success) {
+                    apiStatusBadge.textContent = '✓ 运行中';
+                    apiStatusBadge.className = 'status success';
+                    apiStatus.innerHTML = `
+                        <div style="color: #4caf50; font-weight: bold;">
+                            ✓ API 服务器正常，已找到 ${data.data.length} 个工程
+                        </div>
+                        ${data.data.map(p => `
+                            <div style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                                📁 ${p.projectName} (${p.status === 'published' ? '已发布' : p.status === 'draft' ? '草稿' : '已归档'})
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    throw new Error('API 返回错误');
+                }
+            } catch (error) {
+                apiStatusBadge.textContent = '✗ 异常';
+                apiStatusBadge.className = 'status error';
+                apiStatus.innerHTML = `
+                    <div style="color: #f44336; font-weight: bold;">
+                        ✗ API 服务器连接失败: ${error.message}
+                    </div>
+                    <div style="margin-top: 5px; font-size: 12px; color: #666;">
+                        请确保 API 服务器正在运行 (端口 8000)
+                    </div>
+                `;
+            }
+        }
+
+        // 页面加载时检查状态
+        window.onload = checkStatus;
+    </script>
+</body>
+</html>

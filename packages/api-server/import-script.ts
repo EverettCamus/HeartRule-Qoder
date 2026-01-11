@@ -1,13 +1,14 @@
 /**
  * 导入 CBT 评估脚本到数据库
  */
-import { db, closeConnection } from './src/db/index.js';
-import { scripts } from './src/db/schema.js';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+
 import { eq } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
+
+import { db, closeConnection } from './src/db/index.js';
+import { scripts } from './src/db/schema.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,7 +23,7 @@ async function importScript() {
     // 读取脚本文件
     const scriptPath = resolve(__dirname, '../../scripts/sessions/cbt_depression_assessment.yaml');
     console.log(`📂 读取脚本: ${scriptPath}`);
-    
+
     const scriptContent = readFileSync(scriptPath, 'utf-8');
 
     // 检查脚本是否已存在
@@ -32,7 +33,8 @@ async function importScript() {
 
     if (existingScript) {
       console.log('⚠️  脚本已存在，更新中...');
-      await db.update(scripts)
+      await db
+        .update(scripts)
         .set({
           scriptContent: scriptContent,
           updatedAt: new Date(),
@@ -63,7 +65,6 @@ async function importScript() {
     console.log('  名称: CBT抑郁症初次评估会谈');
     console.log('  类型: session');
     console.log('  状态: published');
-
   } catch (error) {
     console.error('❌ 导入脚本失败:', error);
     process.exit(1);

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>测试前端 API 调用</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>测试工程列表 API</h1>
+    <button onclick="testApi()">测试 /api/projects</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function testApi() {
+            const resultEl = document.getElementById('result');
+            resultEl.textContent = '正在请求...';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/projects');
+                const data = await response.json();
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultEl.textContent = '错误: ' + error.message;
+            }
+        }
+
+        // 页面加载时自动测试
+        window.onload = () => {
+            testApi();
+        };
+    </script>
+</body>
+</html>

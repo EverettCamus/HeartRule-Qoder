@@ -1,11 +1,12 @@
-import Fastify from 'fastify';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import websocket from '@fastify/websocket';
 import { config } from 'dotenv';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import Fastify from 'fastify';
 
 // ES module 中获取 __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -93,7 +94,7 @@ export async function buildApp() {
   const { registerScriptRoutes } = await import('./routes/scripts.js');
   const projectsRoutes = (await import('./routes/projects.js')).default;
   const versionsRoutes = (await import('./routes/versions.js')).default;
-  
+
   await registerSessionRoutes(app);
   await registerChatRoutes(app);
   await registerScriptRoutes(app);

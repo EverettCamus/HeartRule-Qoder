@@ -1,9 +1,10 @@
 import type { LanguageModel } from 'ai';
+
 import { BaseLLMProvider, type LLMConfig } from './orchestrator.js';
 
 /**
  * Volcengine自定义Provider
- * 
+ *
  * 通过兼容OpenAI格式的API接入火山引擎DeepSeek服务
  */
 export class VolcanoProvider extends BaseLLMProvider {
@@ -25,8 +26,9 @@ export class VolcanoProvider extends BaseLLMProvider {
 
   getModel(): LanguageModel {
     // 使用OpenAI兼容格式
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { createOpenAI } = require('@ai-sdk/openai');
-    
+
     const volcanoOpenAI = createOpenAI({
       apiKey: this.apiKey,
       baseURL: this.baseURL,

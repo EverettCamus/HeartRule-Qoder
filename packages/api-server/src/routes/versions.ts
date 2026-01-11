@@ -1,8 +1,9 @@
+import { eq, desc, and } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+
 import { db } from '../db/index.js';
 import { projects, projectDrafts, projectVersions, scriptFiles } from '../db/schema.js';
-import { eq, desc, and } from 'drizzle-orm';
 
 // Schema定义
 const saveDraftSchema = z.object({
@@ -22,10 +23,7 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       const { id } = request.params as { id: string };
 
-      const [draft] = await db
-        .select()
-        .from(projectDrafts)
-        .where(eq(projectDrafts.projectId, id));
+      const [draft] = await db.select().from(projectDrafts).where(eq(projectDrafts.projectId, id));
 
       if (!draft) {
         return reply.status(404).send({
@@ -54,10 +52,7 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
       const body = saveDraftSchema.parse(request.body);
 
       // 检查项目是否存在
-      const [project] = await db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, id));
+      const [project] = await db.select().from(projects).where(eq(projects.id, id));
 
       if (!project) {
         return reply.status(404).send({
@@ -97,10 +92,7 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // 更新项目的更新时间
-      await db
-        .update(projects)
-        .set({ updatedAt: new Date() })
-        .where(eq(projects.id, id));
+      await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, id));
 
       return reply.send({
         success: true,
@@ -129,10 +121,7 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
       const body = publishVersionSchema.parse(request.body);
 
       // 获取项目和草稿
-      const [project] = await db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, id));
+      const [project] = await db.select().from(projects).where(eq(projects.id, id));
 
       if (!project) {
         return reply.status(404).send({
@@ -141,10 +130,7 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const [draft] = await db
-        .select()
-        .from(projectDrafts)
-        .where(eq(projectDrafts.projectId, id));
+      const [draft] = await db.select().from(projectDrafts).where(eq(projectDrafts.projectId, id));
 
       if (!draft) {
         return reply.status(404).send({
@@ -154,21 +140,21 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // 获取所有文件
-      const files = await db
-        .select()
-        .from(scriptFiles)
-        .where(eq(scriptFiles.projectId, id));
+      const files = await db.select().from(scriptFiles).where(eq(scriptFiles.projectId, id));
 
       // 创建版本记录
-      const versionFiles = files.reduce((acc, file) => {
-        acc[file.id] = {
-          fileType: file.fileType,
-          fileName: file.fileName,
-          fileContent: file.fileContent,
-          yamlContent: file.yamlContent,
-        };
-        return acc;
-      }, {} as Record<string, any>);
+      const versionFiles = files.reduce(
+        (acc, file) => {
+          acc[file.id] = {
+            fileType: file.fileType,
+            fileName: file.fileName,
+            fileContent: file.fileContent,
+            yamlContent: file.yamlContent,
+          };
+          return acc;
+        },
+        {} as Record<string, any>
+      );
 
       const [newVersion] = await db
         .insert(projectVersions)

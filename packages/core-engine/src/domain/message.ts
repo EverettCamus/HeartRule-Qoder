@@ -1,5 +1,5 @@
-import { v4 as uuidv4 } from 'uuid';
 import { MessageRole } from '@heartrule/shared-types';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * 消息领域模型

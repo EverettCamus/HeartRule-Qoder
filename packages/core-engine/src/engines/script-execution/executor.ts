@@ -1,9 +1,11 @@
-import type { Script } from '../../domain/script.js';
-import type { Session } from '../../domain/session.js';
-import type { Message } from '../../domain/message.js';
+import { ExecutionStatus } from '@heartrule/shared-types';
+
 import type { BaseAction, ActionContext, ActionResult } from '../../actions/base.js';
 import type { ActionRegistry } from '../../actions/registry.js';
-import { ExecutionStatus } from '@heartrule/shared-types';
+import type { Message } from '../../domain/message.js';
+import type { Script } from '../../domain/script.js';
+import type { Session } from '../../domain/session.js';
+
 import { YAMLParser } from './yaml-parser.js';
 
 /**
@@ -92,13 +94,8 @@ export class ScriptExecutor {
       // 执行脚本流程
       while (executionState.currentPhaseIdx < phases.length) {
         const phase = phases[executionState.currentPhaseIdx];
-        
-        const state = await this.executePhase(
-          phase,
-          session,
-          executionState,
-          userInput
-        );
+
+        const state = await this.executePhase(phase, session, executionState, userInput);
 
         if (state.status === ExecutionStatus.WAITING_INPUT) {
           return state;
@@ -112,7 +109,6 @@ export class ScriptExecutor {
       // 所有Phase执行完成
       executionState.status = ExecutionStatus.COMPLETED;
       return executionState;
-
     } catch (error) {
       executionState.status = ExecutionStatus.ERROR;
       executionState.metadata.set('error', (error as Error).message);
@@ -133,7 +129,7 @@ export class ScriptExecutor {
 
     while (executionState.currentTopicIdx < topics.length) {
       const topic = topics[executionState.currentTopicIdx];
-      
+
       const state = await this.executeTopic(
         topic,
         phase['phase_id'] as string,

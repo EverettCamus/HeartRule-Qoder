@@ -1,13 +1,12 @@
 /**
  * 脚本执行引擎核心执行器
- * 
+ *
  * 参照: legacy-python/src/engines/script_execution/executor.py
  * MVP 简化版本：支持 ai_say 和 ai_ask
  */
 
 import { createAction } from '../../actions/action-registry.js';
-import type { BaseAction } from '../../actions/base-action.js';
-import type { ActionContext, ActionResult } from '../../actions/base-action.js';
+import type { BaseAction, ActionContext, ActionResult } from '../../actions/base-action.js';
 
 /**
  * 执行状态
@@ -70,7 +69,9 @@ export class ScriptExecutor {
 
       // 如果 metadata 中有保存的 Action 状态，恢复它
       if (executionState.metadata.actionState && !executionState.currentAction) {
-        executionState.currentAction = this.deserializeActionState(executionState.metadata.actionState);
+        executionState.currentAction = this.deserializeActionState(
+          executionState.metadata.actionState
+        );
       }
 
       // 如果有当前Action正在执行，继续执行
@@ -86,7 +87,9 @@ export class ScriptExecutor {
           // Action未完成，继续等待
           executionState.status = ExecutionStatus.WAITING_INPUT;
           // 保存 Action 内部状态
-          executionState.metadata.actionState = this.serializeActionState(executionState.currentAction);
+          executionState.metadata.actionState = this.serializeActionState(
+            executionState.currentAction
+          );
           return executionState;
         }
 

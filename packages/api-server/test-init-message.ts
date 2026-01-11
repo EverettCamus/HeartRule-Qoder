@@ -2,11 +2,12 @@
  * 测试会话初始化返回的消息
  */
 
+import { eq } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
+
 import { db, closeConnection } from './src/db/index.js';
 import { sessions, scripts } from './src/db/schema.js';
 import { SessionManager } from './src/services/session-manager.js';
-import { eq } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 
 const SCRIPT_UUID = '550e8400-e29b-41d4-a716-446655440001';
 const USER_ID = 'test-user-init';
@@ -59,8 +60,10 @@ async function testInitMessage() {
 
     console.log('\n💾 数据库状态:');
     console.log('   position:', session?.position);
-    console.log('   metadata.actionState:', session?.metadata ? (session.metadata as any).actionState : null);
-
+    console.log(
+      '   metadata.actionState:',
+      session?.metadata ? (session.metadata as any).actionState : null
+    );
   } catch (error) {
     console.error('❌ 测试失败:', error);
   } finally {

@@ -24,6 +24,6 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
   },
-  "include": ["packages/*/src/**/*", "*.ts"],
+  "include": ["packages/*/src/**/*", "packages/**/*.ts", "*.ts"],
   "exclude": ["node_modules", "dist", "build", ".turbo", "venv", "packages/script-editor/**/*"]
 }

@@ -3,10 +3,12 @@
  * 用于测试 Action 状态持久化和多轮对话
  */
 
+import * as fs from 'fs';
+
+import * as yaml from 'yaml';
+
 import { ScriptExecutor, ExecutionStatus } from '@heartrule/core-engine';
 import type { ExecutionState } from '@heartrule/core-engine';
-import * as fs from 'fs';
-import * as yaml from 'yaml';
 
 async function testSessionFlow() {
   console.log('='.repeat(60));
@@ -41,7 +43,10 @@ async function testSessionFlow() {
     action: executionState.currentActionIdx,
   });
   console.log('  - AI 消息:', executionState.lastAiMessage);
-  console.log('  - metadata.actionState:', JSON.stringify(executionState.metadata.actionState, null, 2));
+  console.log(
+    '  - metadata.actionState:',
+    JSON.stringify(executionState.metadata.actionState, null, 2)
+  );
 
   // 4. 模拟保存到数据库（这里只是打印）
   console.log('\n💾 模拟保存到数据库...');
@@ -76,7 +81,10 @@ async function testSessionFlow() {
     lastAiMessage: null,
   };
 
-  console.log('  恢复的 metadata.actionState:', JSON.stringify(restoredState.metadata.actionState, null, 2));
+  console.log(
+    '  恢复的 metadata.actionState:',
+    JSON.stringify(restoredState.metadata.actionState, null, 2)
+  );
 
   // 用户输入
   const userInput = '我叫 LEO';
@@ -94,7 +102,10 @@ async function testSessionFlow() {
   });
   console.log('  - AI 消息:', executionState.lastAiMessage);
   console.log('  - 提取的变量:', executionState.variables);
-  console.log('  - metadata.actionState:', JSON.stringify(executionState.metadata.actionState, null, 2));
+  console.log(
+    '  - metadata.actionState:',
+    JSON.stringify(executionState.metadata.actionState, null, 2)
+  );
 
   // 6. 检查是否正确进入下一个 Action
   if (executionState.currentActionIdx === 1) {
@@ -106,9 +117,15 @@ async function testSessionFlow() {
 
   // 7. 如果有 AI 消息，检查是否是询问年龄
   if (executionState.lastAiMessage) {
-    if (executionState.lastAiMessage.includes('年龄') || executionState.lastAiMessage.includes('多大')) {
+    if (
+      executionState.lastAiMessage.includes('年龄') ||
+      executionState.lastAiMessage.includes('多大')
+    ) {
       console.log('✅ AI 消息正确：询问年龄');
-    } else if (executionState.lastAiMessage.includes('名字') || executionState.lastAiMessage.includes('称呼')) {
+    } else if (
+      executionState.lastAiMessage.includes('名字') ||
+      executionState.lastAiMessage.includes('称呼')
+    ) {
       console.log('❌ AI 消息错误：仍在询问名字（重复问题）');
     }
   }

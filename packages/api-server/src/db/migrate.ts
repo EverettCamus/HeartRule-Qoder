@@ -1,4 +1,5 @@
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
+
 import { db, closeConnection } from './index.js';
 
 /**

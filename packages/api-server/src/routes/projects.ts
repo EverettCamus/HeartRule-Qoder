@@ -1,8 +1,9 @@
+import { eq, and, desc, like, or, SQL } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+
 import { db } from '../db/index.js';
 import { projects, projectDrafts, scriptFiles, projectVersions } from '../db/schema.js';
-import { eq, and, desc, like, or, SQL } from 'drizzle-orm';
 
 // Schema定义
 const createProjectSchema = z.object({
@@ -42,16 +43,18 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
       }
       if (search) {
         conditions.push(
-          or(
-            like(projects.projectName, `%${search}%`),
-            like(projects.description, `%${search}%`)
-          )!
+          or(like(projects.projectName, `%${search}%`), like(projects.description, `%${search}%`))!
         );
       }
 
-      const result = conditions.length > 0
-        ? await db.select().from(projects).where(and(...conditions)!).orderBy(desc(projects.updatedAt))
-        : await db.select().from(projects).orderBy(desc(projects.updatedAt));
+      const result =
+        conditions.length > 0
+          ? await db
+              .select()
+              .from(projects)
+              .where(and(...conditions)!)
+              .orderBy(desc(projects.updatedAt))
+          : await db.select().from(projects).orderBy(desc(projects.updatedAt));
 
       // 为每个工程附加文件数量
       const projectsWithFileCount = await Promise.all(
@@ -86,10 +89,7 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       const { id } = request.params as { id: string };
 
-      const [project] = await db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, id));
+      const [project] = await db.select().from(projects).where(eq(projects.id, id));
 
       if (!project) {
         return reply.status(404).send({
@@ -99,16 +99,10 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // 获取工程文件
-      const files = await db
-        .select()
-        .from(scriptFiles)
-        .where(eq(scriptFiles.projectId, id));
+      const files = await db.select().from(scriptFiles).where(eq(scriptFiles.projectId, id));
 
       // 获取草稿
-      const [draft] = await db
-        .select()
-        .from(projectDrafts)
-        .where(eq(projectDrafts.projectId, id));
+      const [draft] = await db.select().from(projectDrafts).where(eq(projectDrafts.projectId, id));
 
       // 获取版本历史
       const versions = await db
@@ -281,10 +275,7 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
       const { author } = request.body as { author: string };
 
       // 获取原工程
-      const [originalProject] = await db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, id));
+      const [originalProject] = await db.select().from(projects).where(eq(projects.id, id));
 
       if (!originalProject) {
         return reply.status(404).send({

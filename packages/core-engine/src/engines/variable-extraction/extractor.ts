@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import type { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
 
 /**
@@ -15,7 +16,7 @@ export interface VariableConfig {
 
 /**
  * 变量提取引擎
- * 
+ *
  * 支持多种提取方法：
  * - direct: 直接提取用户输入
  * - pattern: 正则表达式匹配

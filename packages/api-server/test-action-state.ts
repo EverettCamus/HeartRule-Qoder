@@ -2,11 +2,12 @@
  * 测试 Action 状态持久化
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { ScriptExecutor, ExecutionStatus } from '@heartrule/core-engine';
 import type { ExecutionState } from '@heartrule/core-engine';
-import * as fs from 'fs';
 import * as yaml from 'yaml';
-import * as path from 'path';
 
 async function testActionStatePersistence() {
   console.log('='.repeat(80));
@@ -14,13 +15,16 @@ async function testActionStatePersistence() {
   console.log('='.repeat(80));
 
   // 读取脚本
-  const scriptPath = path.join(process.cwd(), '../../scripts/sessions/cbt_depression_assessment.yaml');
+  const scriptPath = path.join(
+    process.cwd(),
+    '../../scripts/sessions/cbt_depression_assessment.yaml'
+  );
   console.log('\n📄 读取脚本:', scriptPath);
-  
+
   const scriptYaml = fs.readFileSync(scriptPath, 'utf-8');
   const scriptParsed = yaml.parse(scriptYaml);
   const scriptJson = JSON.stringify(scriptParsed);
-  
+
   console.log('✅ 脚本加载成功');
 
   // 创建执行器
@@ -37,7 +41,12 @@ async function testActionStatePersistence() {
 
   console.log('\n📊 执行结果:');
   console.log('  状态:', state.status);
-  console.log('  位置: phase=%d, topic=%d, action=%d', state.currentPhaseIdx, state.currentTopicIdx, state.currentActionIdx);
+  console.log(
+    '  位置: phase=%d, topic=%d, action=%d',
+    state.currentPhaseIdx,
+    state.currentTopicIdx,
+    state.currentActionIdx
+  );
   console.log('  AI消息:', state.lastAiMessage);
   console.log('  actionState:', state.metadata.actionState);
 
@@ -84,7 +93,12 @@ async function testActionStatePersistence() {
   };
 
   console.log('\n🔄 恢复的状态:');
-  console.log('  位置: phase=%d, topic=%d, action=%d', restoredState.currentPhaseIdx, restoredState.currentTopicIdx, restoredState.currentActionIdx);
+  console.log(
+    '  位置: phase=%d, topic=%d, action=%d',
+    restoredState.currentPhaseIdx,
+    restoredState.currentTopicIdx,
+    restoredState.currentActionIdx
+  );
   console.log('  metadata.actionState:', restoredState.metadata.actionState);
 
   const userInput = '我叫 LEO';
@@ -95,7 +109,12 @@ async function testActionStatePersistence() {
 
   console.log('\n📊 执行结果:');
   console.log('  状态:', state.status);
-  console.log('  位置: phase=%d, topic=%d, action=%d', state.currentPhaseIdx, state.currentTopicIdx, state.currentActionIdx);
+  console.log(
+    '  位置: phase=%d, topic=%d, action=%d',
+    state.currentPhaseIdx,
+    state.currentTopicIdx,
+    state.currentActionIdx
+  );
   console.log('  AI消息:', state.lastAiMessage);
   console.log('  变量:', state.variables);
   console.log('  actionState:', state.metadata.actionState);

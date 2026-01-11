@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { YAMLParser } from '../yaml-parser.js';
 
 describe('YAML Parser', () => {

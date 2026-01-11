@@ -1,6 +1,6 @@
 /**
  * AiAskAction - AI向用户提问并提取答案
- * 
+ *
  * 参照: legacy-python/src/actions/ai_ask.py
  */
 
@@ -29,14 +29,23 @@ export class AiAskAction extends BaseAction {
       // 1. 选择问题模板（优先 prompt_template，其次 question_template，再次 question）
       let questionTemplate = this.config.prompt_template || this.config.promptTemplate;
       if (!questionTemplate) {
-        questionTemplate = this.config.question_template || this.config.questionTemplate || this.config.question || '';
+        questionTemplate =
+          this.config.question_template ||
+          this.config.questionTemplate ||
+          this.config.question ||
+          '';
       }
 
       // 2. 变量提取目标
-      const extractTo = this.config.target_variable || this.config.targetVariable || this.config.extract_to || this.config.extractTo || '';
+      const extractTo =
+        this.config.target_variable ||
+        this.config.targetVariable ||
+        this.config.extract_to ||
+        this.config.extractTo ||
+        '';
 
       // 3. 校验配置
-      let validation: ValidationRule = this.config.validation || {};
+      const validation: ValidationRule = this.config.validation || {};
       if (Object.keys(validation).length === 0) {
         // 构造validation对象
         if ('required' in this.config) validation.required = this.config.required;
@@ -47,7 +56,8 @@ export class AiAskAction extends BaseAction {
         if ('pattern' in this.config) validation.pattern = this.config.pattern;
       }
 
-      const retryMessage = this.config.retry_message || this.config.retryMessage || '请提供有效的回答。';
+      const retryMessage =
+        this.config.retry_message || this.config.retryMessage || '请提供有效的回答。';
       const extractionPrompt = this.config.extraction_prompt || this.config.extractionPrompt || '';
 
       // 第一轮：发送问题

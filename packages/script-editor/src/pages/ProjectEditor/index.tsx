@@ -1,20 +1,3 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Layout,
-  Typography,
-  Tree,
-  Button,
-  Space,
-  message,
-  Modal,
-  Input,
-  Spin,
-  Tag,
-  Divider,
-  Dropdown,
-  Menu,
-} from 'antd';
 import {
   FolderOutlined,
   FileOutlined,
@@ -34,14 +17,32 @@ import {
   LeftOutlined,
   RightOutlined,
 } from '@ant-design/icons';
+import {
+  Layout,
+  Typography,
+  Tree,
+  Button,
+  Space,
+  message,
+  Modal,
+  Input,
+  Spin,
+  Tag,
+  Divider,
+  Dropdown,
+  Menu,
+} from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import yaml from 'js-yaml';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+
 import { projectsApi, versionsApi } from '../../api/projects';
 import type { Project, ScriptFile } from '../../api/projects';
-import type { Action, SessionScript, Step } from '../../types/action';
 import { ActionNodeList } from '../../components/ActionNodeList';
 import { ActionPropertyPanel } from '../../components/ActionPropertyPanel';
 import { PhaseTopicPropertyPanel } from '../../components/PhaseTopicPropertyPanel';
+import type { Action, SessionScript, Step } from '../../types/action';
 import './style.css';
 
 const { Header, Sider, Content } = Layout;
@@ -76,11 +77,11 @@ const ProjectEditor: React.FC = () => {
   const [publishModalVisible, setPublishModalVisible] = useState(false);
   const [versionNote, setVersionNote] = useState('');
   const [leftCollapsed, setLeftCollapsed] = useState(false); // 左侧文件树折叠状态
-  
+
   // 可视化编辑相关状态
   const [editMode, setEditMode] = useState<'yaml' | 'visual'>('yaml'); // 编辑模式：YAML/可视化
   const [parsedScript, setParsedScript] = useState<SessionScript | null>(null); // 解析后的脚本
-  
+
   // 层级结构数据和选中路径
   interface TopicWithActions {
     topic_id: string;
@@ -89,14 +90,14 @@ const ProjectEditor: React.FC = () => {
     localVariables?: Array<{ name: string; type?: string; description?: string }>;
     actions: Action[];
   }
-  
+
   interface PhaseWithTopics {
     phase_id: string;
     phase_name?: string;
     description?: string;
     topics: TopicWithActions[];
   }
-  
+
   const [currentPhases, setCurrentPhases] = useState<PhaseWithTopics[]>([]); // 层级结构数据
   const [selectedActionPath, setSelectedActionPath] = useState<{
     phaseIndex: number;
@@ -104,7 +105,10 @@ const ProjectEditor: React.FC = () => {
     actionIndex: number;
   } | null>(null); // 选中的 Action 路径
   const [selectedPhasePath, setSelectedPhasePath] = useState<{ phaseIndex: number } | null>(null); // 选中的 Phase 路径
-  const [selectedTopicPath, setSelectedTopicPath] = useState<{ phaseIndex: number; topicIndex: number } | null>(null); // 选中的 Topic 路径
+  const [selectedTopicPath, setSelectedTopicPath] = useState<{
+    phaseIndex: number;
+    topicIndex: number;
+  } | null>(null); // 选中的 Topic 路径
   const [editingType, setEditingType] = useState<'phase' | 'topic' | 'action' | null>(null); // 当前编辑的类型
 
   // 获取文件类型图标
@@ -209,7 +213,7 @@ const ProjectEditor: React.FC = () => {
   const loadFile = useCallback((file: ScriptFile) => {
     setSelectedFile(file);
     setSelectedKeys([file.id]);
-    
+
     // 转换文件内容为YAML字符串
     let content = '';
     if (file.yamlContent) {
@@ -224,7 +228,7 @@ const ProjectEditor: React.FC = () => {
     }
     setFileContent(content);
     setHasUnsavedChanges(false);
-    
+
     // 如果是会谈脚本，尝试解析为可视化结构
     if (file.fileType === 'session' && content) {
       parseYamlToScript(content);
@@ -262,15 +266,18 @@ const ProjectEditor: React.FC = () => {
   );
 
   // 处理内容变化
-  const handleContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setFileContent(e.target.value);
-    setHasUnsavedChanges(true);
-    
-    // YAML 模式下实时解析（可选，仅在用户停止输入一段时间后）
-    if (selectedFile?.fileType === 'session') {
-      parseYamlToScript(e.target.value);
-    }
-  }, [selectedFile]);
+  const handleContentChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setFileContent(e.target.value);
+      setHasUnsavedChanges(true);
+
+      // YAML 模式下实时解析（可选，仅在用户停止输入一段时间后）
+      if (selectedFile?.fileType === 'session') {
+        parseYamlToScript(e.target.value);
+      }
+    },
+    [selectedFile]
+  );
 
   // 保存文件
   const handleSave = useCallback(async () => {
@@ -347,9 +354,9 @@ const ProjectEditor: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [hasUnsavedChanges, handleSave]);
-  
+
   // ========== 可视化编辑相关函数 ==========
-  
+
   /**
    * 解析 YAML 为脚本结构（保留层级结构）
    */
@@ -357,21 +364,21 @@ const ProjectEditor: React.FC = () => {
     try {
       const parsed = yaml.load(yamlContent) as any;
       setParsedScript(parsed);
-      
+
       console.log('解析的完整脚本:', parsed);
-      
+
       const phases: PhaseWithTopics[] = [];
-      
+
       // 新格式：session.phases[].topics[].actions[]
       if (parsed?.session?.phases) {
         console.log('检测到新格式脚本 (session.phases)');
-        
+
         parsed.session.phases.forEach((phase: any) => {
           const topics: TopicWithActions[] = [];
-          
+
           phase.topics?.forEach((topic: any) => {
             const actions: Action[] = [];
-            
+
             topic.actions?.forEach((action: any) => {
               // 规范化 Action 类型，将 config 字段映射到前端期望的字段名
               if (action.action_type === 'ai_say') {
@@ -381,7 +388,7 @@ const ProjectEditor: React.FC = () => {
                   tone: action.config?.tone,
                   condition: action.config?.condition,
                   action_id: action.action_id,
-                  _raw: action // 保留原始数据用于反向转换
+                  _raw: action, // 保留原始数据用于反向转换
                 });
               } else if (action.action_type === 'ai_ask') {
                 actions.push({
@@ -391,14 +398,16 @@ const ProjectEditor: React.FC = () => {
                   exit: action.config?.exit,
                   tolist: action.config?.tolist,
                   output: action.config?.target_variable
-                    ? [{
-                        get: action.config.target_variable,
-                        define: action.config.extraction_prompt || ''
-                      }]
+                    ? [
+                        {
+                          get: action.config.target_variable,
+                          define: action.config.extraction_prompt || '',
+                        },
+                      ]
                     : [],
                   condition: action.config?.condition,
                   action_id: action.action_id,
-                  _raw: action
+                  _raw: action,
                 });
               } else if (action.action_type === 'ai_think') {
                 actions.push({
@@ -406,11 +415,11 @@ const ProjectEditor: React.FC = () => {
                   think: action.config?.prompt_template || action.config?.think_goal || '',
                   output: (action.config?.output_variables || []).map((v: string) => ({
                     get: v,
-                    define: ''
+                    define: '',
                   })),
                   condition: action.config?.condition,
                   action_id: action.action_id,
-                  _raw: action
+                  _raw: action,
                 });
               } else if (action.ai_say) {
                 // 兼容旧的直接字段格式
@@ -423,21 +432,21 @@ const ProjectEditor: React.FC = () => {
                 actions.push(action);
               }
             });
-            
+
             topics.push({
               topic_id: topic.topic_id,
               topic_name: topic.topic_name,
               description: topic.description,
               localVariables: topic.declare || [],
-              actions
+              actions,
             });
           });
-          
+
           phases.push({
             phase_id: phase.phase_id,
             phase_name: phase.phase_name,
             description: phase.description,
-            topics
+            topics,
           });
         });
       }
@@ -447,7 +456,7 @@ const ProjectEditor: React.FC = () => {
         const firstStepWithActions = parsed.sessions[0].stages[0].steps.find(
           (step: Step) => step.actions && step.actions.length > 0
         );
-        
+
         if (firstStepWithActions?.actions) {
           const actions: Action[] = [];
           firstStepWithActions.actions.forEach((action: any) => {
@@ -458,25 +467,28 @@ const ProjectEditor: React.FC = () => {
             else if (action.user_say) actions.push({ type: 'user_say', ...action });
             else actions.push(action);
           });
-          
+
           // 将旧格式转换为单一 Phase 和 Topic
           phases.push({
             phase_id: 'legacy_phase',
             phase_name: '会谈阶段',
-            topics: [{
-              topic_id: 'legacy_topic',
-              topic_name: '会谈主题',
-              actions
-            }]
+            topics: [
+              {
+                topic_id: 'legacy_topic',
+                topic_name: '会谈主题',
+                actions,
+              },
+            ],
           });
         }
       }
-      
-      const totalActions = phases.reduce((sum, p) => 
-        sum + p.topics.reduce((s, t) => s + t.actions.length, 0), 0
+
+      const totalActions = phases.reduce(
+        (sum, p) => sum + p.topics.reduce((s, t) => s + t.actions.length, 0),
+        0
       );
       console.log(`提取到的层级结构: ${phases.length} Phases, 总计 ${totalActions} Actions`);
-      
+
       setCurrentPhases(phases);
     } catch (error) {
       console.error('YAML 解析失败:', error);
@@ -484,134 +496,141 @@ const ProjectEditor: React.FC = () => {
       setCurrentPhases([]);
     }
   }, []);
-  
+
   /**
    * 将层级结构同步回 YAML 字符串
    */
-  const syncPhasesToYaml = useCallback((phases: PhaseWithTopics[]) => {
-    if (!parsedScript) return;
-    
-    try {
-      // 更新脚本对象
-      const updatedScript: any = JSON.parse(JSON.stringify(parsedScript)); // 深拷贝
-      
-      // 新格式：更新 session.phases
-      if (updatedScript?.session?.phases) {
-        // 重建 phases 结构，保持其他字段不变
-        updatedScript.session.phases = phases.map((phase, pi) => {
-          const originalPhase = (parsedScript as any).session?.phases?.[pi] || {};
-          return {
-            ...originalPhase,
-            phase_id: phase.phase_id,
-            phase_name: phase.phase_name,
-            description: phase.description,
-            topics: phase.topics.map((topic, ti) => {
-              const originalTopic = originalPhase.topics?.[ti] || {};
-              return {
-                ...originalTopic,
-                topic_id: topic.topic_id,
-                topic_name: topic.topic_name,
-                description: topic.description,
-                declare: topic.localVariables,
-                actions: topic.actions.map(action => {
-                  // 将前端字段映射回 config 格式
-                  if (action._raw) {
-                    // 使用保留的原始数据
-                    const rawAction = action._raw as any;
-                    if (action.type === 'ai_say') {
-                      return {
-                        ...rawAction,
-                        config: {
-                          ...rawAction.config,
-                          content_template: action.ai_say,
-                          tone: action.tone,
-                          condition: action.condition
-                        }
-                      };
-                    } else if (action.type === 'ai_ask') {
-                      return {
-                        ...rawAction,
-                        config: {
-                          ...rawAction.config,
-                          question_template: action.ai_ask,
-                          tone: action.tone,
-                          exit: action.exit,
-                          tolist: action.tolist,
-                          target_variable: action.output?.[0]?.get,
-                          extraction_prompt: action.output?.[0]?.define,
-                          condition: action.condition
-                        }
-                      };
-                    } else if (action.type === 'ai_think') {
-                      return {
-                        ...rawAction,
-                        config: {
-                          ...rawAction.config,
-                          prompt_template: action.think,
-                          output_variables: action.output?.map(o => o.get),
-                          condition: action.condition
-                        }
-                      };
+  const syncPhasesToYaml = useCallback(
+    (phases: PhaseWithTopics[]) => {
+      if (!parsedScript) return;
+
+      try {
+        // 更新脚本对象
+        const updatedScript: any = JSON.parse(JSON.stringify(parsedScript)); // 深拷贝
+
+        // 新格式：更新 session.phases
+        if (updatedScript?.session?.phases) {
+          // 重建 phases 结构，保持其他字段不变
+          updatedScript.session.phases = phases.map((phase, pi) => {
+            const originalPhase = (parsedScript as any).session?.phases?.[pi] || {};
+            return {
+              ...originalPhase,
+              phase_id: phase.phase_id,
+              phase_name: phase.phase_name,
+              description: phase.description,
+              topics: phase.topics.map((topic, ti) => {
+                const originalTopic = originalPhase.topics?.[ti] || {};
+                return {
+                  ...originalTopic,
+                  topic_id: topic.topic_id,
+                  topic_name: topic.topic_name,
+                  description: topic.description,
+                  declare: topic.localVariables,
+                  actions: topic.actions.map((action) => {
+                    // 将前端字段映射回 config 格式
+                    if (action._raw) {
+                      // 使用保留的原始数据
+                      const rawAction = action._raw as any;
+                      if (action.type === 'ai_say') {
+                        return {
+                          ...rawAction,
+                          config: {
+                            ...rawAction.config,
+                            content_template: action.ai_say,
+                            tone: action.tone,
+                            condition: action.condition,
+                          },
+                        };
+                      } else if (action.type === 'ai_ask') {
+                        return {
+                          ...rawAction,
+                          config: {
+                            ...rawAction.config,
+                            question_template: action.ai_ask,
+                            tone: action.tone,
+                            exit: action.exit,
+                            tolist: action.tolist,
+                            target_variable: action.output?.[0]?.get,
+                            extraction_prompt: action.output?.[0]?.define,
+                            condition: action.condition,
+                          },
+                        };
+                      } else if (action.type === 'ai_think') {
+                        return {
+                          ...rawAction,
+                          config: {
+                            ...rawAction.config,
+                            prompt_template: action.think,
+                            output_variables: action.output?.map((o) => o.get),
+                            condition: action.condition,
+                          },
+                        };
+                      }
+                      return rawAction;
                     }
-                    return rawAction;
-                  }
-                  return action;
-                })
-              };
-            })
-          };
-        });
-      }
-      // 旧格式：更新 sessions[].stages[].steps[].actions[]
-      else if (updatedScript.sessions?.[0]?.stages?.[0]?.steps) {
-        const stepIndex = updatedScript.sessions[0].stages[0].steps.findIndex(
-          (step: Step) => step.actions && step.actions.length > 0
-        );
-        
-        if (stepIndex !== -1 && phases[0]?.topics[0]?.actions) {
-          updatedScript.sessions[0].stages[0].steps[stepIndex].actions = phases[0].topics[0].actions;
+                    return action;
+                  }),
+                };
+              }),
+            };
+          });
         }
+        // 旧格式：更新 sessions[].stages[].steps[].actions[]
+        else if (updatedScript.sessions?.[0]?.stages?.[0]?.steps) {
+          const stepIndex = updatedScript.sessions[0].stages[0].steps.findIndex(
+            (step: Step) => step.actions && step.actions.length > 0
+          );
+
+          if (stepIndex !== -1 && phases[0]?.topics[0]?.actions) {
+            updatedScript.sessions[0].stages[0].steps[stepIndex].actions =
+              phases[0].topics[0].actions;
+          }
+        }
+
+        // 转换回 YAML
+        const newYaml = yaml.dump(updatedScript, {
+          lineWidth: -1,
+          noRefs: true,
+        });
+        setFileContent(newYaml);
+        setParsedScript(updatedScript);
+      } catch (error) {
+        console.error('同步到 YAML 失败:', error);
+        message.error('同步失败');
       }
-      
-      // 转换回 YAML
-      const newYaml = yaml.dump(updatedScript, {
-        lineWidth: -1,
-        noRefs: true,
-      });
-      setFileContent(newYaml);
-      setParsedScript(updatedScript);
-    } catch (error) {
-      console.error('同步到 YAML 失败:', error);
-      message.error('同步失败');
-    }
-  }, [parsedScript]);
-  
+    },
+    [parsedScript]
+  );
+
   /**
    * 保存 Action 修改
    */
-  const handleActionSave = useCallback((updatedAction: Action) => {
-    if (selectedActionPath === null) return;
-    
-    const { phaseIndex, topicIndex, actionIndex } = selectedActionPath;
-    
-    // 更新层级结构
-    const newPhases = JSON.parse(JSON.stringify(currentPhases)); // 深拷贝
-    newPhases[phaseIndex].topics[topicIndex].actions[actionIndex] = updatedAction;
-    setCurrentPhases(newPhases);
-    
-    // 同步回 YAML
-    syncPhasesToYaml(newPhases);
-    setHasUnsavedChanges(true);
-    message.success('Action 已更新');
-  }, [selectedActionPath, currentPhases, syncPhasesToYaml]);
-  
+  const handleActionSave = useCallback(
+    (updatedAction: Action) => {
+      if (selectedActionPath === null) return;
+
+      const { phaseIndex, topicIndex, actionIndex } = selectedActionPath;
+
+      // 更新层级结构
+      const newPhases = JSON.parse(JSON.stringify(currentPhases)); // 深拷贝
+      newPhases[phaseIndex].topics[topicIndex].actions[actionIndex] = updatedAction;
+      setCurrentPhases(newPhases);
+
+      // 同步回 YAML
+      syncPhasesToYaml(newPhases);
+      setHasUnsavedChanges(true);
+      message.success('Action 已更新');
+    },
+    [selectedActionPath, currentPhases, syncPhasesToYaml]
+  );
+
   /**
    * 添加新 Phase
    */
   const handleAddPhase = useCallback(() => {
     const newPhases = JSON.parse(JSON.stringify(currentPhases));
     const newPhaseIndex = newPhases.length + 1;
-    
+
     newPhases.push({
       phase_id: `phase_${newPhaseIndex}`,
       phase_name: `新阶段 ${newPhaseIndex}`,
@@ -628,60 +647,63 @@ const ProjectEditor: React.FC = () => {
                 action_id: `action_1`,
                 action_type: 'ai_say',
                 config: {
-                  content_template: '请编辑此处内容'
-                }
-              }
-            }
-          ]
-        }
-      ]
+                  content_template: '请编辑此处内容',
+                },
+              },
+            },
+          ],
+        },
+      ],
     });
-    
+
     setCurrentPhases(newPhases);
     syncPhasesToYaml(newPhases);
     setHasUnsavedChanges(true);
     message.success('已添加新 Phase');
   }, [currentPhases, syncPhasesToYaml]);
-  
+
   /**
    * 添加新 Topic
    */
-  const handleAddTopic = useCallback((phaseIndex: number) => {
-    const newPhases = JSON.parse(JSON.stringify(currentPhases));
-    const phase = newPhases[phaseIndex];
-    const newTopicIndex = phase.topics.length + 1;
-    
-    phase.topics.push({
-      topic_id: `topic_${newTopicIndex}`,
-      topic_name: `新主题 ${newTopicIndex}`,
-      actions: [
-        {
-          type: 'ai_say',
-          ai_say: '请编辑此处内容',
-          action_id: `action_1`,
-          _raw: {
+  const handleAddTopic = useCallback(
+    (phaseIndex: number) => {
+      const newPhases = JSON.parse(JSON.stringify(currentPhases));
+      const phase = newPhases[phaseIndex];
+      const newTopicIndex = phase.topics.length + 1;
+
+      phase.topics.push({
+        topic_id: `topic_${newTopicIndex}`,
+        topic_name: `新主题 ${newTopicIndex}`,
+        actions: [
+          {
+            type: 'ai_say',
+            ai_say: '请编辑此处内容',
             action_id: `action_1`,
-            action_type: 'ai_say',
-            config: {
-              content_template: '请编辑此处内容'
-            }
-          }
-        }
-      ]
-    });
-    
-    setCurrentPhases(newPhases);
-    syncPhasesToYaml(newPhases);
-    setHasUnsavedChanges(true);
-    message.success('已添加新 Topic');
-  }, [currentPhases, syncPhasesToYaml]);
-  
+            _raw: {
+              action_id: `action_1`,
+              action_type: 'ai_say',
+              config: {
+                content_template: '请编辑此处内容',
+              },
+            },
+          },
+        ],
+      });
+
+      setCurrentPhases(newPhases);
+      syncPhasesToYaml(newPhases);
+      setHasUnsavedChanges(true);
+      message.success('已添加新 Topic');
+    },
+    [currentPhases, syncPhasesToYaml]
+  );
+
   /**
    * 根据类型创建 Action 初始结构
    */
   const createActionByType = useCallback((actionType: string, actionIndex: number): Action => {
     const baseActionId = `action_${actionIndex}`;
-    
+
     switch (actionType) {
       case 'ai_say':
         return {
@@ -692,11 +714,11 @@ const ProjectEditor: React.FC = () => {
             action_id: baseActionId,
             action_type: 'ai_say',
             config: {
-              content_template: '请编辑此处内容'
-            }
-          }
+              content_template: '请编辑此处内容',
+            },
+          },
         };
-      
+
       case 'ai_ask':
         return {
           type: 'ai_ask',
@@ -708,11 +730,11 @@ const ProjectEditor: React.FC = () => {
             action_type: 'ai_ask',
             config: {
               content_template: '请输入问题',
-              output: []
-            }
-          }
+              output: [],
+            },
+          },
         };
-      
+
       case 'ai_think':
         return {
           type: 'ai_think',
@@ -724,11 +746,11 @@ const ProjectEditor: React.FC = () => {
             action_type: 'ai_think',
             config: {
               think_target: '请输入思考目标',
-              output: []
-            }
-          }
+              output: [],
+            },
+          },
         };
-      
+
       case 'use_skill':
         return {
           type: 'use_skill',
@@ -738,11 +760,11 @@ const ProjectEditor: React.FC = () => {
             action_id: baseActionId,
             action_type: 'use_skill',
             config: {
-              skill_name: '技能名称'
-            }
-          }
+              skill_name: '技能名称',
+            },
+          },
         };
-      
+
       case 'show_form':
         return {
           type: 'show_form',
@@ -752,11 +774,11 @@ const ProjectEditor: React.FC = () => {
             action_id: baseActionId,
             action_type: 'show_form',
             config: {
-              form_id: ''
-            }
-          }
+              form_id: '',
+            },
+          },
         };
-      
+
       case 'show_pic':
         return {
           type: 'show_pic',
@@ -766,11 +788,11 @@ const ProjectEditor: React.FC = () => {
             action_id: baseActionId,
             action_type: 'show_pic',
             config: {
-              pic_url: ''
-            }
-          }
+              pic_url: '',
+            },
+          },
         };
-      
+
       default:
         // 默认返回 ai_say 类型
         return {
@@ -781,9 +803,9 @@ const ProjectEditor: React.FC = () => {
             action_id: baseActionId,
             action_type: 'ai_say',
             config: {
-              content_template: '请编辑此处内容'
-            }
-          }
+              content_template: '请编辑此处内容',
+            },
+          },
         };
     }
   }, []);
@@ -791,136 +813,163 @@ const ProjectEditor: React.FC = () => {
   /**
    * 添加新 Action
    */
-  const handleAddAction = useCallback((phaseIndex: number, topicIndex: number, actionType: string) => {
-    const newPhases = JSON.parse(JSON.stringify(currentPhases));
-    const topic = newPhases[phaseIndex].topics[topicIndex];
-    const newActionIndex = topic.actions.length + 1;
-    
-    const newAction = createActionByType(actionType, newActionIndex);
-    topic.actions.push(newAction);
-    
-    setCurrentPhases(newPhases);
-    syncPhasesToYaml(newPhases);
-    setHasUnsavedChanges(true);
-    message.success(`已添加新 ${actionType} Action`);
-  }, [currentPhases, syncPhasesToYaml, createActionByType]);
-  
+  const handleAddAction = useCallback(
+    (phaseIndex: number, topicIndex: number, actionType: string) => {
+      const newPhases = JSON.parse(JSON.stringify(currentPhases));
+      const topic = newPhases[phaseIndex].topics[topicIndex];
+      const newActionIndex = topic.actions.length + 1;
+
+      const newAction = createActionByType(actionType, newActionIndex);
+      topic.actions.push(newAction);
+
+      setCurrentPhases(newPhases);
+      syncPhasesToYaml(newPhases);
+      setHasUnsavedChanges(true);
+      message.success(`已添加新 ${actionType} Action`);
+    },
+    [currentPhases, syncPhasesToYaml, createActionByType]
+  );
+
   /**
    * 删除 Phase
    */
-  const handleDeletePhase = useCallback((phaseIndex: number) => {
-    const newPhases = JSON.parse(JSON.stringify(currentPhases));
-    newPhases.splice(phaseIndex, 1);
-    
-    // 如果删除的是当前选中的 phase，清空选中状态
-    if (selectedActionPath?.phaseIndex === phaseIndex) {
-      setSelectedActionPath(null);
-    } else if (selectedActionPath && selectedActionPath.phaseIndex > phaseIndex) {
-      // 如果选中的 phase 在被删除的后面，需要调整索引
-      setSelectedActionPath({
-        ...selectedActionPath,
-        phaseIndex: selectedActionPath.phaseIndex - 1
-      });
-    }
-    
-    setCurrentPhases(newPhases);
-    syncPhasesToYaml(newPhases);
-    setHasUnsavedChanges(true);
-    message.success('已删除 Phase');
-  }, [currentPhases, selectedActionPath, syncPhasesToYaml]);
-  
+  const handleDeletePhase = useCallback(
+    (phaseIndex: number) => {
+      const newPhases = JSON.parse(JSON.stringify(currentPhases));
+      newPhases.splice(phaseIndex, 1);
+
+      // 如果删除的是当前选中的 phase，清空选中状态
+      if (selectedActionPath?.phaseIndex === phaseIndex) {
+        setSelectedActionPath(null);
+      } else if (selectedActionPath && selectedActionPath.phaseIndex > phaseIndex) {
+        // 如果选中的 phase 在被删除的后面，需要调整索引
+        setSelectedActionPath({
+          ...selectedActionPath,
+          phaseIndex: selectedActionPath.phaseIndex - 1,
+        });
+      }
+
+      setCurrentPhases(newPhases);
+      syncPhasesToYaml(newPhases);
+      setHasUnsavedChanges(true);
+      message.success('已删除 Phase');
+    },
+    [currentPhases, selectedActionPath, syncPhasesToYaml]
+  );
+
   /**
    * 删除 Topic
    */
-  const handleDeleteTopic = useCallback((phaseIndex: number, topicIndex: number) => {
-    const newPhases = JSON.parse(JSON.stringify(currentPhases));
-    newPhases[phaseIndex].topics.splice(topicIndex, 1);
-    
-    // 如果删除的是当前选中的 topic，清空选中状态
-    if (selectedActionPath?.phaseIndex === phaseIndex && selectedActionPath?.topicIndex === topicIndex) {
-      setSelectedActionPath(null);
-    } else if (selectedActionPath && selectedActionPath.phaseIndex === phaseIndex && selectedActionPath.topicIndex > topicIndex) {
-      // 如果选中的 topic 在被删除的后面，需要调整索引
-      setSelectedActionPath({
-        ...selectedActionPath,
-        topicIndex: selectedActionPath.topicIndex - 1
-      });
-    }
-    
-    setCurrentPhases(newPhases);
-    syncPhasesToYaml(newPhases);
-    setHasUnsavedChanges(true);
-    message.success('已删除 Topic');
-  }, [currentPhases, selectedActionPath, syncPhasesToYaml]);
-  
+  const handleDeleteTopic = useCallback(
+    (phaseIndex: number, topicIndex: number) => {
+      const newPhases = JSON.parse(JSON.stringify(currentPhases));
+      newPhases[phaseIndex].topics.splice(topicIndex, 1);
+
+      // 如果删除的是当前选中的 topic，清空选中状态
+      if (
+        selectedActionPath?.phaseIndex === phaseIndex &&
+        selectedActionPath?.topicIndex === topicIndex
+      ) {
+        setSelectedActionPath(null);
+      } else if (
+        selectedActionPath &&
+        selectedActionPath.phaseIndex === phaseIndex &&
+        selectedActionPath.topicIndex > topicIndex
+      ) {
+        // 如果选中的 topic 在被删除的后面，需要调整索引
+        setSelectedActionPath({
+          ...selectedActionPath,
+          topicIndex: selectedActionPath.topicIndex - 1,
+        });
+      }
+
+      setCurrentPhases(newPhases);
+      syncPhasesToYaml(newPhases);
+      setHasUnsavedChanges(true);
+      message.success('已删除 Topic');
+    },
+    [currentPhases, selectedActionPath, syncPhasesToYaml]
+  );
+
   /**
    * 删除 Action
    */
-  const handleDeleteAction = useCallback((phaseIndex: number, topicIndex: number, actionIndex: number) => {
-    const newPhases = JSON.parse(JSON.stringify(currentPhases));
-    const topic = newPhases[phaseIndex].topics[topicIndex];
-    
-    // 至少保留一个 action
-    if (topic.actions.length <= 1) {
-      message.warning('至少需要保留一个 Action');
-      return;
-    }
-    
-    topic.actions.splice(actionIndex, 1);
-    
-    // 如果删除的是当前选中的 action，清空选中状态
-    if (
-      selectedActionPath?.phaseIndex === phaseIndex &&
-      selectedActionPath?.topicIndex === topicIndex &&
-      selectedActionPath?.actionIndex === actionIndex
-    ) {
-      setSelectedActionPath(null);
-    } else if (
-      selectedActionPath &&
-      selectedActionPath.phaseIndex === phaseIndex &&
-      selectedActionPath.topicIndex === topicIndex &&
-      selectedActionPath.actionIndex > actionIndex
-    ) {
-      // 如果选中的 action 在被删除的后面，需要调整索引
-      setSelectedActionPath({
-        ...selectedActionPath,
-        actionIndex: selectedActionPath.actionIndex - 1
-      });
-    }
-    
-    setCurrentPhases(newPhases);
-    syncPhasesToYaml(newPhases);
-    setHasUnsavedChanges(true);
-    message.success('已删除 Action');
-  }, [currentPhases, selectedActionPath, syncPhasesToYaml]);
+  const handleDeleteAction = useCallback(
+    (phaseIndex: number, topicIndex: number, actionIndex: number) => {
+      const newPhases = JSON.parse(JSON.stringify(currentPhases));
+      const topic = newPhases[phaseIndex].topics[topicIndex];
+
+      // 至少保留一个 action
+      if (topic.actions.length <= 1) {
+        message.warning('至少需要保留一个 Action');
+        return;
+      }
+
+      topic.actions.splice(actionIndex, 1);
+
+      // 如果删除的是当前选中的 action，清空选中状态
+      if (
+        selectedActionPath?.phaseIndex === phaseIndex &&
+        selectedActionPath?.topicIndex === topicIndex &&
+        selectedActionPath?.actionIndex === actionIndex
+      ) {
+        setSelectedActionPath(null);
+      } else if (
+        selectedActionPath &&
+        selectedActionPath.phaseIndex === phaseIndex &&
+        selectedActionPath.topicIndex === topicIndex &&
+        selectedActionPath.actionIndex > actionIndex
+      ) {
+        // 如果选中的 action 在被删除的后面，需要调整索引
+        setSelectedActionPath({
+          ...selectedActionPath,
+          actionIndex: selectedActionPath.actionIndex - 1,
+        });
+      }
+
+      setCurrentPhases(newPhases);
+      syncPhasesToYaml(newPhases);
+      setHasUnsavedChanges(true);
+      message.success('已删除 Action');
+    },
+    [currentPhases, selectedActionPath, syncPhasesToYaml]
+  );
 
   /**
    * 移动 Phase
    */
-  const handleMovePhase = useCallback((fromIndex: number, toIndex: number) => {
-    const newPhases = JSON.parse(JSON.stringify(currentPhases));
-    const [movedPhase] = newPhases.splice(fromIndex, 1);
-    newPhases.splice(toIndex, 0, movedPhase);
-    
-    setCurrentPhases(newPhases);
-    syncPhasesToYaml(newPhases);
-    setHasUnsavedChanges(true);
-    message.success('Phase 已移动');
-  }, [currentPhases, syncPhasesToYaml]);
+  const handleMovePhase = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      const newPhases = JSON.parse(JSON.stringify(currentPhases));
+      const [movedPhase] = newPhases.splice(fromIndex, 1);
+      newPhases.splice(toIndex, 0, movedPhase);
+
+      setCurrentPhases(newPhases);
+      syncPhasesToYaml(newPhases);
+      setHasUnsavedChanges(true);
+      message.success('Phase 已移动');
+    },
+    [currentPhases, syncPhasesToYaml]
+  );
 
   /**
    * 移动 Topic（支持跨 Phase）
    */
   const handleMoveTopic = useCallback(
-    (fromPhaseIndex: number, fromTopicIndex: number, toPhaseIndex: number, toTopicIndex: number) => {
+    (
+      fromPhaseIndex: number,
+      fromTopicIndex: number,
+      toPhaseIndex: number,
+      toTopicIndex: number
+    ) => {
       const newPhases = JSON.parse(JSON.stringify(currentPhases));
-      
+
       // 从源位置移除 topic
       const [movedTopic] = newPhases[fromPhaseIndex].topics.splice(fromTopicIndex, 1);
-      
+
       // 插入到目标位置
       newPhases[toPhaseIndex].topics.splice(toTopicIndex, 0, movedTopic);
-      
+
       setCurrentPhases(newPhases);
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
@@ -942,13 +991,16 @@ const ProjectEditor: React.FC = () => {
       toActionIndex: number
     ) => {
       const newPhases = JSON.parse(JSON.stringify(currentPhases));
-      
+
       // 从源位置移除 action
-      const [movedAction] = newPhases[fromPhaseIndex].topics[fromTopicIndex].actions.splice(fromActionIndex, 1);
-      
+      const [movedAction] = newPhases[fromPhaseIndex].topics[fromTopicIndex].actions.splice(
+        fromActionIndex,
+        1
+      );
+
       // 插入到目标位置
       newPhases[toPhaseIndex].topics[toTopicIndex].actions.splice(toActionIndex, 0, movedAction);
-      
+
       setCurrentPhases(newPhases);
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
@@ -966,7 +1018,7 @@ const ProjectEditor: React.FC = () => {
     setSelectedActionPath(null);
     setEditingType('phase');
   }, []);
-  
+
   /**
    * 处理选中 Topic
    */
@@ -976,61 +1028,70 @@ const ProjectEditor: React.FC = () => {
     setSelectedActionPath(null);
     setEditingType('topic');
   }, []);
-  
+
   /**
    * 处理选中 Action
    */
-  const handleSelectAction = useCallback((path: { phaseIndex: number; topicIndex: number; actionIndex: number }) => {
-    setSelectedPhasePath(null);
-    setSelectedTopicPath(null);
-    setSelectedActionPath(path);
-    setEditingType('action');
-  }, []);
-  
+  const handleSelectAction = useCallback(
+    (path: { phaseIndex: number; topicIndex: number; actionIndex: number }) => {
+      setSelectedPhasePath(null);
+      setSelectedTopicPath(null);
+      setSelectedActionPath(path);
+      setEditingType('action');
+    },
+    []
+  );
+
   /**
    * 保存 Phase 修改
    */
-  const handlePhaseSave = useCallback((updatedPhaseData: any) => {
-    if (selectedPhasePath === null) return;
-    
-    const { phaseIndex } = selectedPhasePath;
-    const newPhases = JSON.parse(JSON.stringify(currentPhases));
-    
-    newPhases[phaseIndex] = {
-      ...newPhases[phaseIndex],
-      phase_id: updatedPhaseData.id,
-      phase_name: updatedPhaseData.name,
-      description: updatedPhaseData.description,
-    };
-    
-    setCurrentPhases(newPhases);
-    syncPhasesToYaml(newPhases);
-    setHasUnsavedChanges(true);
-    message.success('Phase 已更新');
-  }, [selectedPhasePath, currentPhases, syncPhasesToYaml]);
-  
+  const handlePhaseSave = useCallback(
+    (updatedPhaseData: any) => {
+      if (selectedPhasePath === null) return;
+
+      const { phaseIndex } = selectedPhasePath;
+      const newPhases = JSON.parse(JSON.stringify(currentPhases));
+
+      newPhases[phaseIndex] = {
+        ...newPhases[phaseIndex],
+        phase_id: updatedPhaseData.id,
+        phase_name: updatedPhaseData.name,
+        description: updatedPhaseData.description,
+      };
+
+      setCurrentPhases(newPhases);
+      syncPhasesToYaml(newPhases);
+      setHasUnsavedChanges(true);
+      message.success('Phase 已更新');
+    },
+    [selectedPhasePath, currentPhases, syncPhasesToYaml]
+  );
+
   /**
    * 保存 Topic 修改
    */
-  const handleTopicSave = useCallback((updatedTopicData: any) => {
-    if (selectedTopicPath === null) return;
-    
-    const { phaseIndex, topicIndex } = selectedTopicPath;
-    const newPhases = JSON.parse(JSON.stringify(currentPhases));
-    
-    newPhases[phaseIndex].topics[topicIndex] = {
-      ...newPhases[phaseIndex].topics[topicIndex],
-      topic_id: updatedTopicData.id,
-      topic_name: updatedTopicData.name,
-      description: updatedTopicData.description,
-      localVariables: updatedTopicData.localVariables,
-    };
-    
-    setCurrentPhases(newPhases);
-    syncPhasesToYaml(newPhases);
-    setHasUnsavedChanges(true);
-    message.success('Topic 已更新');
-  }, [selectedTopicPath, currentPhases, syncPhasesToYaml]);
+  const handleTopicSave = useCallback(
+    (updatedTopicData: any) => {
+      if (selectedTopicPath === null) return;
+
+      const { phaseIndex, topicIndex } = selectedTopicPath;
+      const newPhases = JSON.parse(JSON.stringify(currentPhases));
+
+      newPhases[phaseIndex].topics[topicIndex] = {
+        ...newPhases[phaseIndex].topics[topicIndex],
+        topic_id: updatedTopicData.id,
+        topic_name: updatedTopicData.name,
+        description: updatedTopicData.description,
+        localVariables: updatedTopicData.localVariables,
+      };
+
+      setCurrentPhases(newPhases);
+      syncPhasesToYaml(newPhases);
+      setHasUnsavedChanges(true);
+      message.success('Topic 已更新');
+    },
+    [selectedTopicPath, currentPhases, syncPhasesToYaml]
+  );
 
   // 初始加载
   useEffect(() => {
@@ -1050,15 +1111,28 @@ const ProjectEditor: React.FC = () => {
   return (
     <Layout className="project-editor">
       {/* 顶部导航栏 */}
-      <Header className="editor-header" style={{ background: '#fff', padding: '0 24px', borderBottom: '1px solid #f0f0f0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '100%' }}>
+      <Header
+        className="editor-header"
+        style={{ background: '#fff', padding: '0 24px', borderBottom: '1px solid #f0f0f0' }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            height: '100%',
+          }}
+        >
           <Space size="middle" align="center">
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/projects')}>
               返回列表
             </Button>
             <Divider type="vertical" />
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <Title level={4} style={{ margin: 0, lineHeight: '1.2', fontSize: '18px', marginBottom: '2px' }}>
+              <Title
+                level={4}
+                style={{ margin: 0, lineHeight: '1.2', fontSize: '18px', marginBottom: '2px' }}
+              >
                 {project?.projectName}
               </Title>
               <Text type="secondary" style={{ fontSize: '12px', lineHeight: '1' }}>
@@ -1067,7 +1141,11 @@ const ProjectEditor: React.FC = () => {
             </div>
             {project?.status && (
               <Tag color={project.status === 'published' ? 'success' : 'default'}>
-                {project.status === 'draft' ? '草稿' : project.status === 'published' ? '已发布' : '已归档'}
+                {project.status === 'draft'
+                  ? '草稿'
+                  : project.status === 'published'
+                    ? '已发布'
+                    : '已归档'}
               </Tag>
             )}
             {hasUnsavedChanges && <Tag color="warning">未保存</Tag>}
@@ -1091,31 +1169,33 @@ const ProjectEditor: React.FC = () => {
 
       <Layout style={{ height: 'calc(100vh - 64px)' }}>
         {/* 左侧文件树 */}
-        <Sider 
-          width={300} 
+        <Sider
+          width={300}
           collapsedWidth={50}
           collapsible
           collapsed={leftCollapsed}
           onCollapse={setLeftCollapsed}
           trigger={null}
-          theme="light" 
-          style={{ 
-            borderRight: '1px solid #f0f0f0', 
+          theme="light"
+          style={{
+            borderRight: '1px solid #f0f0f0',
             overflow: 'hidden',
             position: 'relative',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
           }}
-        >          
+        >
           {/* 折叠按钮 */}
-          <div style={{ 
-            padding: '8px', 
-            borderBottom: '1px solid #f0f0f0',
-            display: 'flex',
-            justifyContent: leftCollapsed ? 'center' : 'flex-end'
-          }}>
-            <Button 
-              type="text" 
+          <div
+            style={{
+              padding: '8px',
+              borderBottom: '1px solid #f0f0f0',
+              display: 'flex',
+              justifyContent: leftCollapsed ? 'center' : 'flex-end',
+            }}
+          >
+            <Button
+              type="text"
               icon={leftCollapsed ? <RightOutlined /> : <LeftOutlined />}
               onClick={() => setLeftCollapsed(!leftCollapsed)}
               size="small"
@@ -1123,14 +1203,23 @@ const ProjectEditor: React.FC = () => {
           </div>
 
           {/* 工程文件树区域 - 可滚动 */}
-          <div style={{ 
-            padding: leftCollapsed ? '8px' : '16px', 
-            display: leftCollapsed ? 'none' : 'block',
-            flex: 1,
-            overflow: 'auto',
-            minHeight: 0
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <div
+            style={{
+              padding: leftCollapsed ? '8px' : '16px',
+              display: leftCollapsed ? 'none' : 'block',
+              flex: 1,
+              overflow: 'auto',
+              minHeight: 0,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '12px',
+              }}
+            >
               <Text strong>工程文件</Text>
               <Dropdown
                 overlay={
@@ -1153,17 +1242,21 @@ const ProjectEditor: React.FC = () => {
               onSelect={handleTreeSelect}
             />
           </div>
-          
+
           {/* 文件属性区域 - 固定底部，独立滚动 */}
           {!leftCollapsed && (
-            <div style={{ 
-              borderTop: '1px solid #f0f0f0',
-              padding: '16px',
-              maxHeight: '40vh',
-              overflow: 'auto',
-              flexShrink: 0
-            }}>
-              <Title level={5} style={{ marginTop: 0 }}>文件属性</Title>
+            <div
+              style={{
+                borderTop: '1px solid #f0f0f0',
+                padding: '16px',
+                maxHeight: '40vh',
+                overflow: 'auto',
+                flexShrink: 0,
+              }}
+            >
+              <Title level={5} style={{ marginTop: 0 }}>
+                文件属性
+              </Title>
               {selectedFile ? (
                 <div>
                   <Space direction="vertical" style={{ width: '100%' }} size="middle">
@@ -1213,7 +1306,16 @@ const ProjectEditor: React.FC = () => {
 
         {/* 中间编辑区 */}
         <Layout style={{ padding: '0', overflow: 'hidden' }}>
-          <Content style={{ background: '#fff', margin: 0, minHeight: 280, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <Content
+            style={{
+              background: '#fff',
+              margin: 0,
+              minHeight: 280,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
             {selectedFile ? (
               <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 {/* 文件面包屑 */}
@@ -1224,7 +1326,7 @@ const ProjectEditor: React.FC = () => {
                     <Text type="secondary" style={{ fontSize: '12px' }}>
                       最后修改: {new Date(selectedFile.updatedAt).toLocaleString()}
                     </Text>
-                    
+
                     {/* 如果是会谈脚本，显示模式切换按钮 */}
                     {selectedFile.fileType === 'session' && (
                       <>
@@ -1254,13 +1356,13 @@ const ProjectEditor: React.FC = () => {
                           </Button>
                         </Button.Group>
                         <Text type="secondary" style={{ fontSize: '12px', marginLeft: '8px' }}>
-                          {editMode === 'visual' && (
-                            `(${
-                              currentPhases.reduce((total, phase) => 
-                                total + phase.topics.reduce((t, topic) => t + topic.actions.length, 0), 0
-                              )
-                            } 个节点)`
-                          )}
+                          {editMode === 'visual' &&
+                            `(${currentPhases.reduce(
+                              (total, phase) =>
+                                total +
+                                phase.topics.reduce((t, topic) => t + topic.actions.length, 0),
+                              0
+                            )} 个节点)`}
                         </Text>
                       </>
                     )}
@@ -1287,12 +1389,14 @@ const ProjectEditor: React.FC = () => {
                   // 可视化节点编辑
                   <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
                     {/* 左侧：Action 节点列表 */}
-                    <div style={{ 
-                      width: '50%', 
-                      borderRight: '1px solid #f0f0f0',
-                      overflow: 'auto',
-                      minHeight: 0
-                    }}>
+                    <div
+                      style={{
+                        width: '50%',
+                        borderRight: '1px solid #f0f0f0',
+                        overflow: 'auto',
+                        minHeight: 0,
+                      }}
+                    >
                       <ActionNodeList
                         phases={currentPhases}
                         selectedActionPath={selectedActionPath}
@@ -1312,13 +1416,15 @@ const ProjectEditor: React.FC = () => {
                         onMoveAction={handleMoveAction}
                       />
                     </div>
-                    
+
                     {/* 右侧：属性编辑面板 */}
-                    <div style={{ 
-                      width: '50%',
-                      overflow: 'auto',
-                      minHeight: 0
-                    }}>
+                    <div
+                      style={{
+                        width: '50%',
+                        overflow: 'auto',
+                        minHeight: 0,
+                      }}
+                    >
                       {editingType === 'phase' && selectedPhasePath !== null && (
                         <PhaseTopicPropertyPanel
                           type="phase"
@@ -1330,20 +1436,30 @@ const ProjectEditor: React.FC = () => {
                           onSave={handlePhaseSave}
                         />
                       )}
-                      
+
                       {editingType === 'topic' && selectedTopicPath !== null && (
                         <PhaseTopicPropertyPanel
                           type="topic"
                           data={{
-                            id: currentPhases[selectedTopicPath.phaseIndex].topics[selectedTopicPath.topicIndex].topic_id,
-                            name: currentPhases[selectedTopicPath.phaseIndex].topics[selectedTopicPath.topicIndex].topic_name,
-                            description: currentPhases[selectedTopicPath.phaseIndex].topics[selectedTopicPath.topicIndex].description,
-                            localVariables: currentPhases[selectedTopicPath.phaseIndex].topics[selectedTopicPath.topicIndex].localVariables,
+                            id: currentPhases[selectedTopicPath.phaseIndex].topics[
+                              selectedTopicPath.topicIndex
+                            ].topic_id,
+                            name: currentPhases[selectedTopicPath.phaseIndex].topics[
+                              selectedTopicPath.topicIndex
+                            ].topic_name,
+                            description:
+                              currentPhases[selectedTopicPath.phaseIndex].topics[
+                                selectedTopicPath.topicIndex
+                              ].description,
+                            localVariables:
+                              currentPhases[selectedTopicPath.phaseIndex].topics[
+                                selectedTopicPath.topicIndex
+                              ].localVariables,
                           }}
                           onSave={handleTopicSave}
                         />
                       )}
-                      
+
                       {editingType === 'action' && selectedActionPath !== null && (
                         <ActionPropertyPanel
                           action={
@@ -1355,7 +1471,7 @@ const ProjectEditor: React.FC = () => {
                           onSave={handleActionSave}
                         />
                       )}
-                      
+
                       {editingType === null && (
                         <div style={{ padding: '24px', textAlign: 'center' }}>
                           <Text type="secondary">请从左侧选择一个 Phase、Topic 或 Action</Text>
@@ -1366,7 +1482,14 @@ const ProjectEditor: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100%',
+                }}
+              >
                 <Text type="secondary">请从左侧选择一个文件进行编辑</Text>
               </div>
             )}

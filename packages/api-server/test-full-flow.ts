@@ -3,11 +3,12 @@
  * 测试：创建会话 → 多轮对话 → 验证状态持久化
  */
 
+import { eq } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
+
 import { db, closeConnection } from './src/db/index.js';
 import { sessions, messages, scripts } from './src/db/schema.js';
 import { SessionManager } from './src/services/session-manager.js';
-import { eq } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 
 const SCRIPT_UUID = '550e8400-e29b-41d4-a716-446655440001';
 const USER_ID = 'test-user-001';
@@ -77,7 +78,10 @@ async function testFullFlow() {
     });
     console.log('\n💾 数据库状态:');
     console.log('   position:', session?.position);
-    console.log('   metadata.actionState:', session?.metadata ? (session.metadata as any).actionState : 'null');
+    console.log(
+      '   metadata.actionState:',
+      session?.metadata ? (session.metadata as any).actionState : 'null'
+    );
 
     if (!(session?.metadata as any)?.actionState) {
       console.log('\n❌ 警告：metadata.actionState 未保存！');
@@ -135,7 +139,10 @@ async function testFullFlow() {
     console.log('   position:', session?.position);
     console.log('   variables:', session?.variables);
     console.log('   executionStatus:', session?.executionStatus);
-    console.log('   metadata.actionState:', session?.metadata ? (session.metadata as any).actionState : 'null');
+    console.log(
+      '   metadata.actionState:',
+      session?.metadata ? (session.metadata as any).actionState : 'null'
+    );
 
     // 7. 查看消息历史
     const allMessages = await db.query.messages.findMany({
@@ -159,7 +166,14 @@ async function testFullFlow() {
     // 检查 1: Phase 或 Topic 是否推进
     if (finalPos.phaseIndex > 0 || finalPos.topicIndex > 1 || finalPos.actionIndex >= 2) {
       console.log('✅ 执行位置推进正常:');
-      console.log('   Phase:', finalPos.phaseIndex, ', Topic:', finalPos.topicIndex, ', Action:', finalPos.actionIndex);
+      console.log(
+        '   Phase:',
+        finalPos.phaseIndex,
+        ', Topic:',
+        finalPos.topicIndex,
+        ', Action:',
+        finalPos.actionIndex
+      );
     } else {
       console.log('❌ 执行位置异常:', finalPos);
       success = false;
@@ -181,7 +195,6 @@ async function testFullFlow() {
 
     console.log('\n提示：使用此会话ID在 Web 界面继续对话:');
     console.log('   会话ID:', sessionId);
-
   } catch (error) {
     console.error('\n❌ 测试执行出错:', error);
     throw error;

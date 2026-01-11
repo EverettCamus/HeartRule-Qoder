@@ -1,8 +1,9 @@
+import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
+import { v4 as uuidv4 } from 'uuid';
+
 import { db } from '../db/index.js';
 import { scripts } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 
 /**
  * 注册脚本管理路由
@@ -136,7 +137,7 @@ export async function registerScriptRoutes(app: FastifyInstance) {
       // };
 
       try {
-        let query = db.query.scripts.findMany({
+        const query = db.query.scripts.findMany({
           orderBy: (scripts, { desc }) => [desc(scripts.createdAt)],
         });
 
