@@ -1,4 +1,4 @@
-import { PlusOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import {
   Form,
   Input,
@@ -12,7 +12,7 @@ import {
   Col,
   Collapse,
 } from 'antd';
-import React from 'react';
+import React, { useRef } from 'react';
 
 import type { Action } from '../../types/action';
 import './style.css';
@@ -33,8 +33,9 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
   onSave,
 }) => {
   const [form] = Form.useForm();
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 当选中的 Action 变化时，更新表单
+  // 当选中的 Action 变化时,更新表单
   React.useEffect(() => {
     if (action) {
       // 根据不同类型的 Action 填充表单
@@ -122,6 +123,26 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
     });
   };
 
+  // 自动保存函数
+  const triggerAutoSave = React.useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    
+    autoSaveTimerRef.current = setTimeout(() => {
+      handleSave();
+    }, 600); // 600ms 防抖延迟
+  }, [action, form]);
+
+  // 清理定时器
+  React.useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
+
   if (!action) {
     return (
       <div className="action-property-panel-empty">
@@ -139,14 +160,9 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
             <Tag color="blue">#{(actionIndex ?? 0) + 1}</Tag>
           </Space>
         }
-        extra={
-          <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>
-            保存
-          </Button>
-        }
         size="small"
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onValuesChange={triggerAutoSave}>
           {/* AI Say 类型 */}
           {action.type === 'ai_say' && (
             <>

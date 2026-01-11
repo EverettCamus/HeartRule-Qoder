@@ -34,15 +34,18 @@ import {
 } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import yaml from 'js-yaml';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import { projectsApi, versionsApi } from '../../api/projects';
 import type { Project, ScriptFile } from '../../api/projects';
 import { ActionNodeList } from '../../components/ActionNodeList';
+import type { ActionNodeListRef } from '../../components/ActionNodeList';
 import { ActionPropertyPanel } from '../../components/ActionPropertyPanel';
 import { PhaseTopicPropertyPanel } from '../../components/PhaseTopicPropertyPanel';
 import type { Action, SessionScript, Step } from '../../types/action';
+import { globalHistoryManager } from '../../utils/history-manager';
+import type { FocusPath } from '../../utils/history-manager';
 import './style.css';
 
 const { Header, Sider, Content } = Layout;
@@ -111,249 +114,64 @@ const ProjectEditor: React.FC = () => {
   } | null>(null); // 选中的 Topic 路径
   const [editingType, setEditingType] = useState<'phase' | 'topic' | 'action' | null>(null); // 当前编辑的类型
 
-  // 获取文件类型图标
-  const getFileIcon = (fileType: string) => {
-    switch (fileType) {
-      case 'global':
-        return <GlobalOutlined style={{ color: '#52c41a' }} />;
-      case 'roles':
-        return <UserOutlined style={{ color: '#1890ff' }} />;
-      case 'skills':
-        return <ThunderboltOutlined style={{ color: '#faad14' }} />;
-      case 'forms':
-        return <FormOutlined style={{ color: '#722ed1' }} />;
-      case 'rules':
-        return <BulbOutlined style={{ color: '#eb2f96' }} />;
-      case 'session':
-        return <FileTextOutlined style={{ color: '#13c2c2' }} />;
-      default:
-        return <FileOutlined />;
-    }
-  };
+  // Undo/Redo 历史栈（已废弃，使用全局 globalHistoryManager）
+  // const [history, setHistory] = useState<PhaseWithTopics[][]>([]);
+  // const [historyIndex, setHistoryIndex] = useState(-1);
+  // const [isUndoRedoAction, setIsUndoRedoAction] = useState(false);
 
-  // 构建文件树
-  const buildFileTree = useCallback((fileList: ScriptFile[]): FileTreeNode[] => {
-    const sessionFiles = fileList.filter((f) => f.fileType === 'session');
-    const otherFiles = fileList.filter((f) => f.fileType !== 'session');
-
-    const nodes: FileTreeNode[] = [];
-
-    // 添加其他文件
-    otherFiles.forEach((file) => {
-      nodes.push({
-        key: file.id,
-        title: file.fileName,
-        icon: getFileIcon(file.fileType),
-        isLeaf: true,
-        fileId: file.id,
-        fileType: file.fileType,
-      });
-    });
-
-    // 添加会谈脚本文件夹
-    if (sessionFiles.length > 0) {
-      nodes.push({
-        key: 'sessions-folder',
-        title: `会谈脚本 (${sessionFiles.length})`,
-        icon: <FolderOutlined style={{ color: '#faad14' }} />,
-        children: sessionFiles.map((file) => ({
-          key: file.id,
-          title: file.fileName,
-          icon: getFileIcon(file.fileType),
-          isLeaf: true,
-          fileId: file.id,
-          fileType: file.fileType,
-        })),
-      });
-    }
-
-    return nodes;
-  }, []);
-
-  // 加载工程和文件
-  const loadProjectData = useCallback(async () => {
-    if (!projectId) return;
-
-    try {
-      setLoading(true);
-      const [projectRes, filesRes] = await Promise.all([
-        projectsApi.getProject(projectId),
-        projectsApi.getProjectFiles(projectId),
-      ]);
-
-      if (projectRes.success) {
-        setProject(projectRes.data);
-      }
-
-      if (filesRes.success) {
-        setFiles(filesRes.data);
-        const tree = buildFileTree(filesRes.data);
-        setTreeData(tree);
-        setExpandedKeys(['sessions-folder']);
-
-        // 如果URL有fileId，加载该文件；否则加载第一个文件
-        if (fileId) {
-          const file = filesRes.data.find((f) => f.id === fileId);
-          if (file) {
-            loadFile(file);
-          }
-        } else if (filesRes.data.length > 0) {
-          loadFile(filesRes.data[0]);
-        }
-      }
-    } catch (error) {
-      console.error('加载工程数据失败:', error);
-      message.error('加载工程数据失败');
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, fileId, buildFileTree]);
-
-  // 加载文件内容
-  const loadFile = useCallback((file: ScriptFile) => {
-    setSelectedFile(file);
-    setSelectedKeys([file.id]);
-
-    // 转换文件内容为YAML字符串
-    let content = '';
-    if (file.yamlContent) {
-      content = file.yamlContent;
-    } else if (file.fileContent) {
-      try {
-        // 如果是对象，转为YAML格式（简化版）
-        content = JSON.stringify(file.fileContent, null, 2);
-      } catch {
-        content = String(file.fileContent);
-      }
-    }
-    setFileContent(content);
-    setHasUnsavedChanges(false);
-
-    // 如果是会谈脚本，尝试解析为可视化结构
-    if (file.fileType === 'session' && content) {
-      parseYamlToScript(content);
-    } else {
-      setParsedScript(null);
-      setCurrentPhases([]);
-      setSelectedActionPath(null);
-      setEditMode('yaml'); // 非会谈脚本只能用 YAML 模式
-    }
-  }, []);
-
-  // 处理树节点选择
-  const handleTreeSelect = useCallback(
-    (_selectedKeys: React.Key[], info: any) => {
-      if (info.node.isLeaf && info.node.fileId) {
-        const file = files.find((f) => f.id === info.node.fileId);
-        if (file) {
-          if (hasUnsavedChanges) {
-            Modal.confirm({
-              title: '未保存的修改',
-              content: '当前文件有未保存的修改，是否放弃修改？',
-              onOk: () => {
-                loadFile(file);
-                navigate(`/projects/${projectId}/files/${file.id}`);
-              },
-            });
-          } else {
-            loadFile(file);
-            navigate(`/projects/${projectId}/files/${file.id}`);
-          }
-        }
-      }
-    },
-    [files, hasUnsavedChanges, loadFile, navigate, projectId]
-  );
-
-  // 处理内容变化
-  const handleContentChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setFileContent(e.target.value);
-      setHasUnsavedChanges(true);
-
-      // YAML 模式下实时解析（可选，仅在用户停止输入一段时间后）
-      if (selectedFile?.fileType === 'session') {
-        parseYamlToScript(e.target.value);
-      }
-    },
-    [selectedFile]
-  );
-
-  // 保存文件
-  const handleSave = useCallback(async () => {
-    if (!selectedFile || !projectId) return;
-
-    try {
-      setSaving(true);
-      await projectsApi.updateFile(projectId, selectedFile.id, {
-        yamlContent: fileContent,
-      });
-      message.success('保存成功');
-      setHasUnsavedChanges(false);
-
-      // 重新加载文件列表
-      const filesRes = await projectsApi.getProjectFiles(projectId);
-      if (filesRes.success) {
-        setFiles(filesRes.data);
-        const updatedFile = filesRes.data.find((f) => f.id === selectedFile.id);
-        if (updatedFile) {
-          setSelectedFile(updatedFile);
-        }
-      }
-    } catch (error) {
-      console.error('保存失败:', error);
-      message.error('保存失败');
-    } finally {
-      setSaving(false);
-    }
-  }, [selectedFile, projectId, fileContent]);
-
-  // 发布版本
-  const handlePublish = useCallback(async () => {
-    if (!projectId || !versionNote.trim()) {
-      message.warning('请填写版本说明');
+  // 自动保存的 debounce timer
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // ActionNodeList 组件引用，用于控制展开和滚动
+  const actionNodeListRef = useRef<ActionNodeListRef>(null);
+  
+  // 正在处理的 undo/redo 操作（防止并发）
+  const processingUndoRedoRef = useRef<boolean>(false);
+  
+  // 使用 ref 追踪当前选中的文件（避免闭包问题）
+  const selectedFileRef = useRef<ScriptFile | null>(null);
+  
+  // 追踪是否已经为当前文件推入过初始状态
+  const initialStatePushedRef = useRef<Set<string>>(new Set());
+  
+  // 同步 selectedFile 到 ref
+  useEffect(() => {
+    console.log(`[StateSync] selectedFile 更新: ${selectedFile?.fileName} (id: ${selectedFile?.id})`);
+    selectedFileRef.current = selectedFile;
+  }, [selectedFile]);
+  
+  // 监听 currentPhases 和 selectedFile，在首次加载时推入初始状态
+  useEffect(() => {
+    if (!selectedFile || currentPhases.length === 0) {
       return;
     }
-
-    try {
-      setSaving(true);
-      const currentVersion = project?.currentVersionId || '0.0.0';
-      const versionParts = currentVersion.replace(/^v/, '').split('.');
-      const newPatch = parseInt(versionParts[2] || '0') + 1;
-      const newVersion = `v${versionParts[0]}.${versionParts[1]}.${newPatch}`;
-
-      await versionsApi.publishVersion(projectId, {
-        versionNumber: newVersion,
-        releaseNote: versionNote,
-        publishedBy: project?.author || 'unknown',
-      });
-
-      message.success(`版本 ${newVersion} 发布成功`);
-      setPublishModalVisible(false);
-      setVersionNote('');
-      loadProjectData();
-    } catch (error) {
-      console.error('发布失败:', error);
-      message.error('发布失败');
-    } finally {
-      setSaving(false);
+    
+    // 检查是否已经为该文件推入过初始状态
+    if (initialStatePushedRef.current.has(selectedFile.id)) {
+      return;
     }
-  }, [projectId, versionNote, project, loadProjectData]);
-
-  // 快捷键保存
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        if (hasUnsavedChanges) {
-          handleSave();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasUnsavedChanges, handleSave]);
+    
+    // 检查历史栈中是否已有该文件的记录
+    const hasHistory = globalHistoryManager.getEntries().some(e => e.fileId === selectedFile.id);
+    if (hasHistory) {
+      console.log(`[InitialState] 文件 ${selectedFile.fileName} 已有历史记录，跳过`);
+      initialStatePushedRef.current.add(selectedFile.id);
+      return;
+    }
+    
+    // 推入初始状态
+    console.log(`[InitialState] 🎉 为文件 ${selectedFile.fileName} 推入初始状态`);
+    globalHistoryManager.push({
+      fileId: selectedFile.id,
+      fileName: selectedFile.fileName,
+      phases: currentPhases,
+      focusPath: null,
+      operation: '初始状态',
+      timestamp: Date.now(),
+    });
+    
+    initialStatePushedRef.current.add(selectedFile.id);
+  }, [currentPhases, selectedFile]);
 
   // ========== 可视化编辑相关函数 ==========
 
@@ -497,6 +315,272 @@ const ProjectEditor: React.FC = () => {
     }
   }, []);
 
+  // 获取文件类型图标
+  const getFileIcon = (fileType: string) => {
+    switch (fileType) {
+      case 'global':
+        return <GlobalOutlined style={{ color: '#52c41a' }} />;
+      case 'roles':
+        return <UserOutlined style={{ color: '#1890ff' }} />;
+      case 'skills':
+        return <ThunderboltOutlined style={{ color: '#faad14' }} />;
+      case 'forms':
+        return <FormOutlined style={{ color: '#722ed1' }} />;
+      case 'rules':
+        return <BulbOutlined style={{ color: '#eb2f96' }} />;
+      case 'session':
+        return <FileTextOutlined style={{ color: '#13c2c2' }} />;
+      default:
+        return <FileOutlined />;
+    }
+  };
+
+  // 构建文件树
+  const buildFileTree = useCallback((fileList: ScriptFile[]): FileTreeNode[] => {
+    const sessionFiles = fileList.filter((f) => f.fileType === 'session');
+    const otherFiles = fileList.filter((f) => f.fileType !== 'session');
+
+    const nodes: FileTreeNode[] = [];
+
+    // 添加其他文件
+    otherFiles.forEach((file) => {
+      nodes.push({
+        key: file.id,
+        title: file.fileName,
+        icon: getFileIcon(file.fileType),
+        isLeaf: true,
+        fileId: file.id,
+        fileType: file.fileType,
+      });
+    });
+
+    // 添加会谈脚本文件夹
+    if (sessionFiles.length > 0) {
+      nodes.push({
+        key: 'sessions-folder',
+        title: `会谈脚本 (${sessionFiles.length})`,
+        icon: <FolderOutlined style={{ color: '#faad14' }} />,
+        children: sessionFiles.map((file) => ({
+          key: file.id,
+          title: file.fileName,
+          icon: getFileIcon(file.fileType),
+          isLeaf: true,
+          fileId: file.id,
+          fileType: file.fileType,
+        })),
+      });
+    }
+
+    return nodes;
+  }, []);
+
+  // 加载工程和文件
+  const loadProjectData = useCallback(async () => {
+    if (!projectId) return;
+
+    try {
+      setLoading(true);
+      
+      // 注意：不在这里 clear，因为切换文件时也会触发 loadProjectData
+      // clear 应该在 useEffect 中检测 projectId 变化时执行
+      
+      const [projectRes, filesRes] = await Promise.all([
+        projectsApi.getProject(projectId),
+        projectsApi.getProjectFiles(projectId),
+      ]);
+
+      if (projectRes.success) {
+        setProject(projectRes.data);
+      }
+
+      if (filesRes.success) {
+        setFiles(filesRes.data);
+        const tree = buildFileTree(filesRes.data);
+        setTreeData(tree);
+        setExpandedKeys(['sessions-folder']);
+
+        // 如果URL有fileId，加载该文件；否则加载第一个文件
+        if (fileId) {
+          const file = filesRes.data.find((f) => f.id === fileId);
+          if (file) {
+            loadFile(file);
+          }
+        } else if (filesRes.data.length > 0) {
+          loadFile(filesRes.data[0]);
+        }
+      }
+    } catch (error) {
+      console.error('加载工程数据失败:', error);
+      message.error('加载工程数据失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, fileId, buildFileTree]);
+
+  // 监听 projectId 变化，切换工程时清空历史栈
+  useEffect(() => {
+    if (projectId) {
+      console.log(`[ProjectEditor] 🏠 工程 ID 变化: ${projectId}，清空历史栈`);
+      globalHistoryManager.clear();
+    }
+  }, [projectId]);
+
+  // 加载文件内容
+  const loadFile = useCallback((file: ScriptFile) => {
+    setSelectedFile(file);
+    setSelectedKeys([file.id]);
+
+    // 切换文件时重置可视化编辑状态（但不清空全局历史栈，支持跨文件 undo/redo）
+    setSelectedActionPath(null);
+    setSelectedPhasePath(null);
+    setSelectedTopicPath(null);
+    setEditingType(null);
+
+    // 转换文件内容为YAML字符串
+    let content = '';
+    if (file.yamlContent) {
+      content = file.yamlContent;
+    } else if (file.fileContent) {
+      try {
+        // 如果是对象，转为YAML格式（简化版）
+        content = JSON.stringify(file.fileContent, null, 2);
+      } catch {
+        content = String(file.fileContent);
+      }
+    }
+    setFileContent(content);
+    setHasUnsavedChanges(false);
+
+    // 如果是会谈脚本，尝试解析为可视化结构，并默认进入可视化编辑模式
+    if (file.fileType === 'session' && content) {
+      parseYamlToScript(content);
+      setEditMode('visual'); // 需求1: 会谈脚本默认使用可视化编辑模式
+    } else {
+      setParsedScript(null);
+      setCurrentPhases([]);
+      setSelectedActionPath(null);
+      setEditMode('yaml'); // 非会谈脚本只能用 YAML 模式
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 处理树节点选择
+  const handleTreeSelect = useCallback(
+    (_selectedKeys: React.Key[], info: any) => {
+      if (info.node.isLeaf && info.node.fileId) {
+        const file = files.find((f) => f.id === info.node.fileId);
+        if (file) {
+          if (hasUnsavedChanges) {
+            Modal.confirm({
+              title: '未保存的修改',
+              content: '当前文件有未保存的修改，是否放弃修改？',
+              onOk: () => {
+                loadFile(file);
+                navigate(`/projects/${projectId}/files/${file.id}`);
+              },
+            });
+          } else {
+            loadFile(file);
+            navigate(`/projects/${projectId}/files/${file.id}`);
+          }
+        }
+      }
+    },
+    [files, hasUnsavedChanges, loadFile, navigate, projectId]
+  );
+
+  // 处理内容变化
+  const handleContentChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setFileContent(e.target.value);
+      setHasUnsavedChanges(true);
+
+      // YAML 模式下实时解析（可选，仅在用户停止输入一段时间后）
+      if (selectedFile?.fileType === 'session') {
+        parseYamlToScript(e.target.value);
+      }
+    },
+    [selectedFile]
+  );
+
+  // 保存文件
+  const handleSave = useCallback(async () => {
+    if (!selectedFile || !projectId) return;
+
+    try {
+      setSaving(true);
+      await projectsApi.updateFile(projectId, selectedFile.id, {
+        yamlContent: fileContent,
+      });
+      message.success('保存成功');
+      setHasUnsavedChanges(false);
+
+      // 重新加载文件列表
+      const filesRes = await projectsApi.getProjectFiles(projectId);
+      if (filesRes.success) {
+        setFiles(filesRes.data);
+        const updatedFile = filesRes.data.find((f) => f.id === selectedFile.id);
+        if (updatedFile) {
+          setSelectedFile(updatedFile);
+        }
+      }
+    } catch (error) {
+      console.error('保存失败:', error);
+      message.error('保存失败');
+    } finally {
+      setSaving(false);
+    }
+  }, [selectedFile, projectId, fileContent]);
+
+  // 发布版本
+  const handlePublish = useCallback(async () => {
+    if (!projectId || !versionNote.trim()) {
+      message.warning('请填写版本说明');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const currentVersion = project?.currentVersionId || '0.0.0';
+      const versionParts = currentVersion.replace(/^v/, '').split('.');
+      const newPatch = parseInt(versionParts[2] || '0') + 1;
+      const newVersion = `v${versionParts[0]}.${versionParts[1]}.${newPatch}`;
+
+      await versionsApi.publishVersion(projectId, {
+        versionNumber: newVersion,
+        releaseNote: versionNote,
+        publishedBy: project?.author || 'unknown',
+      });
+
+      message.success(`版本 ${newVersion} 发布成功`);
+      setPublishModalVisible(false);
+      setVersionNote('');
+      loadProjectData();
+    } catch (error) {
+      console.error('发布失败:', error);
+      message.error('发布失败');
+    } finally {
+      setSaving(false);
+    }
+  }, [projectId, versionNote, project, loadProjectData]);
+
+  // 快捷键保存
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (hasUnsavedChanges) {
+          handleSave();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hasUnsavedChanges, handleSave]);
+
+  // ========== 上面已定义 parseYamlToScript ==========
+
   /**
    * 将层级结构同步回 YAML 字符串
    */
@@ -603,6 +687,301 @@ const ProjectEditor: React.FC = () => {
   );
 
   /**
+   * 推送历史记录（需求4 - 使用全局历史管理器）
+   */
+  const pushHistory = useCallback(
+    (newPhases: PhaseWithTopics[], operation: string, focusPath: FocusPath | null = null) => {
+      if (!selectedFile || globalHistoryManager.isInUndoRedo()) {
+        return;
+      }
+
+      globalHistoryManager.push({
+        fileId: selectedFile.id,
+        fileName: selectedFile.fileName,
+        phases: newPhases,
+        focusPath,
+        operation,
+        timestamp: Date.now(),
+      });
+    },
+    [selectedFile]
+  );
+
+  /**
+   * 应用焦点导航
+   * 注意：不再负责切换文件，只负责设置焦点和展开节点
+   */
+  const applyFocusNavigation = useCallback(
+    (focusPath: FocusPath | null, targetFileId: string) => {
+      if (!focusPath) {
+        console.log('[FocusNavigation] ⚠️ 无焦点信息，跳过');
+        return;
+      }
+
+      // 使用 ref 检查文件匹配（不再使用 state）
+      const currentFile = selectedFileRef.current;
+      console.log(`[FocusNavigation] 🔍 文件匹配检查:`);
+      console.log(`[FocusNavigation]   当前文件(ref): ${currentFile?.fileName} (id: ${currentFile?.id})`);
+      console.log(`[FocusNavigation]   目标文件: targetFileId = ${targetFileId}`);
+      console.log(`[FocusNavigation]   匹配结果: ${currentFile?.id === targetFileId}`);
+      
+      if (currentFile?.id !== targetFileId) {
+        console.warn('[FocusNavigation] ⚠️ 当前文件与目标文件不匹配，跳过焦点导航');
+        return;
+      }
+
+      console.log(`[FocusNavigation] 🎯 应用焦点: type=${focusPath.type}`);
+      
+      // 应用焦点
+      setTimeout(() => {
+        if (focusPath.type === 'action' && focusPath.phaseIndex !== undefined && focusPath.topicIndex !== undefined && focusPath.actionIndex !== undefined) {
+          console.log(`[FocusNavigation] 🎯 设置 Action 焦点: [${focusPath.phaseIndex}, ${focusPath.topicIndex}, ${focusPath.actionIndex}]`);
+          setSelectedActionPath({
+            phaseIndex: focusPath.phaseIndex,
+            topicIndex: focusPath.topicIndex,
+            actionIndex: focusPath.actionIndex,
+          });
+          setEditingType('action');
+        } else if (focusPath.type === 'topic' && focusPath.phaseIndex !== undefined && focusPath.topicIndex !== undefined) {
+          console.log(`[FocusNavigation] 🎯 设置 Topic 焦点: [${focusPath.phaseIndex}, ${focusPath.topicIndex}]`);
+          setSelectedTopicPath({
+            phaseIndex: focusPath.phaseIndex,
+            topicIndex: focusPath.topicIndex,
+          });
+          setEditingType('topic');
+        } else if (focusPath.type === 'phase' && focusPath.phaseIndex !== undefined) {
+          console.log(`[FocusNavigation] 🎯 设置 Phase 焦点: [${focusPath.phaseIndex}]`);
+          setSelectedPhasePath({
+            phaseIndex: focusPath.phaseIndex,
+          });
+          setEditingType('phase');
+        }
+        
+        // 调用 ActionNodeList 的展开和滚动方法
+        if (actionNodeListRef.current) {
+          console.log('[FocusNavigation] 📜 调用 expandAndScrollTo');
+          actionNodeListRef.current.expandAndScrollTo(focusPath);
+        }
+      }, 100);
+    },
+    [] // 不再依赖 selectedFile，使用 ref
+  );
+
+  /**
+   * Undo 操作（需求4 - 使用全局历史管理器）
+   */
+  const handleUndo = useCallback(() => {
+    console.log('\n========== [Undo] 开始执行 ==========')
+    console.log(`[Undo] 锁状态: ${processingUndoRedoRef.current}`);
+    
+    // 防止并发执行
+    if (processingUndoRedoRef.current) {
+      console.log('[Undo] ❌ 正在处理上一个操作，请稍候');
+      return;
+    }
+    
+    const entry = globalHistoryManager.undo();
+    console.log(`[Undo] 历史管理器返回:`, entry);
+    
+    if (!entry) {
+      console.log('[Undo] ⚠️ 没有可撤销的历史');
+      message.info('已经是最早的状态了');
+      return;
+    }
+  
+    // 使用 ref 获取最新的 selectedFile
+    const currentFile = selectedFileRef.current;
+    console.log(`[Undo] 📄 当前文件: ${currentFile?.fileName} (id: ${currentFile?.id})`);
+    console.log(`[Undo] 🎯 目标文件: ${entry.fileName} (id: ${entry.fileId})`);
+    console.log(`[Undo] 📝 操作描述: ${entry.operation}`);
+    console.log(`[Undo] 🔍 文件匹配检查: ${currentFile?.id} === ${entry.fileId} ? ${currentFile?.id === entry.fileId}`);
+    
+    processingUndoRedoRef.current = true;
+    console.log('[Undo] 🔒 已加锁');
+  
+    // 关键修复：检查文件是否匹配
+    if (currentFile?.id !== entry.fileId) {
+      console.log('[Undo] ⚡ 需要跨文件切换');
+      
+      const targetFile = files.find((f) => f.id === entry.fileId);
+      console.log(`[Undo] 📋 files 数组长度: ${files.length}`);
+      console.log(`[Undo] 🔎 查找结果:`, targetFile ? `找到 ${targetFile.fileName}` : '未找到');
+      
+      if (targetFile) {
+        console.log(`[Undo] ➡️ 切换: ${currentFile?.fileName} -> ${targetFile.fileName}`);
+        
+        // 直接更新所有状态
+        console.log('[Undo] 📌 开始更新 React 状态...');
+        setSelectedFile(targetFile);
+        setSelectedKeys([targetFile.id]);
+        setSelectedActionPath(null);
+        setSelectedPhasePath(null);
+        setSelectedTopicPath(null);
+        setEditingType(null);
+        console.log('[Undo] ✅ React 状态更新调用完成（等待批量更新）');
+        
+        // 等待 React 批量更新完成
+        setTimeout(() => {
+          console.log(`\n[Undo-Timeout] ⏰ 延迟回调触发`);
+          console.log(`[Undo-Timeout] 📄 selectedFileRef.current: ${selectedFileRef.current?.fileName}`);
+          console.log(`[Undo-Timeout] 🎯 targetFile: ${targetFile.fileName}`);
+          console.log(`[Undo-Timeout] 📊 entry.phases 长度: ${entry.phases.length}`);
+          
+          // 直接恢复历史数据
+          console.log('[Undo-Timeout] 💾 开始恢复历史数据...');
+          setCurrentPhases(entry.phases);
+          syncPhasesToYaml(entry.phases);
+          setHasUnsavedChanges(true);
+          setEditMode('visual');
+          console.log('[Undo-Timeout] ✅ 数据恢复完成');
+            
+          // 应用焦点导航
+          console.log('[Undo-Timeout] 🎯 应用焦点导航...');
+          applyFocusNavigation(entry.focusPath, entry.fileId);
+            
+          message.success(`已撤销: ${entry.operation} (${targetFile.fileName})`);
+          
+          // 释放锁
+          processingUndoRedoRef.current = false;
+          console.log('[Undo-Timeout] 🔓 释放锁');
+          console.log('========== [Undo] 跨文件操作完成 ==========\n');
+        }, 350);
+      } else {
+        console.error(`[Undo] ❌ 无法找到目标文件！`);
+        console.error(`[Undo] 目标 fileId: ${entry.fileId}`);
+        console.error(`[Undo] 当前 files:`, files.map(f => ({ id: f.id, name: f.fileName })));
+        message.error('无法找到目标文件');
+        processingUndoRedoRef.current = false;
+        globalHistoryManager.resetUndoRedoFlag();
+        console.log('========== [Undo] 失败结束 ==========\n');
+        return;
+      }
+    } else {
+      // 同一文件，直接恢复数据
+      console.log('[Undo] ✨ 同文件操作，直接恢复');
+      console.log(`[Undo] 📊 entry.phases 长度: ${entry.phases.length}`);
+      
+      // 计算 entry.phases 中的 Action 总数
+      const totalActions = entry.phases.reduce((sum, phase) => {
+        return sum + phase.topics.reduce((topicSum, topic) => topicSum + topic.actions.length, 0);
+      }, 0);
+      console.log(`[Undo] 🎯 entry 中的 Action 总数: ${totalActions}`);
+      
+      // 输出详细结构
+      entry.phases.forEach((phase, pi) => {
+        phase.topics.forEach((topic, ti) => {
+          console.log(`[Undo]   Phase[${pi}].Topic[${ti}]: ${topic.actions.length} Actions`);
+        });
+      });
+      
+      setCurrentPhases(entry.phases);
+      console.log('[Undo] ✅ setCurrentPhases 调用完成');
+      
+      syncPhasesToYaml(entry.phases);
+      console.log('[Undo] ✅ syncPhasesToYaml 调用完成');
+      
+      setHasUnsavedChanges(true);
+  
+      // 应用焦点导航
+      applyFocusNavigation(entry.focusPath, entry.fileId);
+  
+      message.success(`已撤销: ${entry.operation}`);
+      
+      // 释放锁
+      processingUndoRedoRef.current = false;
+      console.log('[Undo] 🔓 释放锁');
+      console.log('========== [Undo] 同文件操作完成 ==========\n');
+    }
+      
+    // 重置标记
+    setTimeout(() => globalHistoryManager.resetUndoRedoFlag(), 100);
+  }, [files, syncPhasesToYaml, applyFocusNavigation]);
+
+  /**
+   * Redo 操作（需求4 - 使用全局历史管理器）
+   */
+  const handleRedo = useCallback(() => {
+    // 防止并发执行
+    if (processingUndoRedoRef.current) {
+      console.log('[Redo] 正在处理上一个操作，请稍候');
+      return;
+    }
+    
+    const entry = globalHistoryManager.redo();
+    if (!entry) {
+      message.info('已经是最新的状态了');
+      return;
+    }
+
+    // 使用 ref 获取最新的 selectedFile
+    const currentFile = selectedFileRef.current;
+    console.log(`[Redo] 当前文件: ${currentFile?.fileName}, 目标文件ID: ${entry.fileId}`);
+    
+    processingUndoRedoRef.current = true;
+
+    // 关键修复：检查文件是否匹配
+    if (currentFile?.id !== entry.fileId) {
+      const targetFile = files.find((f) => f.id === entry.fileId);
+      if (targetFile) {
+        console.log(`[Redo] 需要切换文件: ${currentFile?.fileName} -> ${targetFile.fileName}`);
+        
+        // 直接更新所有状态
+        setSelectedFile(targetFile);
+        setSelectedKeys([targetFile.id]);
+        setSelectedActionPath(null);
+        setSelectedPhasePath(null);
+        setSelectedTopicPath(null);
+        setEditingType(null);
+        
+        // 等待 React 批量更新完成
+        setTimeout(() => {
+          console.log(`[Redo] 开始恢复数据到: ${targetFile.fileName}`);
+          console.log(`[Redo] entry.phases 长度: ${entry.phases.length}`);
+          
+          // 直接恢复历史数据
+          setCurrentPhases(entry.phases);
+          syncPhasesToYaml(entry.phases);
+          setHasUnsavedChanges(true);
+          setEditMode('visual');
+          
+          // 应用焦点导航
+          applyFocusNavigation(entry.focusPath, entry.fileId);
+          
+          message.success(`已重做: ${entry.operation} (${targetFile.fileName})`);
+          
+          // 释放锁
+          processingUndoRedoRef.current = false;
+          console.log('[Redo] 操作完成，释放锁');
+        }, 350);
+      } else {
+        console.error(`[Redo] 无法找到目标文件，fileId: ${entry.fileId}`);
+        message.error('无法找到目标文件');
+        processingUndoRedoRef.current = false;
+        globalHistoryManager.resetUndoRedoFlag();
+        return;
+      }
+    } else {
+      // 同一文件，直接恢复数据
+      console.log(`[Redo] 同文件恢复: ${currentFile?.fileName}`);
+      setCurrentPhases(entry.phases);
+      syncPhasesToYaml(entry.phases);
+      setHasUnsavedChanges(true);
+
+      // 应用焦点导航
+      applyFocusNavigation(entry.focusPath, entry.fileId);
+
+      message.success(`已重做: ${entry.operation}`);
+      
+      // 释放锁
+      processingUndoRedoRef.current = false;
+      console.log('[Redo] 同文件操作完成');
+    }
+    
+    // 重置标记
+    setTimeout(() => globalHistoryManager.resetUndoRedoFlag(), 100);
+  }, [selectedFile, files, syncPhasesToYaml, applyFocusNavigation]);
+
+  /**
    * 保存 Action 修改
    */
   const handleActionSave = useCallback(
@@ -615,13 +994,21 @@ const ProjectEditor: React.FC = () => {
       const newPhases = JSON.parse(JSON.stringify(currentPhases)); // 深拷贝
       newPhases[phaseIndex].topics[topicIndex].actions[actionIndex] = updatedAction;
       setCurrentPhases(newPhases);
+      
+      // 推送历史记录，带上操作描述和焦点信息
+      pushHistory(newPhases, '修改 Action', {
+        phaseIndex,
+        topicIndex,
+        actionIndex,
+        type: 'action',
+      });
 
       // 同步回 YAML
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
       message.success('Action 已更新');
     },
-    [selectedActionPath, currentPhases, syncPhasesToYaml]
+    [selectedActionPath, currentPhases, syncPhasesToYaml, pushHistory]
   );
 
   /**
@@ -629,11 +1016,11 @@ const ProjectEditor: React.FC = () => {
    */
   const handleAddPhase = useCallback(() => {
     const newPhases = JSON.parse(JSON.stringify(currentPhases));
-    const newPhaseIndex = newPhases.length + 1;
+    const newPhaseIndex = newPhases.length;
 
     newPhases.push({
-      phase_id: `phase_${newPhaseIndex}`,
-      phase_name: `新阶段 ${newPhaseIndex}`,
+      phase_id: `phase_${newPhaseIndex + 1}`,
+      phase_name: `新阶段 ${newPhaseIndex + 1}`,
       topics: [
         {
           topic_id: `topic_1`,
@@ -657,10 +1044,14 @@ const ProjectEditor: React.FC = () => {
     });
 
     setCurrentPhases(newPhases);
+    pushHistory(newPhases, '添加 Phase', {
+      phaseIndex: newPhaseIndex,
+      type: 'phase',
+    });
     syncPhasesToYaml(newPhases);
     setHasUnsavedChanges(true);
     message.success('已添加新 Phase');
-  }, [currentPhases, syncPhasesToYaml]);
+  }, [currentPhases, syncPhasesToYaml, pushHistory]);
 
   /**
    * 添加新 Topic
@@ -669,11 +1060,11 @@ const ProjectEditor: React.FC = () => {
     (phaseIndex: number) => {
       const newPhases = JSON.parse(JSON.stringify(currentPhases));
       const phase = newPhases[phaseIndex];
-      const newTopicIndex = phase.topics.length + 1;
+      const newTopicIndex = phase.topics.length;
 
       phase.topics.push({
-        topic_id: `topic_${newTopicIndex}`,
-        topic_name: `新主题 ${newTopicIndex}`,
+        topic_id: `topic_${newTopicIndex + 1}`,
+        topic_name: `新主题 ${newTopicIndex + 1}`,
         actions: [
           {
             type: 'ai_say',
@@ -691,11 +1082,16 @@ const ProjectEditor: React.FC = () => {
       });
 
       setCurrentPhases(newPhases);
+      pushHistory(newPhases, '添加 Topic', {
+        phaseIndex,
+        topicIndex: newTopicIndex,
+        type: 'topic',
+      });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
       message.success('已添加新 Topic');
     },
-    [currentPhases, syncPhasesToYaml]
+    [currentPhases, syncPhasesToYaml, pushHistory]
   );
 
   /**
@@ -817,17 +1213,23 @@ const ProjectEditor: React.FC = () => {
     (phaseIndex: number, topicIndex: number, actionType: string) => {
       const newPhases = JSON.parse(JSON.stringify(currentPhases));
       const topic = newPhases[phaseIndex].topics[topicIndex];
-      const newActionIndex = topic.actions.length + 1;
+      const newActionIndex = topic.actions.length;
 
-      const newAction = createActionByType(actionType, newActionIndex);
+      const newAction = createActionByType(actionType, newActionIndex + 1);
       topic.actions.push(newAction);
 
       setCurrentPhases(newPhases);
+      pushHistory(newPhases, `添加 ${actionType} Action`, {
+        phaseIndex,
+        topicIndex,
+        actionIndex: newActionIndex,
+        type: 'action',
+      });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
       message.success(`已添加新 ${actionType} Action`);
     },
-    [currentPhases, syncPhasesToYaml, createActionByType]
+    [currentPhases, syncPhasesToYaml, createActionByType, pushHistory]
   );
 
   /**
@@ -835,26 +1237,33 @@ const ProjectEditor: React.FC = () => {
    */
   const handleDeletePhase = useCallback(
     (phaseIndex: number) => {
-      const newPhases = JSON.parse(JSON.stringify(currentPhases));
-      newPhases.splice(phaseIndex, 1);
+      // 使用函数式更新，确保基于最新的 state
+      setCurrentPhases((prevPhases) => {
+        // 关键修复：先保存删除前的状态
+        pushHistory(prevPhases, '删除 Phase', null);
+        
+        const newPhases = JSON.parse(JSON.stringify(prevPhases));
+        newPhases.splice(phaseIndex, 1);
 
-      // 如果删除的是当前选中的 phase，清空选中状态
-      if (selectedActionPath?.phaseIndex === phaseIndex) {
-        setSelectedActionPath(null);
-      } else if (selectedActionPath && selectedActionPath.phaseIndex > phaseIndex) {
-        // 如果选中的 phase 在被删除的后面，需要调整索引
-        setSelectedActionPath({
-          ...selectedActionPath,
-          phaseIndex: selectedActionPath.phaseIndex - 1,
-        });
-      }
+        // 如果删除的是当前选中的 phase，清空选中状态
+        if (selectedActionPath?.phaseIndex === phaseIndex) {
+          setSelectedActionPath(null);
+        } else if (selectedActionPath && selectedActionPath.phaseIndex > phaseIndex) {
+          // 如果选中的 phase 在被删除的后面，需要调整索引
+          setSelectedActionPath({
+            ...selectedActionPath,
+            phaseIndex: selectedActionPath.phaseIndex - 1,
+          });
+        }
 
-      setCurrentPhases(newPhases);
-      syncPhasesToYaml(newPhases);
-      setHasUnsavedChanges(true);
-      message.success('已删除 Phase');
+        syncPhasesToYaml(newPhases);
+        setHasUnsavedChanges(true);
+        message.success('已删除 Phase');
+        
+        return newPhases;
+      });
     },
-    [currentPhases, selectedActionPath, syncPhasesToYaml]
+    [selectedActionPath, syncPhasesToYaml, pushHistory]
   );
 
   /**
@@ -862,33 +1271,40 @@ const ProjectEditor: React.FC = () => {
    */
   const handleDeleteTopic = useCallback(
     (phaseIndex: number, topicIndex: number) => {
-      const newPhases = JSON.parse(JSON.stringify(currentPhases));
-      newPhases[phaseIndex].topics.splice(topicIndex, 1);
-
-      // 如果删除的是当前选中的 topic，清空选中状态
-      if (
-        selectedActionPath?.phaseIndex === phaseIndex &&
-        selectedActionPath?.topicIndex === topicIndex
-      ) {
-        setSelectedActionPath(null);
-      } else if (
-        selectedActionPath &&
-        selectedActionPath.phaseIndex === phaseIndex &&
-        selectedActionPath.topicIndex > topicIndex
-      ) {
-        // 如果选中的 topic 在被删除的后面，需要调整索引
-        setSelectedActionPath({
-          ...selectedActionPath,
-          topicIndex: selectedActionPath.topicIndex - 1,
-        });
-      }
-
-      setCurrentPhases(newPhases);
-      syncPhasesToYaml(newPhases);
-      setHasUnsavedChanges(true);
-      message.success('已删除 Topic');
+      // 使用函数式更新，确保基于最新的 state
+      setCurrentPhases((prevPhases) => {
+        // 关键修复：先保存删除前的状态
+        pushHistory(prevPhases, '删除 Topic', null);
+          
+        const newPhases = JSON.parse(JSON.stringify(prevPhases));
+        newPhases[phaseIndex].topics.splice(topicIndex, 1);
+  
+        // 如果删除的是当前选中的 topic，清空选中状态
+        if (
+          selectedActionPath?.phaseIndex === phaseIndex &&
+          selectedActionPath?.topicIndex === topicIndex
+        ) {
+          setSelectedActionPath(null);
+        } else if (
+          selectedActionPath &&
+          selectedActionPath.phaseIndex === phaseIndex &&
+          selectedActionPath.topicIndex > topicIndex
+        ) {
+          // 如果选中的 topic 在被删除的后面，需要调整索引
+          setSelectedActionPath({
+            ...selectedActionPath,
+            topicIndex: selectedActionPath.topicIndex - 1,
+          });
+        }
+  
+        syncPhasesToYaml(newPhases);
+        setHasUnsavedChanges(true);
+        message.success('已删除 Topic');
+          
+        return newPhases;
+      });
     },
-    [currentPhases, selectedActionPath, syncPhasesToYaml]
+    [selectedActionPath, syncPhasesToYaml, pushHistory]
   );
 
   /**
@@ -896,43 +1312,50 @@ const ProjectEditor: React.FC = () => {
    */
   const handleDeleteAction = useCallback(
     (phaseIndex: number, topicIndex: number, actionIndex: number) => {
-      const newPhases = JSON.parse(JSON.stringify(currentPhases));
-      const topic = newPhases[phaseIndex].topics[topicIndex];
+      // 使用函数式更新，确保基于最新的 state
+      setCurrentPhases((prevPhases) => {
+        const newPhases = JSON.parse(JSON.stringify(prevPhases));
+        const topic = newPhases[phaseIndex].topics[topicIndex];
 
-      // 至少保留一个 action
-      if (topic.actions.length <= 1) {
-        message.warning('至少需要保留一个 Action');
-        return;
-      }
+        // 至少保留一个 action
+        if (topic.actions.length <= 1) {
+          message.warning('至少需要保留一个 Action');
+          return prevPhases; // 返回原状态，不更新
+        }
 
-      topic.actions.splice(actionIndex, 1);
+        // 关键修复：在删除前保存当前状态
+        pushHistory(prevPhases, '删除 Action', null);
+        
+        topic.actions.splice(actionIndex, 1);
 
-      // 如果删除的是当前选中的 action，清空选中状态
-      if (
-        selectedActionPath?.phaseIndex === phaseIndex &&
-        selectedActionPath?.topicIndex === topicIndex &&
-        selectedActionPath?.actionIndex === actionIndex
-      ) {
-        setSelectedActionPath(null);
-      } else if (
-        selectedActionPath &&
-        selectedActionPath.phaseIndex === phaseIndex &&
-        selectedActionPath.topicIndex === topicIndex &&
-        selectedActionPath.actionIndex > actionIndex
-      ) {
-        // 如果选中的 action 在被删除的后面，需要调整索引
-        setSelectedActionPath({
-          ...selectedActionPath,
-          actionIndex: selectedActionPath.actionIndex - 1,
-        });
-      }
+        // 如果删除的是当前选中的 action，清空选中状态
+        if (
+          selectedActionPath?.phaseIndex === phaseIndex &&
+          selectedActionPath?.topicIndex === topicIndex &&
+          selectedActionPath?.actionIndex === actionIndex
+        ) {
+          setSelectedActionPath(null);
+        } else if (
+          selectedActionPath &&
+          selectedActionPath.phaseIndex === phaseIndex &&
+          selectedActionPath.topicIndex === topicIndex &&
+          selectedActionPath.actionIndex > actionIndex
+        ) {
+          // 如果选中的 action 在被删除的后面，需要调整索引
+          setSelectedActionPath({
+            ...selectedActionPath,
+            actionIndex: selectedActionPath.actionIndex - 1,
+          });
+        }
 
-      setCurrentPhases(newPhases);
-      syncPhasesToYaml(newPhases);
-      setHasUnsavedChanges(true);
-      message.success('已删除 Action');
+        syncPhasesToYaml(newPhases);
+        setHasUnsavedChanges(true);
+        message.success('已删除 Action');
+        
+        return newPhases; // 返回新状态
+      });
     },
-    [currentPhases, selectedActionPath, syncPhasesToYaml]
+    [selectedActionPath, syncPhasesToYaml, pushHistory]
   );
 
   /**
@@ -945,11 +1368,15 @@ const ProjectEditor: React.FC = () => {
       newPhases.splice(toIndex, 0, movedPhase);
 
       setCurrentPhases(newPhases);
+      pushHistory(newPhases, `移动 Phase 从 ${fromIndex} 到 ${toIndex}`, {
+        phaseIndex: toIndex,
+        type: 'phase',
+      });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
       message.success('Phase 已移动');
     },
-    [currentPhases, syncPhasesToYaml]
+    [currentPhases, syncPhasesToYaml, pushHistory]
   );
 
   /**
@@ -971,11 +1398,16 @@ const ProjectEditor: React.FC = () => {
       newPhases[toPhaseIndex].topics.splice(toTopicIndex, 0, movedTopic);
 
       setCurrentPhases(newPhases);
+      pushHistory(newPhases, `移动 Topic`, {
+        phaseIndex: toPhaseIndex,
+        topicIndex: toTopicIndex,
+        type: 'topic',
+      });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
       message.success('Topic 已移动');
     },
-    [currentPhases, syncPhasesToYaml]
+    [currentPhases, syncPhasesToYaml, pushHistory]
   );
 
   /**
@@ -1002,11 +1434,17 @@ const ProjectEditor: React.FC = () => {
       newPhases[toPhaseIndex].topics[toTopicIndex].actions.splice(toActionIndex, 0, movedAction);
 
       setCurrentPhases(newPhases);
+      pushHistory(newPhases, `移动 Action`, {
+        phaseIndex: toPhaseIndex,
+        topicIndex: toTopicIndex,
+        actionIndex: toActionIndex,
+        type: 'action',
+      });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
       message.success('Action 已移动');
     },
-    [currentPhases, syncPhasesToYaml]
+    [currentPhases, syncPhasesToYaml, pushHistory]
   );
 
   /**
@@ -1060,11 +1498,15 @@ const ProjectEditor: React.FC = () => {
       };
 
       setCurrentPhases(newPhases);
+      pushHistory(newPhases, '修改 Phase', {
+        phaseIndex,
+        type: 'phase',
+      });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
       message.success('Phase 已更新');
     },
-    [selectedPhasePath, currentPhases, syncPhasesToYaml]
+    [selectedPhasePath, currentPhases, syncPhasesToYaml, pushHistory]
   );
 
   /**
@@ -1086,17 +1528,145 @@ const ProjectEditor: React.FC = () => {
       };
 
       setCurrentPhases(newPhases);
+      pushHistory(newPhases, '修改 Topic', {
+        phaseIndex,
+        topicIndex,
+        type: 'topic',
+      });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
       message.success('Topic 已更新');
     },
-    [selectedTopicPath, currentPhases, syncPhasesToYaml]
+    [selectedTopicPath, currentPhases, syncPhasesToYaml, pushHistory]
   );
+
+  /**
+   * 新增会谈脚本（需求2）
+   */
+  const handleCreateSession = useCallback(async () => {
+    if (!projectId) return;
+
+    Modal.confirm({
+      title: '新建会谈脚本',
+      content: (
+        <div>
+          <div style={{ marginBottom: '8px' }}>请输入会谈脚本名称：</div>
+          <Input
+            id="session-name-input"
+            placeholder="例如: first-day"
+            defaultValue="new-session"
+          />
+        </div>
+      ),
+      onOk: async () => {
+        const input = document.getElementById('session-name-input') as HTMLInputElement;
+        const sessionName = input?.value?.trim() || 'new-session';
+        const fileName = sessionName.endsWith('.yaml') ? sessionName : `${sessionName}.yaml`;
+
+        try {
+          setSaving(true);
+          
+          // 创建新的 session 文件，使用默认模板
+          const defaultSessionContent = {
+            session: {
+              session_id: sessionName,
+              session_name: sessionName,
+              phases: [
+                {
+                  phase_id: 'phase_1',
+                  phase_name: '新阶段 1',
+                  topics: [
+                    {
+                      topic_id: 'topic_1',
+                      topic_name: '新主题 1',
+                      actions: [
+                        {
+                          action_id: 'action_1',
+                          action_type: 'ai_say',
+                          config: {
+                            content_template: '请编辑此处内容',
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          };
+
+          const res = await projectsApi.createFile(projectId, {
+            fileType: 'session',
+            fileName,
+            fileContent: defaultSessionContent,
+          });
+
+          if (res.success) {
+            message.success('会谈脚本创建成功');
+            // 重新加载文件列表
+            await loadProjectData();
+            // 自动加载新创建的文件
+            loadFile(res.data);
+            navigate(`/projects/${projectId}/files/${res.data.id}`);
+          }
+        } catch (error) {
+          console.error('创建会谈脚本失败:', error);
+          message.error('创建失败');
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  }, [projectId, loadProjectData, loadFile, navigate]);
 
   // 初始加载
   useEffect(() => {
     loadProjectData();
   }, [loadProjectData]);
+
+  // 自动保存（需求3）：监听 currentPhases 变化，1秒后自动保存
+  useEffect(() => {
+    // 只在可视化编辑模式且有未保存变化时才自动保存
+    if (editMode !== 'visual' || !hasUnsavedChanges || !selectedFile || selectedFile.fileType !== 'session') {
+      return;
+    }
+
+    // 清除之前的定时器
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    // 设置新的定时器，1秒后自动保存
+    autoSaveTimerRef.current = setTimeout(() => {
+      handleSave();
+    }, 1000);
+
+    // 清理函数
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [currentPhases, editMode, hasUnsavedChanges, selectedFile, handleSave]);
+
+  // Undo/Redo 快捷键（需求4）
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+Z / Cmd+Z: Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      }
+      // Ctrl+Shift+Z / Cmd+Shift+Z or Ctrl+Y / Cmd+Y: Redo
+      else if ((e.ctrlKey || e.metaKey) && (e.shiftKey && e.key === 'z' || e.key === 'y')) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
 
   if (loading) {
     return (
@@ -1223,7 +1793,11 @@ const ProjectEditor: React.FC = () => {
               <Text strong>工程文件</Text>
               <Dropdown
                 overlay={
-                  <Menu>
+                  <Menu onClick={({ key }) => {
+                    if (key === 'session') {
+                      handleCreateSession();
+                    }
+                  }}>
                     <Menu.Item key="session" icon={<FileTextOutlined />}>
                       新建会谈脚本
                     </Menu.Item>
@@ -1398,6 +1972,7 @@ const ProjectEditor: React.FC = () => {
                       }}
                     >
                       <ActionNodeList
+                        ref={actionNodeListRef}
                         phases={currentPhases}
                         selectedActionPath={selectedActionPath}
                         selectedPhasePath={selectedPhasePath}

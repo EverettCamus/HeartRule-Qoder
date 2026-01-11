@@ -1,6 +1,6 @@
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Form, Input, Button, Space, Typography, Divider, Card } from 'antd';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './style.css';
 
 const { Title, Text } = Typography;
@@ -32,6 +32,7 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
 }) => {
   const [form] = Form.useForm();
   const [localVariables, setLocalVariables] = useState<Variable[]>([]);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (data) {
@@ -46,6 +47,34 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
       setLocalVariables([]);
     }
   }, [data, form]);
+
+  // 自动保存函数
+  const triggerAutoSave = useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    
+    autoSaveTimerRef.current = setTimeout(() => {
+      handleSave();
+    }, 600); // 600ms 防抖延迟
+  }, [localVariables, data]);
+
+  // 监听 localVariables 变化触发自动保存
+  useEffect(() => {
+    // 只有在 data 存在且 localVariables 已初始化后才触发自动保存
+    if (data && localVariables !== data.localVariables) {
+      triggerAutoSave();
+    }
+  }, [localVariables, data, triggerAutoSave]);
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleSave = () => {
     form.validateFields().then((values) => {
@@ -90,7 +119,7 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
       <div style={{ padding: '16px', height: '100%', overflowY: 'auto' }}>
         <Title level={5}>编辑 {type === 'phase' ? 'Phase' : 'Topic'} 属性</Title>
 
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onValuesChange={triggerAutoSave}>
           <Form.Item label="ID" name="id" rules={[{ required: true, message: '请输入ID' }]}>
             <Input placeholder="例如: phase_01 或 topic_01" />
           </Form.Item>
@@ -180,15 +209,9 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
                   </Space>
                 </Card>
               ))
-            )}
+            )}  
           </Space>
         </div>
-
-        <Divider />
-
-        <Button type="primary" block onClick={handleSave}>
-          保存修改
-        </Button>
       </div>
     </div>
   );

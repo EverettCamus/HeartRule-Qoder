@@ -132,3 +132,24 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* 焦点高亮效果 */
+@keyframes focusHighlight {
+  0% {
+    background-color: #e6f7ff;
+    transform: scale(1);
+  }
+  50% {
+    background-color: #bae7ff;
+    transform: scale(1.02);
+  }
+  100% {
+    background-color: transparent;
+    transform: scale(1);
+  }
+}
+
+.focus-highlight {
+  animation: focusHighlight 2s ease-in-out;
+  border: 2px solid #1890ff !important;
+}

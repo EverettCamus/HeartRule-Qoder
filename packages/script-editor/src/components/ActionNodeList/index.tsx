@@ -24,7 +24,7 @@ import {
   Dropdown,
   Menu,
 } from 'antd';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 
 import type { Action } from '../../types/action';
 import './style.css';
@@ -74,6 +74,18 @@ interface ActionNodeListProps {
     toTopicIndex: number,
     toActionIndex: number
   ) => void;
+}
+
+/**
+ * 对外暴露的方法
+ */
+export interface ActionNodeListRef {
+  expandAndScrollTo: (focusPath: {
+    phaseIndex?: number;
+    topicIndex?: number;
+    actionIndex?: number;
+    type: 'phase' | 'topic' | 'action';
+  }) => void;
 }
 
 /**
@@ -161,24 +173,27 @@ const truncateText = (text: string, maxLength: number = 100): string => {
   return cleanText.substring(0, maxLength) + '...';
 };
 
-export const ActionNodeList: React.FC<ActionNodeListProps> = ({
-  phases,
-  selectedActionPath,
-  selectedPhasePath,
-  selectedTopicPath,
-  onSelectAction,
-  onSelectPhase,
-  onSelectTopic,
-  onAddPhase,
-  onAddTopic,
-  onAddAction,
-  onDeletePhase,
-  onDeleteTopic,
-  onDeleteAction,
-  onMovePhase,
-  onMoveTopic,
-  onMoveAction,
-}) => {
+export const ActionNodeList = forwardRef<ActionNodeListRef, ActionNodeListProps>((
+  {
+    phases,
+    selectedActionPath,
+    selectedPhasePath,
+    selectedTopicPath,
+    onSelectAction,
+    onSelectPhase,
+    onSelectTopic,
+    onAddPhase,
+    onAddTopic,
+    onAddAction,
+    onDeletePhase,
+    onDeleteTopic,
+    onDeleteAction,
+    onMovePhase,
+    onMoveTopic,
+    onMoveAction,
+  },
+  ref
+) => {
   // 默认展开所有层级
   const [expandedPhases, setExpandedPhases] = useState<string[]>(
     phases.map((_, i) => `phase-${i}`)
@@ -198,6 +213,83 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
   // 滚动容器引用和自动滚动
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollAnimationFrameRef = useRef<number | null>(null);
+
+  // 对外暴露方法：展开父级节点并滚动到目标位置
+  useImperativeHandle(ref, () => ({
+    expandAndScrollTo: (focusPath) => {
+      const { phaseIndex, topicIndex, actionIndex, type } = focusPath;
+
+      // 1. 展开父级节点
+      if (phaseIndex !== undefined) {
+        const phaseKey = `phase-${phaseIndex}`;
+        
+        // 展开 Phase
+        if (!expandedPhases.includes(phaseKey)) {
+          setExpandedPhases((prev) => [...prev, phaseKey]);
+        }
+
+        // 如果是 Topic 或 Action，需要展开 Topic
+        if ((type === 'topic' || type === 'action') && topicIndex !== undefined) {
+          const topicKey = `phase-${phaseIndex}-topic-${topicIndex}`;
+          if (!expandedTopics.includes(topicKey)) {
+            setExpandedTopics((prev) => [...prev, topicKey]);
+          }
+        }
+      }
+
+      // 2. 等待展开动画完成后滚动（Collapse 展开需要时间）
+      setTimeout(() => {
+        scrollToTarget(focusPath);
+      }, 300); // Ant Design Collapse 展开动画默认 300ms
+    },
+  }));
+
+  /**
+   * 滚动到目标节点
+   */
+  const scrollToTarget = (focusPath: {
+    phaseIndex?: number;
+    topicIndex?: number;
+    actionIndex?: number;
+    type: 'phase' | 'topic' | 'action';
+  }) => {
+    if (!containerRef.current) return;
+
+    const { phaseIndex, topicIndex, actionIndex, type } = focusPath;
+    let targetElement: HTMLElement | null = null;
+
+    // 根据类型查找目标元素
+    if (type === 'action' && phaseIndex !== undefined && topicIndex !== undefined && actionIndex !== undefined) {
+      // 查找 Action 卡片（通过 data-action-path 属性）
+      targetElement = containerRef.current.querySelector(
+        `[data-action-path="${phaseIndex}-${topicIndex}-${actionIndex}"]`
+      );
+    } else if (type === 'topic' && phaseIndex !== undefined && topicIndex !== undefined) {
+      // 查找 Topic Panel
+      targetElement = containerRef.current.querySelector(
+        `[data-topic-path="${phaseIndex}-${topicIndex}"]`
+      );
+    } else if (type === 'phase' && phaseIndex !== undefined) {
+      // 查找 Phase Panel
+      targetElement = containerRef.current.querySelector(
+        `[data-phase-path="${phaseIndex}"]`
+      );
+    }
+
+    // 滚动到目标元素
+    if (targetElement) {
+      targetElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center', // 将目标元素居中显示
+      });
+
+      // 添加高亮效果（可选）
+      targetElement.classList.add('focus-highlight');
+      setTimeout(() => {
+        targetElement?.classList.remove('focus-highlight');
+      }, 2000);
+    }
+  };
 
   // 清理滚动动画
   useEffect(() => {
@@ -281,6 +373,7 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
     return (
       <Card
         key={actionIndex}
+        data-action-path={`${phaseIndex}-${topicIndex}-${actionIndex}`}
         className={`action-node-card ${isSelected ? 'selected' : ''}`}
         size="small"
         hoverable
@@ -435,6 +528,7 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
         {phases.map((phase, phaseIndex) => (
           <Panel
             key={`phase-${phaseIndex}`}
+            data-phase-path={phaseIndex}
             header={
               <div
                 draggable={!!onMovePhase}
@@ -562,6 +656,7 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
               {phase.topics.map((topic, topicIndex) => (
                 <Panel
                   key={`phase-${phaseIndex}-topic-${topicIndex}`}
+                  data-topic-path={`${phaseIndex}-${topicIndex}`}
                   header={
                     <div
                       draggable={!!onMoveTopic}
@@ -778,4 +873,4 @@ export const ActionNodeList: React.FC<ActionNodeListProps> = ({
       </Collapse>
     </div>
   );
-};
+});
