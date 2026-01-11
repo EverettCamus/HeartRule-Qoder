@@ -25,5 +25,5 @@
     "emitDecoratorMetadata": true
   },
   "include": ["packages/*/src/**/*", "*.ts"],
-  "exclude": ["node_modules", "dist", "build", ".turbo", "venv"]
+  "exclude": ["node_modules", "dist", "build", ".turbo", "venv", "packages/script-editor/**/*"]
 }
