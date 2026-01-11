@@ -91,10 +91,14 @@ export async function buildApp() {
   const { registerSessionRoutes } = await import('./routes/sessions.js');
   const { registerChatRoutes } = await import('./routes/chat.js');
   const { registerScriptRoutes } = await import('./routes/scripts.js');
+  const projectsRoutes = (await import('./routes/projects.js')).default;
+  const versionsRoutes = (await import('./routes/versions.js')).default;
   
   await registerSessionRoutes(app);
   await registerChatRoutes(app);
   await registerScriptRoutes(app);
+  await app.register(projectsRoutes, { prefix: '/api' });
+  await app.register(versionsRoutes, { prefix: '/api' });
 
   return app;
 }

@@ -1,0 +1,56 @@
+/* Action 属性面板容器 */
+.action-property-panel {
+  padding: 16px;
+  height: 100%;
+  overflow-y: auto;
+  background-color: #fafafa;
+}
+
+/* 隐蔽的滚动条样式 */
+.action-property-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.action-property-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.action-property-panel::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+  transition: background-color 0.3s ease;
+}
+
+.action-property-panel::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+/* Firefox 滚动条样式 */
+.action-property-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* 空状态 */
+.action-property-panel-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #999;
+}
+
+/* 覆盖 Ant Design Card 样式 */
+.action-property-panel .ant-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.action-property-panel .ant-form-item {
+  margin-bottom: 16px;
+}
+
+/* 输出变量卡片 */
+.action-property-panel .ant-card-small {
+  background-color: #fff;
+  border: 1px solid #e8e8e8;
+}

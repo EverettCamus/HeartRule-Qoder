@@ -1,0 +1,134 @@
+/* Action 节点列表容器 */
+.action-node-list {
+  padding: 16px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Phase 级别折叠面板样式 */
+.phase-collapse {
+  background: transparent;
+  border: none;
+}
+
+.phase-collapse .phase-panel {
+  margin-bottom: 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.phase-collapse .ant-collapse-header {
+  background: #fafafa;
+  font-weight: 600;
+  padding: 12px 16px !important;
+}
+
+/* Topic 级别折叠面板样式 */
+.topic-collapse {
+  background: transparent;
+  border: none;
+  margin-top: 8px;
+}
+
+.topic-collapse .topic-panel {
+  margin-bottom: 8px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.topic-collapse .ant-collapse-header {
+  background: #f5f5f5;
+  padding: 10px 16px !important;
+}
+
+/* Actions 容器 */
+.actions-container {
+  padding: 8px;
+  background: #fafafa;
+}
+
+/* 隐蔽的滚动条样式 */
+.action-node-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.action-node-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.action-node-list::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+  transition: background-color 0.3s ease;
+}
+
+.action-node-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+/* Firefox 滚动条样式 */
+.action-node-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* 空状态 */
+.action-node-list-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #999;
+}
+
+/* Action 节点卡片 */
+.action-node-card {
+  margin-bottom: 12px;
+  border: 2px solid #f0f0f0;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.action-node-card:hover {
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2);
+}
+
+.action-node-card.selected {
+  border-color: #1890ff;
+  background-color: #e6f7ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.3);
+}
+
+/* 拖拽状态样式 */
+.action-node-card[draggable="true"] {
+  cursor: move;
+}
+
+.action-node-card[draggable="true"]:active {
+  opacity: 0.6;
+  cursor: grabbing;
+}
+
+/* Phase 和 Topic 拖拽样式 */
+.phase-collapse .ant-collapse-header[draggable="true"],
+.topic-collapse .ant-collapse-header[draggable="true"] {
+  cursor: move;
+}
+
+.phase-collapse .ant-collapse-header[draggable="true"]:active,
+.topic-collapse .ant-collapse-header[draggable="true"]:active {
+  opacity: 0.6;
+  cursor: grabbing;
+}
+
+/* 内容预览 */
+.action-content-preview {
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

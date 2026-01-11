@@ -1,0 +1,32 @@
+{
+  "name": "@heartrule/script-editor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@heartrule/shared-types": "workspace:*",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0",
+    "antd": "^5.13.0",
+    "@ant-design/icons": "^5.2.6",
+    "zustand": "^4.5.0",
+    "axios": "^1.6.5",
+    "reactflow": "^11.10.4",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@types/js-yaml": "^4.0.9",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.9.2",
+    "vite": "^5.0.11"
+  }
+}

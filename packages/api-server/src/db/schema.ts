@@ -12,6 +12,9 @@ export const messageRoleEnum = pgEnum('message_role', ['user', 'assistant', 'sys
 export const scriptTypeEnum = pgEnum('script_type', ['session', 'technique', 'awareness']);
 export const scriptStatusEnum = pgEnum('script_status', ['draft', 'published', 'archived']);
 export const variableScopeEnum = pgEnum('variable_scope', ['global', 'session', 'phase', 'topic']);
+export const projectStatusEnum = pgEnum('project_status', ['draft', 'published', 'archived']);
+export const fileTypeEnum = pgEnum('file_type', ['global', 'roles', 'skills', 'forms', 'rules', 'session']);
+export const validationStatusEnum = pgEnum('validation_status', ['valid', 'invalid', 'unknown']);
 
 /**
  * 会话表
@@ -78,6 +81,81 @@ export const scripts = pgTable('scripts', {
 });
 
 /**
+ * 脚本工程表
+ */
+export const projects = pgTable('projects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectName: varchar('project_name', { length: 255 }).notNull(),
+  description: text('description').notNull().default(''),
+  engineVersion: varchar('engine_version', { length: 50 }).notNull(),
+  engineVersionMin: varchar('engine_version_min', { length: 50 }).notNull(),
+  currentVersionId: uuid('current_version_id'),
+  status: projectStatusEnum('status').notNull().default('draft'),
+  author: varchar('author', { length: 255 }).notNull(),
+  tags: jsonb('tags').notNull().default([]).$type<string[]>(),
+  metadata: jsonb('metadata').notNull().default({}),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => {
+  return {
+    statusIdx: index('projects_status_idx').on(table.status),
+    authorIdx: index('projects_author_idx').on(table.author),
+    nameIdx: index('projects_name_idx').on(table.projectName),
+  };
+});
+
+/**
+ * 脚本文件表（隶属于工程）
+ */
+export const scriptFiles = pgTable('script_files', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  fileType: fileTypeEnum('file_type').notNull(),
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  fileContent: jsonb('file_content').notNull(),
+  yamlContent: text('yaml_content'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => {
+  return {
+    projectIdIdx: index('script_files_project_id_idx').on(table.projectId),
+    fileTypeIdx: index('script_files_file_type_idx').on(table.fileType),
+  };
+});
+
+/**
+ * 工程草稿表
+ */
+export const projectDrafts = pgTable('project_drafts', {
+  projectId: uuid('project_id').primaryKey().references(() => projects.id, { onDelete: 'cascade' }),
+  draftFiles: jsonb('draft_files').notNull().$type<Record<string, any>>(),
+  validationStatus: validationStatusEnum('validation_status').notNull().default('unknown'),
+  validationErrors: jsonb('validation_errors').default([]).$type<any[]>(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  updatedBy: varchar('updated_by', { length: 255 }).notNull(),
+});
+
+/**
+ * 工程版本表
+ */
+export const projectVersions = pgTable('project_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  versionNumber: varchar('version_number', { length: 32 }).notNull(),
+  versionFiles: jsonb('version_files').notNull().$type<Record<string, any>>(),
+  releaseNote: text('release_note').notNull().default(''),
+  isRollback: varchar('is_rollback', { length: 10 }).notNull().default('false'),
+  rollbackFromVersionId: uuid('rollback_from_version_id'),
+  publishedAt: timestamp('published_at').notNull().defaultNow(),
+  publishedBy: varchar('published_by', { length: 255 }).notNull(),
+}, (table) => {
+  return {
+    projectIdIdx: index('project_versions_project_id_idx').on(table.projectId),
+    publishedAtIdx: index('project_versions_published_at_idx').on(table.publishedAt),
+  };
+});
+
+/**
  * 变量表（快照存储）
  */
 export const variables = pgTable('variables', {
@@ -130,3 +208,11 @@ export type Variable = typeof variables.$inferSelect;
 export type NewVariable = typeof variables.$inferInsert;
 export type Memory = typeof memories.$inferSelect;
 export type NewMemory = typeof memories.$inferInsert;
+export type Project = typeof projects.$inferSelect;
+export type NewProject = typeof projects.$inferInsert;
+export type ScriptFile = typeof scriptFiles.$inferSelect;
+export type NewScriptFile = typeof scriptFiles.$inferInsert;
+export type ProjectDraft = typeof projectDrafts.$inferSelect;
+export type NewProjectDraft = typeof projectDrafts.$inferInsert;
+export type ProjectVersion = typeof projectVersions.$inferSelect;
+export type NewProjectVersion = typeof projectVersions.$inferInsert;
