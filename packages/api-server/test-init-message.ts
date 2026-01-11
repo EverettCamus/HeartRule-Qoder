@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 import { db, closeConnection } from './src/db/index.js';
-import { sessions, scripts } from './src/db/schema.js';
+import { sessions } from './src/db/schema.js';
 import { SessionManager } from './src/services/session-manager.js';
 
 const SCRIPT_UUID = '550e8400-e29b-41d4-a716-446655440001';
