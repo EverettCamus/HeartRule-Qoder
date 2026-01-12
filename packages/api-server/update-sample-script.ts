@@ -11,7 +11,7 @@ import { scriptFiles } from './src/db/schema.js';
 // 简化版的脚本结构，包含4个Action节点示例
 const sampleScript = {
   metadata: {
-    name: 'CBT抑郁症初次评估会谈',
+    name: 'CBT Depression Initial Assessment Session',
     version: '1.0',
     author: 'HeartRule Team',
     description: '用于抑郁症患者的初次评估会谈，建立关系并收集基础信息',
@@ -20,7 +20,7 @@ const sampleScript = {
   },
   session: {
     session_id: 'cbt_depression_assessment_v1',
-    session_name: 'CBT抑郁症初次评估会谈',
+    session_name: 'CBT Depression Initial Assessment Session',
     phases: [
       {
         phase_id: 'phase_1_rapport',

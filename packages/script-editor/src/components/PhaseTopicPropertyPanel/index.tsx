@@ -144,16 +144,16 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
               marginBottom: '12px',
             }}
           >
-            <Text strong>局部变量定义</Text>
+            <Text strong>Local Variable Definitions</Text>
             <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addVariable}>
-              添加变量
+              Add Variable
             </Button>
           </div>
 
           <Space direction="vertical" style={{ width: '100%' }} size="small">
             {localVariables.length === 0 ? (
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                暂无局部变量
+                No local variables
               </Text>
             ) : (
               localVariables.map((variable, index) => (
@@ -174,7 +174,7 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
                   <Space direction="vertical" style={{ width: '100%' }} size="small">
                     <div>
                       <Text type="secondary" style={{ fontSize: '12px' }}>
-                        变量名
+                        Variable Name
                       </Text>
                       <Input
                         size="small"
@@ -185,7 +185,7 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
                     </div>
                     <div>
                       <Text type="secondary" style={{ fontSize: '12px' }}>
-                        类型
+                        Type
                       </Text>
                       <Input
                         size="small"
@@ -196,14 +196,14 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
                     </div>
                     <div>
                       <Text type="secondary" style={{ fontSize: '12px' }}>
-                        说明
+                        Description
                       </Text>
                       <TextArea
                         size="small"
                         rows={2}
                         value={variable.description}
                         onChange={(e) => updateVariable(index, 'description', e.target.value)}
-                        placeholder="变量用途说明"
+                        placeholder="Variable usage description"
                       />
                     </div>
                   </Space>

@@ -1,10 +1,10 @@
 $body = @{
-    projectName = "CBT抑郁症评估工程"
-    description = "认知行为疗法(CBT)抑郁症初次评估会谈脚本工程，用于演示完整的会谈流程"
+    projectName = "CBT Depression Assessment Project"
+    description = "Cognitive Behavioral Therapy (CBT) initial depression assessment session script project for demonstrating complete consultation workflow"
     engineVersion = "2.0.0"
     engineVersionMin = "2.0.0"
     author = "LEO"
-    tags = @("CBT", "抑郁症", "评估会谈", "示例工程")
+    tags = @("CBT", "Depression", "Assessment", "Sample Project")
 } | ConvertTo-Json
 
 $response = Invoke-WebRequest -Uri "http://localhost:8000/api/projects" `

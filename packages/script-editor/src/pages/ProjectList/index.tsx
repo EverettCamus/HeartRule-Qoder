@@ -67,7 +67,7 @@ const ProjectList: React.FC = () => {
       }
     } catch (error) {
       console.error('加载工程列表失败:', error);
-      message.error('加载工程列表失败: ' + (error as any).message);
+      message.error('Failed to load project list: ' + (error as any).message);
     } finally {
       setLoading(false);
     }
@@ -76,12 +76,12 @@ const ProjectList: React.FC = () => {
   const handleCreateProject = async (_values: any) => {
     try {
       // TODO: 调用API创建项目
-      message.success('工程创建成功');
+      message.success('Project created successfully');
       setIsCreateModalVisible(false);
       form.resetFields();
       loadProjects();
     } catch (error) {
-      message.error('工程创建失败');
+      message.error('Failed to create project');
     }
   };
 
@@ -92,20 +92,20 @@ const ProjectList: React.FC = () => {
   const handleCopyProject = async (project: Project) => {
     try {
       // TODO: 调用API复制项目
-      message.success(`工程"${project.projectName}"已复制`);
+      message.success(`Project "${project.projectName}" has been duplicated`);
       loadProjects();
     } catch (error) {
-      message.error('复制失败');
+      message.error('Failed to duplicate project');
     }
   };
 
   const handleArchiveProject = async (project: Project) => {
     try {
       // TODO: 调用API归档项目
-      message.success(`工程"${project.projectName}"已归档`);
+      message.success(`Project "${project.projectName}" has been archived`);
       loadProjects();
     } catch (error) {
-      message.error('归档失败');
+      message.error('Failed to archive project');
     }
   };
 
@@ -113,19 +113,19 @@ const ProjectList: React.FC = () => {
     {
       key: 'edit',
       icon: <EditOutlined />,
-      label: '编辑',
+      label: 'Edit',
       onClick: () => handleEditProject(project.id),
     },
     {
       key: 'files',
       icon: <FolderOpenOutlined />,
-      label: '查看文件',
+      label: 'View Files',
       onClick: () => navigate(`/projects/${project.id}/files`),
     },
     {
       key: 'copy',
       icon: <CopyOutlined />,
-      label: '复制',
+      label: 'Duplicate',
       onClick: () => handleCopyProject(project),
     },
     {
@@ -134,12 +134,12 @@ const ProjectList: React.FC = () => {
     {
       key: 'archive',
       icon: <DeleteOutlined />,
-      label: '归档',
+      label: 'Archive',
       danger: true,
       onClick: () => {
         Modal.confirm({
-          title: '确认归档',
-          content: `确定要归档工程"${project.projectName}"吗？`,
+          title: 'Confirm Archive',
+          content: `Are you sure you want to archive project "${project.projectName}"?`,
           onOk: () => handleArchiveProject(project),
         });
       },
@@ -148,9 +148,9 @@ const ProjectList: React.FC = () => {
 
   const getStatusTag = (status: string) => {
     const statusMap: Record<string, { color: string; text: string }> = {
-      draft: { color: 'default', text: '草稿' },
-      published: { color: 'success', text: '已发布' },
-      archived: { color: 'error', text: '已归档' },
+      draft: { color: 'default', text: 'Draft' },
+      published: { color: 'success', text: 'Published' },
+      archived: { color: 'error', text: 'Archived' },
     };
     const config = statusMap[status] || statusMap.draft;
     return <Tag color={config.color}>{config.text}</Tag>;
@@ -170,7 +170,7 @@ const ProjectList: React.FC = () => {
       <Header className="project-list-header">
         <div className="header-content">
           <Title level={3} style={{ margin: 0, color: '#fff' }}>
-            咨询脚本编辑器
+            Consultation Script Editor
           </Title>
           <Space>
             <Button
@@ -178,7 +178,7 @@ const ProjectList: React.FC = () => {
               icon={<PlusOutlined />}
               onClick={() => setIsCreateModalVisible(true)}
             >
-              新建工程
+              New Project
             </Button>
           </Space>
         </div>
@@ -188,7 +188,7 @@ const ProjectList: React.FC = () => {
         <div className="filter-bar">
           <Space size="large">
             <Input
-              placeholder="搜索工程..."
+              placeholder="Search projects..."
               prefix={<SearchOutlined />}
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
@@ -196,10 +196,10 @@ const ProjectList: React.FC = () => {
               allowClear
             />
             <Select value={statusFilter} onChange={setStatusFilter} style={{ width: 120 }}>
-              <Option value="all">全部状态</Option>
-              <Option value="draft">草稿</Option>
-              <Option value="published">已发布</Option>
-              <Option value="archived">已归档</Option>
+              <Option value="all">All statuses</Option>
+              <Option value="draft">Draft</Option>
+              <Option value="published">Published</Option>
+              <Option value="archived">Archived</Option>
             </Select>
           </Space>
         </div>
@@ -237,7 +237,7 @@ const ProjectList: React.FC = () => {
 
                   <div className="project-meta">
                     <Space size="small" wrap>
-                      <Text type="secondary">🔧 引擎 {project.engineVersion}</Text>
+                      <Text type="secondary">🔧 Engine {project.engineVersion}</Text>
                       <Text type="secondary">•</Text>
                       <Text type="secondary">{project.author}</Text>
                       <Text type="secondary">•</Text>
@@ -247,7 +247,7 @@ const ProjectList: React.FC = () => {
 
                   <div className="project-meta">
                     <Space size="small" wrap>
-                      <Text type="secondary">📄 {project.fileCount}个文件</Text>
+                      <Text type="secondary">📄 {project.fileCount} files</Text>
                       {project.tags.map((tag) => (
                         <Tag key={tag} color="blue">
                           {tag}
@@ -264,16 +264,16 @@ const ProjectList: React.FC = () => {
                         icon={<EditOutlined />}
                         onClick={() => handleEditProject(project.id)}
                       >
-                        编辑
+                        Edit
                       </Button>
                       <Button size="small" icon={<PlayCircleOutlined />}>
-                        调试
+                        Debug
                       </Button>
                       <Button size="small" icon={<CloudUploadOutlined />}>
-                        发布
+                        Publish
                       </Button>
                       <Button size="small" icon={<FolderOpenOutlined />}>
-                        文件
+                        Files
                       </Button>
                     </Space>
                   </div>
@@ -286,7 +286,7 @@ const ProjectList: React.FC = () => {
 
       {/* 创建工程对话框 */}
       <Modal
-        title="创建新工程"
+        title="Create New Project"
         open={isCreateModalVisible}
         onOk={() => form.submit()}
         onCancel={() => {
@@ -297,37 +297,37 @@ const ProjectList: React.FC = () => {
       >
         <Form form={form} layout="vertical" onFinish={handleCreateProject}>
           <Form.Item
-            label="工程名称"
+            label="Project Name"
             name="projectName"
-            rules={[{ required: true, message: '请输入工程名称' }]}
+            rules={[{ required: true, message: 'Please enter the project name' }]}
           >
-            <Input placeholder="例如: CBT抑郁症评估工程" />
+            <Input placeholder="e.g. CBT Depression Assessment Project" />
           </Form.Item>
 
-          <Form.Item label="工程描述" name="description">
-            <Input.TextArea rows={3} placeholder="简要说明工程的用途和内容" />
+          <Form.Item label="Project Description" name="description">
+            <Input.TextArea rows={3} placeholder="Briefly describe the purpose and content of the project" />
           </Form.Item>
 
           <Form.Item
-            label="目标引擎版本"
+            label="Target Engine Version"
             name="engineVersion"
             initialValue="1.2.0"
-            rules={[{ required: true, message: '请选择引擎版本' }]}
+            rules={[{ required: true, message: 'Please select an engine version' }]}
           >
             <Select>
               <Option value="1.0.0">v1.0.0</Option>
               <Option value="1.1.0">v1.1.0</Option>
-              <Option value="1.2.0">v1.2.0 (最新稳定版)</Option>
-              <Option value="1.3.0">v1.3.0 (测试版)</Option>
+              <Option value="1.2.0">v1.2.0 (Latest stable)</Option>
+              <Option value="1.3.0">v1.3.0 (Beta)</Option>
             </Select>
           </Form.Item>
 
-          <Form.Item label="标签" name="tags">
-            <Select mode="tags" placeholder="输入标签，按回车添加">
+          <Form.Item label="Tags" name="tags">
+            <Select mode="tags" placeholder="Enter tags and press Enter">
               <Option value="CBT">CBT</Option>
-              <Option value="抑郁症">抑郁症</Option>
-              <Option value="焦虑症">焦虑症</Option>
-              <Option value="评估">评估</Option>
+              <Option value="Depression">Depression</Option>
+              <Option value="Anxiety">Anxiety</Option>
+              <Option value="Assessment">Assessment</Option>
             </Select>
           </Form.Item>
         </Form>

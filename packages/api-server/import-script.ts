@@ -45,14 +45,14 @@ async function importScript() {
       console.log('📝 插入新脚本...');
       await db.insert(scripts).values({
         id: SCRIPT_UUID,
-        scriptName: 'CBT抑郁症初次评估会谈',
+        scriptName: 'CBT Depression Initial Assessment Session',
         scriptType: 'session',
         scriptContent: scriptContent,
         version: '1.0.0',
         status: 'published',
         author: 'HeartRule Team',
-        description: '用于抑郁症患者的初次评估会谈',
-        tags: ['CBT', '抑郁症', '评估'],
+        description: 'Initial assessment session for depression patients',
+        tags: ['CBT', 'Depression', 'Assessment'],
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -62,7 +62,7 @@ async function importScript() {
     console.log('');
     console.log('脚本信息:');
     console.log(`  ID: ${SCRIPT_UUID}`);
-    console.log('  名称: CBT抑郁症初次评估会谈');
+    console.log('  名称: CBT Depression Initial Assessment Session');
     console.log('  类型: session');
     console.log('  状态: published');
   } catch (error) {

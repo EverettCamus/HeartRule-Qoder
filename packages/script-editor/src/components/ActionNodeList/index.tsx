@@ -119,14 +119,14 @@ const getActionIcon = (type: string) => {
  */
 const getActionTypeName = (type: string) => {
   const names: Record<string, string> = {
-    ai_say: 'AI 说话',
-    ai_ask: 'AI 提问',
-    ai_think: 'AI 思考',
-    use_skill: '使用技能',
-    show_form: '展示表单',
-    show_pic: '展示图片',
-    say: '说话',
-    user_say: '用户说话',
+    ai_say: 'AI Say',
+    ai_ask: 'AI Ask',
+    ai_think: 'AI Think',
+    use_skill: 'Use Skill',
+    show_form: 'Show Form',
+    show_pic: 'Show Image',
+    say: 'Say',
+    user_say: 'User Say',
   };
   return names[type] || type;
 };
@@ -352,7 +352,22 @@ export const ActionNodeList = forwardRef<ActionNodeListRef, ActionNodeListProps>
   if (!phases || phases.length === 0) {
     return (
       <div className="action-node-list-empty">
-        <Text type="secondary">暂无脚本内容</Text>
+        <Space direction="vertical" align="center" size="large">
+          <Text type="secondary" style={{ fontSize: '16px' }}>No content yet</Text>
+          <Text type="secondary" style={{ fontSize: '14px' }}>
+            Start by creating your first Phase to build the conversation flow
+          </Text>
+          {onAddPhase && (
+            <Button 
+              type="primary" 
+              icon={<PlusOutlined />} 
+              size="large"
+              onClick={onAddPhase}
+            >
+              Create First Phase
+            </Button>
+          )}
+        </Space>
       </div>
     );
   }

@@ -79,7 +79,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 200px;
+  min-height: 300px;
+  height: 100%;
+  padding: 48px 24px;
   color: #999;
 }
 

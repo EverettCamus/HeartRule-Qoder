@@ -30,14 +30,14 @@ export function initDevData() {
     
     const script = {
       id: 'cbt_depression_001',
-      scriptName: 'CBT抑郁症初次评估会谈',
+      scriptName: 'CBT Depression Initial Assessment Session',
       scriptType: 'session',
       scriptContent: scriptContent,
       version: '1.0.0',
       status: 'published',
       author: 'HeartRule Team',
-      description: '用于抑郁症患者的初次评估会谈',
-      tags: ['CBT', '抑郁症', '评估'],
+      description: 'Initial assessment session for depression patients',
+      tags: ['CBT', 'Depression', 'Assessment'],
       createdAt: new Date(),
       updatedAt: new Date(),
     };

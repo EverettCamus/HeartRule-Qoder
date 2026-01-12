@@ -172,6 +172,12 @@ const ProjectEditor: React.FC = () => {
     
     initialStatePushedRef.current.add(selectedFile.id);
   }, [currentPhases, selectedFile]);
+  
+  // 监控 fileContent 变化，用于调试
+  useEffect(() => {
+    console.log('[fileContent Changed] fileContent 长度:', fileContent.length);
+    console.log('[fileContent Changed] 内容预览:', fileContent.substring(0, 100));
+  }, [fileContent]);
 
   // ========== 可视化编辑相关函数 ==========
 
@@ -358,7 +364,7 @@ const ProjectEditor: React.FC = () => {
     if (sessionFiles.length > 0) {
       nodes.push({
         key: 'sessions-folder',
-        title: `会谈脚本 (${sessionFiles.length})`,
+        title: `Session Scripts (${sessionFiles.length})`,
         icon: <FolderOutlined style={{ color: '#faad14' }} />,
         children: sessionFiles.map((file) => ({
           key: file.id,
@@ -411,7 +417,7 @@ const ProjectEditor: React.FC = () => {
       }
     } catch (error) {
       console.error('加载工程数据失败:', error);
-      message.error('加载工程数据失败');
+      message.error('Failed to load project data');
     } finally {
       setLoading(false);
     }
@@ -472,8 +478,8 @@ const ProjectEditor: React.FC = () => {
         if (file) {
           if (hasUnsavedChanges) {
             Modal.confirm({
-              title: '未保存的修改',
-              content: '当前文件有未保存的修改，是否放弃修改？',
+              title: 'Unsaved Changes',
+              content: 'The current file has unsaved changes. Discard them?',
               onOk: () => {
                 loadFile(file);
                 navigate(`/projects/${projectId}/files/${file.id}`);
@@ -512,7 +518,7 @@ const ProjectEditor: React.FC = () => {
       await projectsApi.updateFile(projectId, selectedFile.id, {
         yamlContent: fileContent,
       });
-      message.success('保存成功');
+      message.success('Saved successfully');
       setHasUnsavedChanges(false);
 
       // 重新加载文件列表
@@ -526,7 +532,7 @@ const ProjectEditor: React.FC = () => {
       }
     } catch (error) {
       console.error('保存失败:', error);
-      message.error('保存失败');
+      message.error('Save failed');
     } finally {
       setSaving(false);
     }
@@ -535,7 +541,7 @@ const ProjectEditor: React.FC = () => {
   // 发布版本
   const handlePublish = useCallback(async () => {
     if (!projectId || !versionNote.trim()) {
-      message.warning('请填写版本说明');
+      message.warning('Please enter release notes');
       return;
     }
 
@@ -552,13 +558,13 @@ const ProjectEditor: React.FC = () => {
         publishedBy: project?.author || 'unknown',
       });
 
-      message.success(`版本 ${newVersion} 发布成功`);
+      message.success(`Version ${newVersion} published successfully`);
       setPublishModalVisible(false);
       setVersionNote('');
       loadProjectData();
     } catch (error) {
       console.error('发布失败:', error);
-      message.error('发布失败');
+      message.error('Publish failed');
     } finally {
       setSaving(false);
     }
@@ -586,17 +592,54 @@ const ProjectEditor: React.FC = () => {
    */
   const syncPhasesToYaml = useCallback(
     (phases: PhaseWithTopics[]) => {
-      if (!parsedScript) return;
-
+      console.log('[syncPhasesToYaml] 开始执行');
+      console.log('[syncPhasesToYaml] 输入 phases 数量:', phases.length);
+      console.log('[syncPhasesToYaml] parsedScript 状态:', parsedScript ? '存在' : 'null');
+      console.log('[syncPhasesToYaml] selectedFile:', selectedFile?.fileName);
+      
       try {
-        // 更新脚本对象
-        const updatedScript: any = JSON.parse(JSON.stringify(parsedScript)); // 深拷贝
+        let updatedScript: any;
 
+        // 如果 parsedScript 存在，使用现有结构
+        if (parsedScript) {
+          console.log('[syncPhasesToYaml] 使用现有 parsedScript');
+          updatedScript = JSON.parse(JSON.stringify(parsedScript)); // 深拷贝
+        } else {
+          // 如果 parsedScript 为空（新文件或解析失败），创建新的脚本结构
+          console.log('[syncPhasesToYaml] parsedScript 为空，创建新的脚本结构');
+          updatedScript = {
+            session: {
+              session_id: selectedFile?.fileName?.replace('.yaml', '') || 'new-session',
+              session_name: selectedFile?.fileName?.replace('.yaml', '') || 'New Session',
+              phases: [],
+            },
+          };
+          console.log('[syncPhasesToYaml] 创建的新结构:', JSON.stringify(updatedScript, null, 2));
+        }
+
+        // 确保 updatedScript 有 session 结构
+        if (!updatedScript.session) {
+          console.log('[syncPhasesToYaml] 脚本中没有 session 结构，创建新的 session');
+          updatedScript.session = {
+            session_id: selectedFile?.fileName?.replace('.yaml', '') || 'new-session',
+            session_name: selectedFile?.fileName?.replace('.yaml', '') || 'New Session',
+            phases: [],
+          };
+        }
+        
         // 新格式：更新 session.phases
-        if (updatedScript?.session?.phases) {
+        if (updatedScript?.session) {
+          console.log('[syncPhasesToYaml] 检测到 session 结构');
+          // 确保 session.phases 存在
+          if (!updatedScript.session.phases) {
+            updatedScript.session.phases = [];
+            console.log('[syncPhasesToYaml] 初始化 session.phases 数组');
+          }
+          
+          console.log('[syncPhasesToYaml] 开始构建 phases 数据...');
           // 重建 phases 结构，保持其他字段不变
           updatedScript.session.phases = phases.map((phase, pi) => {
-            const originalPhase = (parsedScript as any).session?.phases?.[pi] || {};
+            const originalPhase = (parsedScript as any)?.session?.phases?.[pi] || {};
             return {
               ...originalPhase,
               phase_id: phase.phase_id,
@@ -658,9 +701,11 @@ const ProjectEditor: React.FC = () => {
               }),
             };
           });
+          console.log('[syncPhasesToYaml] phases 数据构建完成，数量:', updatedScript.session.phases.length);
         }
         // 旧格式：更新 sessions[].stages[].steps[].actions[]
         else if (updatedScript.sessions?.[0]?.stages?.[0]?.steps) {
+          console.log('[syncPhasesToYaml] 检测到旧格式');
           const stepIndex = updatedScript.sessions[0].stages[0].steps.findIndex(
             (step: Step) => step.actions && step.actions.length > 0
           );
@@ -671,19 +716,28 @@ const ProjectEditor: React.FC = () => {
           }
         }
 
+        console.log('[syncPhasesToYaml] 开始转换为 YAML...');
         // 转换回 YAML
         const newYaml = yaml.dump(updatedScript, {
           lineWidth: -1,
           noRefs: true,
         });
+        console.log('[syncPhasesToYaml] YAML 转换完成，长度:', newYaml.length);
+        console.log('[syncPhasesToYaml] YAML 内容预览:', newYaml.substring(0, 200));
+        
         setFileContent(newYaml);
+        console.log('[syncPhasesToYaml] setFileContent 调用完成');
+        
         setParsedScript(updatedScript);
+        console.log('[syncPhasesToYaml] setParsedScript 调用完成');
+        
+        console.log('[syncPhasesToYaml] YAML 同步成功，phases 数量:', phases.length);
       } catch (error) {
         console.error('同步到 YAML 失败:', error);
-        message.error('同步失败');
+        message.error('Sync failed');
       }
     },
-    [parsedScript]
+    [parsedScript, selectedFile]
   );
 
   /**
@@ -785,7 +839,7 @@ const ProjectEditor: React.FC = () => {
     
     if (!entry) {
       console.log('[Undo] ⚠️ 没有可撤销的历史');
-      message.info('已经是最早的状态了');
+      message.info('Already at the earliest state');
       return;
     }
   
@@ -839,7 +893,7 @@ const ProjectEditor: React.FC = () => {
           console.log('[Undo-Timeout] 🎯 应用焦点导航...');
           applyFocusNavigation(entry.focusPath, entry.fileId);
             
-          message.success(`已撤销: ${entry.operation} (${targetFile.fileName})`);
+          message.success(`Undone: ${entry.operation} (${targetFile.fileName})`);
           
           // 释放锁
           processingUndoRedoRef.current = false;
@@ -850,7 +904,7 @@ const ProjectEditor: React.FC = () => {
         console.error(`[Undo] ❌ 无法找到目标文件！`);
         console.error(`[Undo] 目标 fileId: ${entry.fileId}`);
         console.error(`[Undo] 当前 files:`, files.map(f => ({ id: f.id, name: f.fileName })));
-        message.error('无法找到目标文件');
+        message.error('Target file not found');
         processingUndoRedoRef.current = false;
         globalHistoryManager.resetUndoRedoFlag();
         console.log('========== [Undo] 失败结束 ==========\n');
@@ -885,7 +939,7 @@ const ProjectEditor: React.FC = () => {
       // 应用焦点导航
       applyFocusNavigation(entry.focusPath, entry.fileId);
   
-      message.success(`已撤销: ${entry.operation}`);
+      message.success(`Undone: ${entry.operation}`);
       
       // 释放锁
       processingUndoRedoRef.current = false;
@@ -909,7 +963,7 @@ const ProjectEditor: React.FC = () => {
     
     const entry = globalHistoryManager.redo();
     if (!entry) {
-      message.info('已经是最新的状态了');
+      message.info('Already at the latest state');
       return;
     }
 
@@ -947,7 +1001,7 @@ const ProjectEditor: React.FC = () => {
           // 应用焦点导航
           applyFocusNavigation(entry.focusPath, entry.fileId);
           
-          message.success(`已重做: ${entry.operation} (${targetFile.fileName})`);
+          message.success(`Redone: ${entry.operation} (${targetFile.fileName})`);
           
           // 释放锁
           processingUndoRedoRef.current = false;
@@ -955,7 +1009,7 @@ const ProjectEditor: React.FC = () => {
         }, 350);
       } else {
         console.error(`[Redo] 无法找到目标文件，fileId: ${entry.fileId}`);
-        message.error('无法找到目标文件');
+        message.error('Target file not found');
         processingUndoRedoRef.current = false;
         globalHistoryManager.resetUndoRedoFlag();
         return;
@@ -970,7 +1024,7 @@ const ProjectEditor: React.FC = () => {
       // 应用焦点导航
       applyFocusNavigation(entry.focusPath, entry.fileId);
 
-      message.success(`已重做: ${entry.operation}`);
+      message.success(`Redone: ${entry.operation}`);
       
       // 释放锁
       processingUndoRedoRef.current = false;
@@ -1006,7 +1060,7 @@ const ProjectEditor: React.FC = () => {
       // 同步回 YAML
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
-      message.success('Action 已更新');
+      message.success('Action updated');
     },
     [selectedActionPath, currentPhases, syncPhasesToYaml, pushHistory]
   );
@@ -1015,26 +1069,30 @@ const ProjectEditor: React.FC = () => {
    * 添加新 Phase
    */
   const handleAddPhase = useCallback(() => {
+    console.log('[handleAddPhase] 开始添加新 Phase');
+    console.log('[handleAddPhase] 当前 currentPhases 数量:', currentPhases.length);
+    console.log('[handleAddPhase] parsedScript:', parsedScript ? '存在' : '为null');
+    
     const newPhases = JSON.parse(JSON.stringify(currentPhases));
     const newPhaseIndex = newPhases.length;
 
     newPhases.push({
       phase_id: `phase_${newPhaseIndex + 1}`,
-      phase_name: `新阶段 ${newPhaseIndex + 1}`,
+      phase_name: `New Phase ${newPhaseIndex + 1}`,
       topics: [
         {
           topic_id: `topic_1`,
-          topic_name: '新主题 1',
+          topic_name: 'New Topic 1',
           actions: [
             {
               type: 'ai_say',
-              ai_say: '请编辑此处内容',
+              ai_say: 'Please edit this content',
               action_id: `action_1`,
               _raw: {
                 action_id: `action_1`,
                 action_type: 'ai_say',
                 config: {
-                  content_template: '请编辑此处内容',
+                  content_template: 'Please edit this content',
                 },
               },
             },
@@ -1043,15 +1101,18 @@ const ProjectEditor: React.FC = () => {
       ],
     });
 
+    console.log('[handleAddPhase] 新 newPhases 数量:', newPhases.length);
     setCurrentPhases(newPhases);
-    pushHistory(newPhases, '添加 Phase', {
+    pushHistory(newPhases, 'Add Phase', {
       phaseIndex: newPhaseIndex,
       type: 'phase',
     });
+    console.log('[handleAddPhase] 调用 syncPhasesToYaml...');
     syncPhasesToYaml(newPhases);
     setHasUnsavedChanges(true);
-    message.success('已添加新 Phase');
-  }, [currentPhases, syncPhasesToYaml, pushHistory]);
+    message.success('New Phase added');
+    console.log('[handleAddPhase] 完成');
+  }, [currentPhases, syncPhasesToYaml, pushHistory, parsedScript]);
 
   /**
    * 添加新 Topic
@@ -1064,17 +1125,17 @@ const ProjectEditor: React.FC = () => {
 
       phase.topics.push({
         topic_id: `topic_${newTopicIndex + 1}`,
-        topic_name: `新主题 ${newTopicIndex + 1}`,
+        topic_name: `New Topic ${newTopicIndex + 1}`,
         actions: [
           {
             type: 'ai_say',
-            ai_say: '请编辑此处内容',
+            ai_say: 'Please edit this content',
             action_id: `action_1`,
             _raw: {
               action_id: `action_1`,
               action_type: 'ai_say',
               config: {
-                content_template: '请编辑此处内容',
+                content_template: 'Please edit this content',
               },
             },
           },
@@ -1082,14 +1143,14 @@ const ProjectEditor: React.FC = () => {
       });
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, '添加 Topic', {
+      pushHistory(newPhases, 'Add Topic', {
         phaseIndex,
         topicIndex: newTopicIndex,
         type: 'topic',
       });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
-      message.success('已添加新 Topic');
+      message.success('New Topic added');
     },
     [currentPhases, syncPhasesToYaml, pushHistory]
   );
@@ -1118,14 +1179,14 @@ const ProjectEditor: React.FC = () => {
       case 'ai_ask':
         return {
           type: 'ai_ask',
-          ai_ask: '请输入问题',
+          ai_ask: 'Please enter a question',
           output: [],
           action_id: baseActionId,
           _raw: {
             action_id: baseActionId,
             action_type: 'ai_ask',
             config: {
-              content_template: '请输入问题',
+              content_template: 'Please enter a question',
               output: [],
             },
           },
@@ -1134,14 +1195,14 @@ const ProjectEditor: React.FC = () => {
       case 'ai_think':
         return {
           type: 'ai_think',
-          think: '请输入思考目标',
+          think: 'Please enter the thinking goal',
           output: [],
           action_id: baseActionId,
           _raw: {
             action_id: baseActionId,
             action_type: 'ai_think',
             config: {
-              think_target: '请输入思考目标',
+              think_target: 'Please enter the thinking goal',
               output: [],
             },
           },
@@ -1150,13 +1211,13 @@ const ProjectEditor: React.FC = () => {
       case 'use_skill':
         return {
           type: 'use_skill',
-          skill: '技能名称',
+          skill: 'Skill name',
           action_id: baseActionId,
           _raw: {
             action_id: baseActionId,
             action_type: 'use_skill',
             config: {
-              skill_name: '技能名称',
+              skill_name: 'Skill name',
             },
           },
         };
@@ -1227,7 +1288,7 @@ const ProjectEditor: React.FC = () => {
       });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
-      message.success(`已添加新 ${actionType} Action`);
+      message.success(`New ${actionType} Action added`);
     },
     [currentPhases, syncPhasesToYaml, createActionByType, pushHistory]
   );
@@ -1240,7 +1301,7 @@ const ProjectEditor: React.FC = () => {
       // 使用函数式更新，确保基于最新的 state
       setCurrentPhases((prevPhases) => {
         // 关键修复：先保存删除前的状态
-        pushHistory(prevPhases, '删除 Phase', null);
+        pushHistory(prevPhases, 'Delete Phase', null);
         
         const newPhases = JSON.parse(JSON.stringify(prevPhases));
         newPhases.splice(phaseIndex, 1);
@@ -1258,7 +1319,7 @@ const ProjectEditor: React.FC = () => {
 
         syncPhasesToYaml(newPhases);
         setHasUnsavedChanges(true);
-        message.success('已删除 Phase');
+        message.success('Phase deleted');
         
         return newPhases;
       });
@@ -1274,7 +1335,7 @@ const ProjectEditor: React.FC = () => {
       // 使用函数式更新，确保基于最新的 state
       setCurrentPhases((prevPhases) => {
         // 关键修复：先保存删除前的状态
-        pushHistory(prevPhases, '删除 Topic', null);
+        pushHistory(prevPhases, 'Delete Topic', null);
           
         const newPhases = JSON.parse(JSON.stringify(prevPhases));
         newPhases[phaseIndex].topics.splice(topicIndex, 1);
@@ -1299,7 +1360,7 @@ const ProjectEditor: React.FC = () => {
   
         syncPhasesToYaml(newPhases);
         setHasUnsavedChanges(true);
-        message.success('已删除 Topic');
+        message.success('Topic deleted');
           
         return newPhases;
       });
@@ -1319,12 +1380,12 @@ const ProjectEditor: React.FC = () => {
 
         // 至少保留一个 action
         if (topic.actions.length <= 1) {
-          message.warning('至少需要保留一个 Action');
+          message.warning('At least one Action is required');
           return prevPhases; // 返回原状态，不更新
         }
 
         // 关键修复：在删除前保存当前状态
-        pushHistory(prevPhases, '删除 Action', null);
+        pushHistory(prevPhases, 'Delete Action', null);
         
         topic.actions.splice(actionIndex, 1);
 
@@ -1350,7 +1411,7 @@ const ProjectEditor: React.FC = () => {
 
         syncPhasesToYaml(newPhases);
         setHasUnsavedChanges(true);
-        message.success('已删除 Action');
+        message.success('Action deleted');
         
         return newPhases; // 返回新状态
       });
@@ -1368,13 +1429,13 @@ const ProjectEditor: React.FC = () => {
       newPhases.splice(toIndex, 0, movedPhase);
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, `移动 Phase 从 ${fromIndex} 到 ${toIndex}`, {
+      pushHistory(newPhases, `Move Phase from ${fromIndex} to ${toIndex}`, {
         phaseIndex: toIndex,
         type: 'phase',
       });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
-      message.success('Phase 已移动');
+      message.success('Phase moved');
     },
     [currentPhases, syncPhasesToYaml, pushHistory]
   );
@@ -1398,14 +1459,14 @@ const ProjectEditor: React.FC = () => {
       newPhases[toPhaseIndex].topics.splice(toTopicIndex, 0, movedTopic);
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, `移动 Topic`, {
+      pushHistory(newPhases, `Move Topic`, {
         phaseIndex: toPhaseIndex,
         topicIndex: toTopicIndex,
         type: 'topic',
       });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
-      message.success('Topic 已移动');
+      message.success('Topic moved');
     },
     [currentPhases, syncPhasesToYaml, pushHistory]
   );
@@ -1434,7 +1495,7 @@ const ProjectEditor: React.FC = () => {
       newPhases[toPhaseIndex].topics[toTopicIndex].actions.splice(toActionIndex, 0, movedAction);
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, `移动 Action`, {
+      pushHistory(newPhases, `Move Action`, {
         phaseIndex: toPhaseIndex,
         topicIndex: toTopicIndex,
         actionIndex: toActionIndex,
@@ -1442,7 +1503,7 @@ const ProjectEditor: React.FC = () => {
       });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
-      message.success('Action 已移动');
+      message.success('Action moved');
     },
     [currentPhases, syncPhasesToYaml, pushHistory]
   );
@@ -1498,13 +1559,13 @@ const ProjectEditor: React.FC = () => {
       };
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, '修改 Phase', {
+      pushHistory(newPhases, 'Update Phase', {
         phaseIndex,
         type: 'phase',
       });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
-      message.success('Phase 已更新');
+      message.success('Phase updated');
     },
     [selectedPhasePath, currentPhases, syncPhasesToYaml, pushHistory]
   );
@@ -1528,14 +1589,14 @@ const ProjectEditor: React.FC = () => {
       };
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, '修改 Topic', {
+      pushHistory(newPhases, 'Update Topic', {
         phaseIndex,
         topicIndex,
         type: 'topic',
       });
       syncPhasesToYaml(newPhases);
       setHasUnsavedChanges(true);
-      message.success('Topic 已更新');
+      message.success('Topic updated');
     },
     [selectedTopicPath, currentPhases, syncPhasesToYaml, pushHistory]
   );
@@ -1547,13 +1608,13 @@ const ProjectEditor: React.FC = () => {
     if (!projectId) return;
 
     Modal.confirm({
-      title: '新建会谈脚本',
+      title: 'Create Session Script',
       content: (
         <div>
-          <div style={{ marginBottom: '8px' }}>请输入会谈脚本名称：</div>
+          <div style={{ marginBottom: '8px' }}>Please enter the session script name:</div>
           <Input
             id="session-name-input"
-            placeholder="例如: first-day"
+            placeholder="e.g. first-day"
             defaultValue="new-session"
           />
         </div>
@@ -1574,17 +1635,17 @@ const ProjectEditor: React.FC = () => {
               phases: [
                 {
                   phase_id: 'phase_1',
-                  phase_name: '新阶段 1',
+                  phase_name: 'New Phase 1',
                   topics: [
                     {
                       topic_id: 'topic_1',
-                      topic_name: '新主题 1',
+                      topic_name: 'New Topic 1',
                       actions: [
                         {
                           action_id: 'action_1',
                           action_type: 'ai_say',
                           config: {
-                            content_template: '请编辑此处内容',
+                            content_template: 'Please edit this content',
                           },
                         },
                       ],
@@ -1602,7 +1663,7 @@ const ProjectEditor: React.FC = () => {
           });
 
           if (res.success) {
-            message.success('会谈脚本创建成功');
+            message.success('Session script created successfully');
             // 重新加载文件列表
             await loadProjectData();
             // 自动加载新创建的文件
@@ -1611,7 +1672,7 @@ const ProjectEditor: React.FC = () => {
           }
         } catch (error) {
           console.error('创建会谈脚本失败:', error);
-          message.error('创建失败');
+          message.error('Creation failed');
         } finally {
           setSaving(false);
         }
@@ -1672,7 +1733,7 @@ const ProjectEditor: React.FC = () => {
     return (
       <Layout style={{ minHeight: '100vh' }}>
         <Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <Spin size="large" tip="加载中..." />
+          <Spin size="large" tip="Loading..." />
         </Content>
       </Layout>
     );
@@ -1695,7 +1756,7 @@ const ProjectEditor: React.FC = () => {
         >
           <Space size="middle" align="center">
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/projects')}>
-              返回列表
+              Back to list
             </Button>
             <Divider type="vertical" />
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -1706,19 +1767,19 @@ const ProjectEditor: React.FC = () => {
                 {project?.projectName}
               </Title>
               <Text type="secondary" style={{ fontSize: '12px', lineHeight: '1' }}>
-                引擎版本: {project?.engineVersion}
+                Engine version: {project?.engineVersion}
               </Text>
             </div>
             {project?.status && (
               <Tag color={project.status === 'published' ? 'success' : 'default'}>
                 {project.status === 'draft'
-                  ? '草稿'
+                  ? 'Draft'
                   : project.status === 'published'
-                    ? '已发布'
-                    : '已归档'}
+                    ? 'Published'
+                    : 'Archived'}
               </Tag>
             )}
-            {hasUnsavedChanges && <Tag color="warning">未保存</Tag>}
+            {hasUnsavedChanges && <Tag color="warning">Unsaved</Tag>}
           </Space>
           <Space>
             <Button
@@ -1728,10 +1789,10 @@ const ProjectEditor: React.FC = () => {
               onClick={handleSave}
               disabled={!hasUnsavedChanges}
             >
-              保存 {hasUnsavedChanges && '(Ctrl+S)'}
+              Save {hasUnsavedChanges && '(Ctrl+S)'}
             </Button>
             <Button icon={<RocketOutlined />} onClick={() => setPublishModalVisible(true)}>
-              发布版本
+              Publish Version
             </Button>
           </Space>
         </div>
@@ -1790,7 +1851,7 @@ const ProjectEditor: React.FC = () => {
                 marginBottom: '12px',
               }}
             >
-              <Text strong>工程文件</Text>
+              <Text strong>Project Files</Text>
               <Dropdown
                 overlay={
                   <Menu onClick={({ key }) => {
@@ -1799,7 +1860,7 @@ const ProjectEditor: React.FC = () => {
                     }
                   }}>
                     <Menu.Item key="session" icon={<FileTextOutlined />}>
-                      新建会谈脚本
+                      New Session Script
                     </Menu.Item>
                   </Menu>
                 }
@@ -1829,31 +1890,31 @@ const ProjectEditor: React.FC = () => {
               }}
             >
               <Title level={5} style={{ marginTop: 0 }}>
-                文件属性
+                File Details
               </Title>
               {selectedFile ? (
                 <div>
                   <Space direction="vertical" style={{ width: '100%' }} size="middle">
                     <div>
-                      <Text type="secondary">文件名称</Text>
+                      <Text type="secondary">File Name</Text>
                       <div>
                         <Text>{selectedFile.fileName}</Text>
                       </div>
                     </div>
                     <div>
-                      <Text type="secondary">文件类型</Text>
+                      <Text type="secondary">File Type</Text>
                       <div>
                         <Tag>{selectedFile.fileType}</Tag>
                       </div>
                     </div>
                     <div>
-                      <Text type="secondary">创建时间</Text>
+                      <Text type="secondary">Created At</Text>
                       <div>
                         <Text>{new Date(selectedFile.createdAt).toLocaleString()}</Text>
                       </div>
                     </div>
                     <div>
-                      <Text type="secondary">修改时间</Text>
+                      <Text type="secondary">Updated At</Text>
                       <div>
                         <Text>{new Date(selectedFile.updatedAt).toLocaleString()}</Text>
                       </div>
@@ -1862,17 +1923,17 @@ const ProjectEditor: React.FC = () => {
 
                   <Divider />
 
-                  <Title level={5}>快捷操作</Title>
+                  <Title level={5}>Quick Actions</Title>
                   <Space direction="vertical" style={{ width: '100%' }}>
                     <Button block icon={<HistoryOutlined />}>
-                      查看版本历史
+                      View Version History
                     </Button>
-                    <Button block>格式化YAML</Button>
-                    <Button block>验证脚本</Button>
+                    <Button block>Format YAML</Button>
+                    <Button block>Validate Script</Button>
                   </Space>
                 </div>
               ) : (
-                <Text type="secondary">未选择文件</Text>
+                <Text type="secondary">No file selected</Text>
               )}
             </div>
           )}
@@ -1898,7 +1959,7 @@ const ProjectEditor: React.FC = () => {
                     {getFileIcon(selectedFile.fileType)}
                     <Text strong>{selectedFile.fileName}</Text>
                     <Text type="secondary" style={{ fontSize: '12px' }}>
-                      最后修改: {new Date(selectedFile.updatedAt).toLocaleString()}
+                      Last modified: {new Date(selectedFile.updatedAt).toLocaleString()}
                     </Text>
 
                     {/* 如果是会谈脚本，显示模式切换按钮 */}
@@ -1914,7 +1975,7 @@ const ProjectEditor: React.FC = () => {
                               setEditMode('yaml');
                             }}
                           >
-                            YAML 模式
+                            YAML Mode
                           </Button>
                           <Button
                             icon={<AppstoreOutlined />}
@@ -1923,10 +1984,15 @@ const ProjectEditor: React.FC = () => {
                               console.log('切换到可视化编辑模式');
                               console.log('当前 Phases 数量:', currentPhases.length);
                               console.log('解析的脚本:', parsedScript);
+                              
+                              // 切换到可视化模式时，重新解析 YAML 内容以确保数据同步
+                              if (fileContent) {
+                                parseYamlToScript(fileContent);
+                              }
                               setEditMode('visual');
                             }}
                           >
-                            可视化编辑
+                            Visual Editor
                           </Button>
                         </Button.Group>
                         <Text type="secondary" style={{ fontSize: '12px', marginLeft: '8px' }}>
@@ -1936,7 +2002,7 @@ const ProjectEditor: React.FC = () => {
                                 total +
                                 phase.topics.reduce((t, topic) => t + topic.actions.length, 0),
                               0
-                            )} 个节点)`}
+                            )} nodes)`}
                         </Text>
                       </>
                     )}
@@ -1950,7 +2016,7 @@ const ProjectEditor: React.FC = () => {
                     <TextArea
                       value={fileContent}
                       onChange={handleContentChange}
-                      placeholder="编辑YAML内容..."
+                      placeholder="Edit YAML content..."
                       style={{
                         width: '100%',
                         minHeight: '600px',
@@ -2049,7 +2115,7 @@ const ProjectEditor: React.FC = () => {
 
                       {editingType === null && (
                         <div style={{ padding: '24px', textAlign: 'center' }}>
-                          <Text type="secondary">请从左侧选择一个 Phase、Topic 或 Action</Text>
+                          <Text type="secondary">Please select a Phase, Topic, or Action on the left</Text>
                         </div>
                       )}
                     </div>
@@ -2065,7 +2131,7 @@ const ProjectEditor: React.FC = () => {
                   height: '100%',
                 }}
               >
-                <Text type="secondary">请从左侧选择一个文件进行编辑</Text>
+                <Text type="secondary">Please select a file on the left to edit</Text>
               </div>
             )}
           </Content>
@@ -2074,30 +2140,30 @@ const ProjectEditor: React.FC = () => {
 
       {/* 发布版本对话框 */}
       <Modal
-        title="发布新版本"
+        title="Publish New Version"
         open={publishModalVisible}
         onOk={handlePublish}
         onCancel={() => {
           setPublishModalVisible(false);
           setVersionNote('');
         }}
-        okText="确认发布"
-        cancelText="取消"
+        okText="Confirm Publish"
+        cancelText="Cancel"
         confirmLoading={saving}
       >
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <div>
-            <Text type="secondary">当前工程:</Text>
+            <Text type="secondary">Current project:</Text>
             <div>
               <Text strong>{project?.projectName}</Text>
             </div>
           </div>
           <div>
-            <Text type="secondary">版本说明 (必填)</Text>
+            <Text type="secondary">Release Notes (required)</Text>
             <TextArea
               value={versionNote}
               onChange={(e) => setVersionNote(e.target.value)}
-              placeholder="描述本次发布的主要变更内容..."
+              placeholder="Describe the main changes in this release..."
               rows={4}
             />
           </div>

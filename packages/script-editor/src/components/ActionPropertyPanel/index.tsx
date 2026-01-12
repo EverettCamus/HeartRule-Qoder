@@ -146,7 +146,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
   if (!action) {
     return (
       <div className="action-property-panel-empty">
-        <Text type="secondary">请选择一个 Action 节点进行编辑</Text>
+        <Text type="secondary">Please select an Action node to edit</Text>
       </div>
     );
   }
@@ -156,7 +156,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
       <Card
         title={
           <Space>
-            <Text strong>Action 属性配置</Text>
+            <Text strong>Action Property Settings</Text>
             <Tag color="blue">#{(actionIndex ?? 0) + 1}</Tag>
           </Space>
         }
@@ -167,15 +167,15 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
           {action.type === 'ai_say' && (
             <>
               <Form.Item
-                label="提示词内容"
+                label="Prompt Content"
                 name="ai_say"
-                rules={[{ required: true, message: '请输入提示词内容' }]}
+                rules={[{ required: true, message: 'Please enter the prompt content' }]}
               >
-                <TextArea rows={8} placeholder="输入 AI 说话的提示词..." showCount />
+                <TextArea rows={8} placeholder="Enter the prompt for AI speaking..." showCount />
               </Form.Item>
 
-              <Form.Item label="语气风格" name="tone">
-                <Input placeholder="例如: 温柔、鼓励、严肃等" />
+              <Form.Item label="Tone Style" name="tone">
+                <Input placeholder="e.g. gentle, encouraging, serious" />
               </Form.Item>
             </>
           )}
@@ -184,33 +184,33 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
           {action.type === 'ai_ask' && (
             <>
               <Form.Item
-                label="提示词内容"
+                label="Prompt Content"
                 name="ai_ask"
-                rules={[{ required: true, message: '请输入提示词内容' }]}
+                rules={[{ required: true, message: 'Please enter the prompt content' }]}
               >
-                <TextArea rows={8} placeholder="输入 AI 提问的提示词..." showCount />
+                <TextArea rows={8} placeholder="Enter the prompt for AI questions..." showCount />
               </Form.Item>
 
               <Row gutter={16}>
                 <Col span={12}>
-                  <Form.Item label="语气风格" name="tone">
-                    <Input placeholder="例如: 温柔、鼓励" />
+                  <Form.Item label="Tone Style" name="tone">
+                    <Input placeholder="e.g. gentle, encouraging" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="添加到列表" name="tolist">
-                    <Input placeholder="列表变量名" />
+                  <Form.Item label="Append to List" name="tolist">
+                    <Input placeholder="List variable name" />
                   </Form.Item>
                 </Col>
               </Row>
 
-              <Form.Item label="退出条件" name="exit">
-                <TextArea rows={2} placeholder="描述何时退出此 Action..." />
+              <Form.Item label="Exit Condition" name="exit">
+                <TextArea rows={2} placeholder="Describe when to exit this Action..." />
               </Form.Item>
 
-              <Divider orientation="left">输出变量配置</Divider>
+              <Divider orientation="left">Output Variable Configuration</Divider>
               <Form.List name="output">
-                {(fields, { add, remove }) => (
+                {(fields, { add, remove}) => (
                   <>
                     {fields.map((field) => (
                       <Card
@@ -229,24 +229,24 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                       >
                         <Form.Item
                           {...field}
-                          label="变量操作"
+                          label="Variable Operation"
                           name={[field.name, 'get']}
                           style={{ marginBottom: 8 }}
                         >
-                          <Input placeholder="get: 提取变量名" />
+                          <Input placeholder="get: variable name to extract" />
                         </Form.Item>
                         <Form.Item
                           {...field}
-                          label="变量定义"
+                          label="Variable Definition"
                           name={[field.name, 'define']}
                           style={{ marginBottom: 0 }}
                         >
-                          <Input placeholder="define: 变量说明" />
+                          <Input placeholder="define: variable description" />
                         </Form.Item>
                       </Card>
                     ))}
                     <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-                      添加输出变量
+                      Add Output Variable
                     </Button>
                   </>
                 )}
@@ -258,14 +258,14 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
           {action.type === 'ai_think' && (
             <>
               <Form.Item
-                label="思考提示词"
+                label="Thinking Prompt"
                 name="think"
-                rules={[{ required: true, message: '请输入思考提示词' }]}
+                rules={[{ required: true, message: 'Please enter the thinking prompt' }]}
               >
-                <TextArea rows={8} placeholder="输入 AI 思考的提示词..." showCount />
+                <TextArea rows={8} placeholder="Enter the prompt for AI thinking..." showCount />
               </Form.Item>
 
-              <Divider orientation="left">输出变量配置</Divider>
+              <Divider orientation="left">Output Variable Configuration</Divider>
               <Form.List name="output">
                 {(fields, { add, remove }) => (
                   <>
@@ -288,44 +288,44 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                           <Col span={12}>
                             <Form.Item
                               {...field}
-                              label="变量操作"
+                              label="Variable Operation"
                               name={[field.name, 'get']}
                               style={{ marginBottom: 8 }}
                             >
-                              <Input placeholder="get: 提取" />
+                              <Input placeholder="get: extract" />
                             </Form.Item>
                           </Col>
                           <Col span={12}>
                             <Form.Item
                               {...field}
-                              label="或设置"
+                              label="Or Set"
                               name={[field.name, 'set']}
                               style={{ marginBottom: 8 }}
                             >
-                              <Input placeholder="set: 设置" />
+                              <Input placeholder="set: assign" />
                             </Form.Item>
                           </Col>
                         </Row>
                         <Form.Item
                           {...field}
-                          label="变量定义"
+                          label="Variable Definition"
                           name={[field.name, 'define']}
                           style={{ marginBottom: 8 }}
                         >
-                          <Input placeholder="define: 说明" />
+                          <Input placeholder="define: description" />
                         </Form.Item>
                         <Form.Item
                           {...field}
-                          label="默认值"
+                          label="Default Value"
                           name={[field.name, 'value']}
                           style={{ marginBottom: 0 }}
                         >
-                          <Input placeholder="value: 默认值" />
+                          <Input placeholder="value: default value" />
                         </Form.Item>
                       </Card>
                     ))}
                     <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-                      添加输出变量
+                      Add Output Variable
                     </Button>
                   </>
                 )}
@@ -337,14 +337,14 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
           {action.type === 'use_skill' && (
             <>
               <Form.Item
-                label="技能名称"
+                label="Skill Name"
                 name="skill"
-                rules={[{ required: true, message: '请输入技能名称' }]}
+                rules={[{ required: true, message: 'Please enter the skill name' }]}
               >
-                <Input placeholder="输入要使用的技能名称..." />
+                <Input placeholder="Enter the skill name to use..." />
               </Form.Item>
 
-              <Divider orientation="left">输入参数配置</Divider>
+              <Divider orientation="left">Input Parameter Configuration</Divider>
               <Form.List name="input">
                 {(fields, { add, remove }) => (
                   <>
@@ -365,30 +365,30 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                       >
                         <Form.Item
                           {...field}
-                          label="参数名"
+                          label="Parameter Name"
                           name={[field.name, 'get']}
                           style={{ marginBottom: 8 }}
                         >
-                          <Input placeholder="参数名" />
+                          <Input placeholder="Parameter name" />
                         </Form.Item>
                         <Form.Item
                           {...field}
-                          label="参数说明"
+                          label="Parameter Description"
                           name={[field.name, 'define']}
                           style={{ marginBottom: 0 }}
                         >
-                          <Input placeholder="参数说明" />
+                          <Input placeholder="Parameter description" />
                         </Form.Item>
                       </Card>
                     ))}
                     <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-                      添加输入参数
+                      Add Input Parameter
                     </Button>
                   </>
                 )}
               </Form.List>
 
-              <Divider orientation="left">输出变量配置</Divider>
+              <Divider orientation="left">Output Variable Configuration</Divider>
               <Form.List name="output">
                 {(fields, { add, remove }) => (
                   <>
@@ -409,24 +409,24 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                       >
                         <Form.Item
                           {...field}
-                          label="输出变量名"
+                          label="Output Variable Name"
                           name={[field.name, 'get']}
                           style={{ marginBottom: 8 }}
                         >
-                          <Input placeholder="变量名" />
+                          <Input placeholder="Variable name" />
                         </Form.Item>
                         <Form.Item
                           {...field}
-                          label="变量说明"
+                          label="Variable Description"
                           name={[field.name, 'define']}
                           style={{ marginBottom: 0 }}
                         >
-                          <Input placeholder="变量说明" />
+                          <Input placeholder="Variable description" />
                         </Form.Item>
                       </Card>
                     ))}
                     <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-                      添加输出变量
+                      Add Output Variable
                     </Button>
                   </>
                 )}
@@ -438,14 +438,14 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
           {action.type === 'show_form' && (
             <>
               <Form.Item
-                label="表单 ID"
+                label="Form ID"
                 name="form_id"
-                rules={[{ required: true, message: '请输入表单 ID' }]}
+                rules={[{ required: true, message: 'Please enter the form ID' }]}
               >
-                <Input placeholder="输入要展示的表单 ID..." />
+                <Input placeholder="Enter the form ID to display..." />
               </Form.Item>
 
-              <Divider orientation="left">输出变量配置</Divider>
+              <Divider orientation="left">Output Variable Configuration</Divider>
               <Form.List name="output">
                 {(fields, { add, remove }) => (
                   <>
@@ -466,24 +466,24 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                       >
                         <Form.Item
                           {...field}
-                          label="表单字段名"
+                          label="Form Field Name"
                           name={[field.name, 'get']}
                           style={{ marginBottom: 8 }}
                         >
-                          <Input placeholder="字段名" />
+                          <Input placeholder="Field name" />
                         </Form.Item>
                         <Form.Item
                           {...field}
-                          label="字段说明"
+                          label="Field Description"
                           name={[field.name, 'define']}
                           style={{ marginBottom: 0 }}
                         >
-                          <Input placeholder="字段说明" />
+                          <Input placeholder="Field description" />
                         </Form.Item>
                       </Card>
                     ))}
                     <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-                      添加输出变量
+                      Add Output Variable
                     </Button>
                   </>
                 )}
@@ -495,25 +495,25 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
           {action.type === 'show_pic' && (
             <>
               <Form.Item
-                label="图片 URL"
+                label="Image URL"
                 name="pic_url"
-                rules={[{ required: true, message: '请输入图片 URL' }]}
+                rules={[{ required: true, message: 'Please enter the image URL' }]}
               >
-                <Input placeholder="输入图片的 URL 地址..." />
+                <Input placeholder="Enter the image URL..." />
               </Form.Item>
 
-              <Form.Item label="图片说明" name="description">
-                <TextArea rows={3} placeholder="输入图片的说明文字（可选）..." />
+              <Form.Item label="Image Description" name="description">
+                <TextArea rows={3} placeholder="Enter the image description (optional)..." />
               </Form.Item>
             </>
           )}
 
           {/* 通用：执行条件 */}
-          <Divider orientation="left">高级配置</Divider>
+          <Divider orientation="left">Advanced Settings</Divider>
           <Collapse ghost>
-            <Panel header="执行条件（可选）" key="condition">
+            <Panel header="Execution Condition (optional)" key="condition">
               <Form.Item name="condition" style={{ marginBottom: 0 }}>
-                <TextArea rows={3} placeholder="例如: {变量名} == 'true'" />
+                <TextArea rows={3} placeholder="e.g. {variableName} == 'true'" />
               </Form.Item>
             </Panel>
           </Collapse>
