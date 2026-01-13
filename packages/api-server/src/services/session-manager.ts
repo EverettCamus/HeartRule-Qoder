@@ -74,14 +74,23 @@ export class SessionManager {
     executionStatus: string;
     variables?: Record<string, unknown>;
   }> {
+    console.log('[SessionManager] 🔵 initializeSession called', { sessionId });
+
     // 获取会话
     const session = await db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
     });
 
     if (!session) {
+      console.error('[SessionManager] ❌ Session not found:', sessionId);
       throw new Error('Session not found');
     }
+    console.log('[SessionManager] ✅ Session found:', {
+      id: session.id,
+      scriptId: session.scriptId,
+      status: session.status,
+      executionStatus: session.executionStatus,
+    });
 
     // 获取脚本
     const script = await db.query.scripts.findFirst({
@@ -89,28 +98,59 @@ export class SessionManager {
     });
 
     if (!script) {
+      console.error('[SessionManager] ❌ Script not found:', session.scriptId);
       throw new Error('Script not found');
     }
+    console.log('[SessionManager] ✅ Script found:', {
+      id: script.id,
+      scriptName: script.scriptName,
+      contentLength: script.scriptContent.length,
+    });
 
     // 创建初始执行状态
     let executionState: ExecutionState = ScriptExecutor.createInitialState();
     executionState.variables = (session.variables as Record<string, unknown>) || {};
+    console.log('[SessionManager] 📋 Initial execution state:', {
+      status: executionState.status,
+      phaseIdx: executionState.currentPhaseIdx,
+      topicIdx: executionState.currentTopicIdx,
+      actionIdx: executionState.currentActionIdx,
+      variables: executionState.variables,
+    });
 
     // 转换 YAML 为 JSON
     const scriptContent = yaml.parse(script.scriptContent);
     const scriptJson = JSON.stringify(scriptContent);
+    console.log('[SessionManager] 📄 Parsed YAML script:', {
+      sessionId: scriptContent.session?.session_id,
+      sessionName: scriptContent.session?.session_name,
+      phasesCount: scriptContent.phases?.length || 0,
+    });
 
     // 执行脚本（初始化，没有用户输入）
+    console.log('[SessionManager] ⏳ Executing script (initialization)...');
     executionState = await this.scriptExecutor.executeSession(
       scriptJson,
       sessionId,
       executionState,
       null
     );
+    console.log('[SessionManager] ✅ Script execution completed:', {
+      status: executionState.status,
+      phaseIdx: executionState.currentPhaseIdx,
+      topicIdx: executionState.currentTopicIdx,
+      actionIdx: executionState.currentActionIdx,
+      lastAiMessage: executionState.lastAiMessage,
+      hasMessage: !!executionState.lastAiMessage,
+    });
 
     // 保存 AI 消息
     if (executionState.lastAiMessage) {
       const aiMessageId = uuidv4();
+      console.log('[SessionManager] 💾 Saving AI message (init):', {
+        messageId: aiMessageId,
+        content: executionState.lastAiMessage,
+      });
       await db.insert(messages).values({
         id: aiMessageId,
         sessionId,
@@ -119,6 +159,8 @@ export class SessionManager {
         metadata: {},
         timestamp: new Date(),
       });
+    } else {
+      console.log('[SessionManager] ⚠️ No AI message to save (init)');
     }
 
     // 在更新 sessions 之前，记录变量变化快照
@@ -127,10 +169,12 @@ export class SessionManager {
 
     const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
     if (snapshots.length > 0) {
+      console.log('[SessionManager] 💾 Saving variable snapshots (init):', snapshots.length);
       await db.insert(variables).values(snapshots);
     }
 
     // 更新会话状态
+    console.log('[SessionManager] 💾 Updating session state in DB (init)');
     await db
       .update(sessions)
       .set({
@@ -146,12 +190,14 @@ export class SessionManager {
       })
       .where(eq(sessions.id, sessionId));
 
-    return {
+    const result = {
       aiMessage: executionState.lastAiMessage || '',
       sessionStatus: session.status,
       executionStatus: executionState.status,
       variables: executionState.variables,
     };
+    console.log('[SessionManager] 🏁 initializeSession completed:', result);
+    return result;
   }
 
   /**
@@ -166,14 +212,23 @@ export class SessionManager {
     executionStatus: string;
     variables?: Record<string, unknown>;
   }> {
+    console.log('[SessionManager] 🔵 processUserInput called', { sessionId, userInput });
+
     // 获取会话
     const session = await db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
     });
 
     if (!session) {
+      console.error('[SessionManager] ❌ Session not found:', sessionId);
       throw new Error('Session not found');
     }
+    console.log('[SessionManager] ✅ Session found:', {
+      id: session.id,
+      status: session.status,
+      executionStatus: session.executionStatus,
+      position: session.position,
+    });
 
     // 获取脚本
     const script = await db.query.scripts.findFirst({
@@ -181,11 +236,17 @@ export class SessionManager {
     });
 
     if (!script) {
+      console.error('[SessionManager] ❌ Script not found:', session.scriptId);
       throw new Error('Script not found');
     }
+    console.log('[SessionManager] ✅ Script found:', {
+      id: script.id,
+      scriptName: script.scriptName,
+    });
 
     // 保存用户消息
     const userMessageId = uuidv4();
+    console.log('[SessionManager] 💾 Saving user message:', { messageId: userMessageId, content: userInput });
     await db.insert(messages).values({
       id: userMessageId,
       sessionId,
@@ -207,22 +268,41 @@ export class SessionManager {
       metadata: (session.metadata as Record<string, unknown>) || {},
       lastAiMessage: null,
     };
+    console.log('[SessionManager] 📋 Restored execution state:', {
+      status: executionState.status,
+      phaseIdx: executionState.currentPhaseIdx,
+      topicIdx: executionState.currentTopicIdx,
+      actionIdx: executionState.currentActionIdx,
+    });
 
     // 转换 YAML 为 JSON
     const scriptContent = yaml.parse(script.scriptContent);
     const scriptJson = JSON.stringify(scriptContent);
 
     // 执行脚本（传入用户输入）
+    console.log('[SessionManager] ⏳ Executing script with user input...');
     executionState = await this.scriptExecutor.executeSession(
       scriptJson,
       sessionId,
       executionState,
       userInput
     );
+    console.log('[SessionManager] ✅ Script execution completed:', {
+      status: executionState.status,
+      phaseIdx: executionState.currentPhaseIdx,
+      topicIdx: executionState.currentTopicIdx,
+      actionIdx: executionState.currentActionIdx,
+      lastAiMessage: executionState.lastAiMessage,
+      hasMessage: !!executionState.lastAiMessage,
+    });
 
     // 保存 AI 消息
     if (executionState.lastAiMessage) {
       const aiMessageId = uuidv4();
+      console.log('[SessionManager] 💾 Saving AI message:', {
+        messageId: aiMessageId,
+        content: executionState.lastAiMessage,
+      });
       await db.insert(messages).values({
         id: aiMessageId,
         sessionId,
@@ -231,6 +311,8 @@ export class SessionManager {
         metadata: {},
         timestamp: new Date(),
       });
+    } else {
+      console.log('[SessionManager] ⚠️ No AI message to save');
     }
 
     // 在更新 sessions 之前，记录变量变化快照
@@ -239,10 +321,12 @@ export class SessionManager {
 
     const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
     if (snapshots.length > 0) {
+      console.log('[SessionManager] 💾 Saving variable snapshots:', snapshots.length);
       await db.insert(variables).values(snapshots);
     }
 
     // 更新会话状态
+    console.log('[SessionManager] 💾 Updating session state in DB');
     await db
       .update(sessions)
       .set({
@@ -258,11 +342,13 @@ export class SessionManager {
       })
       .where(eq(sessions.id, sessionId));
 
-    return {
+    const result = {
       aiMessage: executionState.lastAiMessage || '',
       sessionStatus: session.status,
       executionStatus: executionState.status,
       variables: executionState.variables,
     };
+    console.log('[SessionManager] 🏁 processUserInput completed:', result);
+    return result;
   }
 }
