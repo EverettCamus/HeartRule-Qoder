@@ -36,7 +36,14 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
   // 加载会话数据
   const loadSessionData = async () => {
+    console.log('[DebugChat] 🔵 loadSessionData called', {
+      sessionId,
+      initialMessage,
+      timestamp: new Date().toISOString(),
+    });
+
     if (!sessionId) {
+      console.error('[DebugChat] ❌ No session ID provided');
       setError('No session ID provided');
       setInitialLoading(false);
       return;
@@ -45,17 +52,34 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     try {
       setInitialLoading(true);
       setError(null);
+      console.log('[DebugChat] ⏳ Loading session data...');
 
       // 获取会话详情
+      console.log('[DebugChat] 📡 Fetching session detail:', sessionId);
       const sessionDetail = await debugApi.getDebugSession(sessionId);
+      console.log('[DebugChat] ✅ Session detail received:', {
+        sessionId: sessionDetail.sessionId,
+        userId: sessionDetail.userId,
+        scriptId: sessionDetail.scriptId,
+        status: sessionDetail.status,
+        executionStatus: sessionDetail.executionStatus,
+      });
       setSessionInfo(sessionDetail);
 
       // 获取消息历史
+      console.log('[DebugChat] 📡 Fetching message history:', sessionId);
       const messagesResult = await debugApi.getDebugSessionMessages(sessionId);
+      console.log('[DebugChat] 📨 Messages result:', {
+        success: messagesResult.success,
+        messageCount: messagesResult.data?.length || 0,
+        hasData: !!messagesResult.data,
+      });
       
       if (messagesResult.success && messagesResult.data) {
+        console.log('[DebugChat] ✅ Setting messages from API:', messagesResult.data.length);
         setMessages(messagesResult.data);
       } else {
+        console.log('[DebugChat] ⚠️ No message history, using initial message');
         // 如果没有消息历史但有初始消息，添加初始AI消息
         if (initialMessage) {
           const initialMsg: DebugMessage = {
@@ -64,18 +88,26 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             content: initialMessage,
             timestamp: new Date().toISOString(),
           };
+          console.log('[DebugChat] 💬 Created initial message:', initialMsg);
           setMessages([initialMsg]);
         }
       }
 
       // 滚动到底部
       setTimeout(scrollToBottom, 100);
+      console.log('[DebugChat] ✅ Session data loaded successfully');
     } catch (err: any) {
-      console.error('Failed to load session data:', err);
+      console.error('[DebugChat] ❌ Failed to load session data:', {
+        error: err,
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+      });
       setError(err.response?.data?.error || err.message || 'Failed to load session');
       
       // 即使加载失败，如果有初始消息也显示
       if (initialMessage) {
+        console.log('[DebugChat] 🔄 Using initial message despite error');
         const initialMsg: DebugMessage = {
           messageId: 'initial',
           role: 'ai',
@@ -86,6 +118,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       }
     } finally {
       setInitialLoading(false);
+      console.log('[DebugChat] 🏁 loadSessionData completed');
     }
   };
 
@@ -103,7 +136,19 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
   // 发送消息
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || !sessionId) return;
+    console.log('[DebugChat] 🔵 handleSendMessage called', {
+      inputValue,
+      sessionId,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!inputValue.trim() || !sessionId) {
+      console.warn('[DebugChat] ⚠️ Cannot send message:', {
+        hasInput: !!inputValue.trim(),
+        hasSessionId: !!sessionId,
+      });
+      return;
+    }
 
     const userMessage = inputValue.trim();
     setInputValue('');
@@ -116,14 +161,26 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       content: userMessage,
       timestamp: new Date().toISOString(),
     };
+    console.log('[DebugChat] 💬 Adding user message to UI:', userMsg);
     setMessages((prev) => [...prev, userMsg]);
 
     try {
       setLoading(true);
+      console.log('[DebugChat] ⏳ Sending message to backend...');
 
       // 发送消息到后端
+      console.log('[DebugChat] 📡 API Call: sendDebugMessage', {
+        sessionId,
+        content: userMessage,
+      });
       const response = await debugApi.sendDebugMessage(sessionId, {
         content: userMessage,
+      });
+      console.log('[DebugChat] ✅ API Response received:', {
+        aiMessage: response.aiMessage,
+        sessionStatus: response.sessionStatus,
+        executionStatus: response.executionStatus,
+        hasVariables: !!response.variables,
       });
 
       // 添加AI回复到消息列表
@@ -133,9 +190,21 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         content: response.aiMessage,
         timestamp: new Date().toISOString(),
       };
+      console.log('[DebugChat] 💬 Adding AI response to UI:', aiMsg);
       setMessages((prev) => [...prev, aiMsg]);
+      console.log('[DebugChat] ✅ Message sent successfully');
     } catch (err: any) {
-      console.error('Failed to send message:', err);
+      console.error('[DebugChat] ❌ Failed to send message:', {
+        error: err,
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        config: {
+          url: err.config?.url,
+          method: err.config?.method,
+          data: err.config?.data,
+        },
+      });
       setError(err.response?.data?.error || err.message || 'Failed to send message');
       
       // 添加错误提示消息
@@ -145,9 +214,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         content: `Error: ${err.response?.data?.error || err.message || 'Failed to send message'}`,
         timestamp: new Date().toISOString(),
       };
+      console.log('[DebugChat] ⚠️ Adding error message to UI:', errorMsg);
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setLoading(false);
+      console.log('[DebugChat] 🏁 handleSendMessage completed');
     }
   };
 

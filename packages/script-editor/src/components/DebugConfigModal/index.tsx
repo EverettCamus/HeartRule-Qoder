@@ -39,63 +39,116 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
 
   // 处理提交
   const handleSubmit = async () => {
+    console.log('[DebugConfig] 🔵 handleSubmit called', {
+      visible,
+      currentProject: currentProject?.projectName,
+      sessionFilesCount: sessionFiles.length,
+      timestamp: new Date().toISOString(),
+    });
+  
     try {
       setError(null);
+      console.log('[DebugConfig] ⏳ Validating form fields...');
       const values = await form.validateFields();
-
+      console.log('[DebugConfig] ✅ Form validation passed:', values);
+  
       // 检查是否选择了Session文件
       if (!values.sessionFileId) {
+        console.error('[DebugConfig] ❌ No session file selected');
         setError('Please select a Session script');
         return;
       }
-
+  
       // 查找选中的文件
+      console.log('[DebugConfig] 🔍 Finding selected file:', values.sessionFileId);
       const selectedFile = sessionFiles.find((f) => f.id === values.sessionFileId);
       if (!selectedFile) {
+        console.error('[DebugConfig] ❌ Selected file not found in list');
         setError('Selected file not found');
         return;
       }
-
+      console.log('[DebugConfig] ✅ Selected file found:', {
+        id: selectedFile.id,
+        fileName: selectedFile.fileName,
+        fileType: selectedFile.fileType,
+        hasContent: !!selectedFile.yamlContent,
+        contentLength: selectedFile.yamlContent?.length || 0,
+      });
+  
       // 检查文件内容
       if (!selectedFile.yamlContent) {
+        console.error('[DebugConfig] ❌ File has no YAML content');
         setError('Selected file has no content');
         return;
       }
-
+  
       setLoading(true);
-
+  
       try {
-        // 步骤1: 导入脚本到数据库，获取scriptId
+        // 步顤1: 导入脚本到数据库，获取scriptId
+        console.log('[DebugConfig] 🔵 Step 1: Importing script to database...');
+        console.log('[DebugConfig] 📡 API Call: importScript', {
+          fileName: selectedFile.fileName,
+          contentLength: selectedFile.yamlContent.length,
+          contentPreview: selectedFile.yamlContent.substring(0, 100) + '...',
+        });
         const importResult = await debugApi.importScript(
           selectedFile.yamlContent,
           selectedFile.fileName
         );
-
+        console.log('[DebugConfig] ✅ Import result:', importResult);
+  
         if (!importResult.success || !importResult.data?.scriptId) {
+          console.error('[DebugConfig] ❌ Import failed: Invalid response format');
           throw new Error('Failed to import script');
         }
-
+  
         const scriptId = importResult.data.scriptId;
-
-        // 步骤2: 创建调试会话
-        const sessionResult = await debugApi.createDebugSession({
+        console.log('[DebugConfig] ✅ Script imported successfully, scriptId:', scriptId);
+  
+        // 步顤2: 创建调试会话
+        console.log('[DebugConfig] 🔵 Step 2: Creating debug session...');
+        const sessionData = {
           userId: values.userId || 'debug_user',
           scriptId: scriptId,
           initialVariables: {},
+        };
+        console.log('[DebugConfig] 📡 API Call: createDebugSession', sessionData);
+        const sessionResult = await debugApi.createDebugSession(sessionData);
+        console.log('[DebugConfig] ✅ Session created successfully:', {
+          sessionId: sessionResult.sessionId,
+          status: sessionResult.status,
+          executionStatus: sessionResult.executionStatus,
+          aiMessage: sessionResult.aiMessage,
         });
-
+  
         // 成功后回调
         message.success('Debug session created successfully');
+        console.log('[DebugConfig] 🎉 Calling onStart callback with:', {
+          sessionId: sessionResult.sessionId,
+          aiMessage: sessionResult.aiMessage || '',
+        });
         onStart(sessionResult.sessionId, sessionResult.aiMessage || '');
       } catch (apiError: any) {
-        console.error('API Error:', apiError);
+        console.error('[DebugConfig] ❌ API Error:', {
+          error: apiError,
+          message: apiError.message,
+          response: apiError.response?.data,
+          status: apiError.response?.status,
+          config: {
+            url: apiError.config?.url,
+            method: apiError.config?.method,
+            data: apiError.config?.data,
+          },
+        });
         const errorMsg = apiError.response?.data?.error || apiError.message || 'Unknown error';
         setError(`Failed to create debug session: ${errorMsg}`);
       }
     } catch (validationError) {
-      console.error('Form validation error:', validationError);
+      console.error('[DebugConfig] ❌ Form validation error:', validationError);
     } finally {
       setLoading(false);
+      console.log('[DebugConfig] 🏁 handleSubmit completed');
     }
   };
 
