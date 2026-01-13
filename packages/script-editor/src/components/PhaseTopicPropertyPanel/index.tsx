@@ -48,6 +48,29 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
     }
   }, [data, form]);
 
+  // 保存函数
+  const handleSave = useCallback(() => {
+    form.validateFields().then((values) => {
+      if (data) {
+        // 检查数据是否真的变化了，避免无意义的更新
+        const hasChanged = 
+          values.id !== data.id ||
+          values.name !== data.name ||
+          values.description !== data.description ||
+          JSON.stringify(localVariables) !== JSON.stringify(data.localVariables || []);
+        
+        if (hasChanged) {
+          onSave({
+            id: values.id,
+            name: values.name,
+            description: values.description,
+            localVariables: localVariables,
+          });
+        }
+      }
+    });
+  }, [form, data, localVariables, onSave]);
+
   // 自动保存函数
   const triggerAutoSave = useCallback(() => {
     if (autoSaveTimerRef.current) {
@@ -57,7 +80,7 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
     autoSaveTimerRef.current = setTimeout(() => {
       handleSave();
     }, 600); // 600ms 防抖延迟
-  }, [localVariables, data]);
+  }, [handleSave]);
 
   // 监听 localVariables 变化触发自动保存
   useEffect(() => {
@@ -75,19 +98,6 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
       }
     };
   }, []);
-
-  const handleSave = () => {
-    form.validateFields().then((values) => {
-      if (data) {
-        onSave({
-          id: values.id,
-          name: values.name,
-          description: values.description,
-          localVariables: localVariables,
-        });
-      }
-    });
-  };
 
   const addVariable = () => {
     setLocalVariables([...localVariables, { name: '', type: 'string', description: '' }]);

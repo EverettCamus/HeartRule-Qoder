@@ -1,7 +1,6 @@
 /**
  * 重置数据库 - 删除所有数据并重新导入
  */
-import { sql } from 'drizzle-orm';
 import { db, closeConnection } from './src/db/index.js';
 import { 
   projects, 

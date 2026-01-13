@@ -217,7 +217,7 @@ export const ActionNodeList = forwardRef<ActionNodeListRef, ActionNodeListProps>
   // 对外暴露方法：展开父级节点并滚动到目标位置
   useImperativeHandle(ref, () => ({
     expandAndScrollTo: (focusPath) => {
-      const { phaseIndex, topicIndex, actionIndex, type } = focusPath;
+      const { phaseIndex, topicIndex, type } = focusPath;
 
       // 1. 展开父级节点
       if (phaseIndex !== undefined) {

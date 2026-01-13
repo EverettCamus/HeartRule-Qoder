@@ -134,6 +134,9 @@ const ProjectEditor: React.FC = () => {
   // 追踪是否已经为当前文件推入过初始状态
   const initialStatePushedRef = useRef<Set<string>>(new Set());
   
+  // 为每个文件保存一份YAML基线（避免跨文件污染）
+  const fileYamlBaseRef = useRef<Map<string, string>>(new Map());
+  
   // 同步 selectedFile 到 ref
   useEffect(() => {
     console.log(`[StateSync] selectedFile 更新: ${selectedFile?.fileName} (id: ${selectedFile?.id})`);
@@ -159,13 +162,30 @@ const ProjectEditor: React.FC = () => {
       return;
     }
     
-    // 推入初始状态
+    // 计算一个合理的初始焦点（如果存在Action）
+    let initialFocus: FocusPath | null = null;
+    if (
+      currentPhases[0]?.topics &&
+      currentPhases[0].topics[0]?.actions &&
+      currentPhases[0].topics[0].actions.length > 0
+    ) {
+      initialFocus = {
+        phaseIndex: 0,
+        topicIndex: 0,
+        actionIndex: 0,
+        type: 'action',
+      };
+    }
+    
+    // 推入初始状态（作为第一条操作，其 beforePhases 为空）
     console.log(`[InitialState] 🎉 为文件 ${selectedFile.fileName} 推入初始状态`);
     globalHistoryManager.push({
       fileId: selectedFile.id,
       fileName: selectedFile.fileName,
-      phases: currentPhases,
-      focusPath: null,
+      beforePhases: [], // 初始状态没有 before，用空数组表示
+      afterPhases: JSON.parse(JSON.stringify(currentPhases)), // 深拷贝
+      beforeFocusPath: null,
+      afterFocusPath: initialFocus,
       operation: '初始状态',
       timestamp: Date.now(),
     });
@@ -457,6 +477,12 @@ const ProjectEditor: React.FC = () => {
     setFileContent(content);
     setHasUnsavedChanges(false);
 
+    // 为该文件记录YAML基线（用于后续 syncPhasesToYaml）
+    if (file.fileType === 'session') {
+      fileYamlBaseRef.current.set(file.id, content || '');
+      console.log(`[loadFile] 保存文件 ${file.fileName} 的YAML基线，长度: ${content.length}`);
+    }
+
     // 如果是会谈脚本，尝试解析为可视化结构，并默认进入可视化编辑模式
     if (file.fileType === 'session' && content) {
       parseYamlToScript(content);
@@ -503,6 +529,8 @@ const ProjectEditor: React.FC = () => {
 
       // YAML 模式下实时解析（可选，仅在用户停止输入一段时间后）
       if (selectedFile?.fileType === 'session') {
+        // 更新该文件的YAML基线（包含metadata的修改）
+        fileYamlBaseRef.current.set(selectedFile.id, e.target.value);
         parseYamlToScript(e.target.value);
       }
     },
@@ -589,28 +617,55 @@ const ProjectEditor: React.FC = () => {
 
   /**
    * 将层级结构同步回 YAML 字符串
+   * @param phases - 要同步的 phases 数据
+   * @param targetFileId - 目标文件 ID（可选，默认使用当前文件）
    */
   const syncPhasesToYaml = useCallback(
-    (phases: PhaseWithTopics[]) => {
+    (phases: PhaseWithTopics[], targetFileId?: string) => {
       console.log('[syncPhasesToYaml] 开始执行');
       console.log('[syncPhasesToYaml] 输入 phases 数量:', phases.length);
+      console.log('[syncPhasesToYaml] targetFileId:', targetFileId || '未指定，使用当前文件');
       console.log('[syncPhasesToYaml] parsedScript 状态:', parsedScript ? '存在' : 'null');
       console.log('[syncPhasesToYaml] selectedFile:', selectedFile?.fileName);
       
       try {
         let updatedScript: any;
+        let baseScript: any = null;
 
-        // 如果 parsedScript 存在，使用现有结构
-        if (parsedScript) {
-          console.log('[syncPhasesToYaml] 使用现有 parsedScript');
+        // 使用显式传入的 targetFileId，或者使用当前文件 ID
+        const currentFileId = targetFileId || selectedFile?.id || selectedFileRef.current?.id;
+        
+        // 获取目标文件信息（用于 session_id）
+        let targetFile = selectedFile;
+        if (targetFileId && targetFileId !== selectedFile?.id) {
+          targetFile = files.find(f => f.id === targetFileId) || selectedFile;
+        }
+        
+        if (currentFileId) {
+          const baseYaml = fileYamlBaseRef.current.get(currentFileId);
+          if (baseYaml) {
+            try {
+              baseScript = yaml.load(baseYaml) as any;
+              console.log('[syncPhasesToYaml] 使用 fileYamlBaseRef 中的基线脚本');
+            } catch (e) {
+              console.error('[syncPhasesToYaml] 基线YAML解析失败:', e);
+            }
+          }
+        }
+
+        // 优先级: 文件基线 > parsedScript > 创建新结构
+        if (baseScript) {
+          updatedScript = JSON.parse(JSON.stringify(baseScript));
+        } else if (parsedScript) {
+          console.log('[syncPhasesToYaml] 使用现有 parsedScript 作为基线');
           updatedScript = JSON.parse(JSON.stringify(parsedScript)); // 深拷贝
         } else {
-          // 如果 parsedScript 为空（新文件或解析失败），创建新的脚本结构
-          console.log('[syncPhasesToYaml] parsedScript 为空，创建新的脚本结构');
+          // 如果都没有，创建新的脚本结构
+          console.log('[syncPhasesToYaml] 没有可用基线，创建新的脚本结构');
           updatedScript = {
             session: {
-              session_id: selectedFile?.fileName?.replace('.yaml', '') || 'new-session',
-              session_name: selectedFile?.fileName?.replace('.yaml', '') || 'New Session',
+              session_id: targetFile?.fileName?.replace('.yaml', '') || 'new-session',
+              session_name: targetFile?.fileName?.replace('.yaml', '') || 'New Session',
               phases: [],
             },
           };
@@ -621,8 +676,8 @@ const ProjectEditor: React.FC = () => {
         if (!updatedScript.session) {
           console.log('[syncPhasesToYaml] 脚本中没有 session 结构，创建新的 session');
           updatedScript.session = {
-            session_id: selectedFile?.fileName?.replace('.yaml', '') || 'new-session',
-            session_name: selectedFile?.fileName?.replace('.yaml', '') || 'New Session',
+            session_id: targetFile?.fileName?.replace('.yaml', '') || 'new-session',
+            session_name: targetFile?.fileName?.replace('.yaml', '') || 'New Session',
             phases: [],
           };
         }
@@ -737,14 +792,21 @@ const ProjectEditor: React.FC = () => {
         message.error('Sync failed');
       }
     },
-    [parsedScript, selectedFile]
+    [parsedScript, selectedFile, files]
   );
 
   /**
    * 推送历史记录（需求4 - 使用全局历史管理器）
+   * 修改为接收 before/after 双快照
    */
   const pushHistory = useCallback(
-    (newPhases: PhaseWithTopics[], operation: string, focusPath: FocusPath | null = null) => {
+    (
+      beforePhases: PhaseWithTopics[],
+      afterPhases: PhaseWithTopics[],
+      operation: string,
+      beforeFocusPath: FocusPath | null = null,
+      afterFocusPath: FocusPath | null = null
+    ) => {
       if (!selectedFile || globalHistoryManager.isInUndoRedo()) {
         return;
       }
@@ -752,8 +814,10 @@ const ProjectEditor: React.FC = () => {
       globalHistoryManager.push({
         fileId: selectedFile.id,
         fileName: selectedFile.fileName,
-        phases: newPhases,
-        focusPath,
+        beforePhases,
+        afterPhases,
+        beforeFocusPath,
+        afterFocusPath,
         operation,
         timestamp: Date.now(),
       });
@@ -823,6 +887,7 @@ const ProjectEditor: React.FC = () => {
 
   /**
    * Undo 操作（需求4 - 使用全局历史管理器）
+   * 关键修复：使用 entry.beforePhases 恢复到操作前状态
    */
   const handleUndo = useCallback(() => {
     console.log('\n========== [Undo] 开始执行 ==========')
@@ -853,7 +918,13 @@ const ProjectEditor: React.FC = () => {
     processingUndoRedoRef.current = true;
     console.log('[Undo] 🔒 已加锁');
   
-    // 关键修复：检查文件是否匹配
+    // 关键修复：使用 beforePhases 恢复到操作前状态
+    const phasesToRestore = entry.beforePhases;
+    const focusToRestore = entry.beforeFocusPath;
+    
+    console.log(`[Undo] 📊 将恢复到 beforePhases，长度: ${phasesToRestore.length}`);
+    
+    // 检查文件是否匹配
     if (currentFile?.id !== entry.fileId) {
       console.log('[Undo] ⚡ 需要跨文件切换');
       
@@ -879,19 +950,20 @@ const ProjectEditor: React.FC = () => {
           console.log(`\n[Undo-Timeout] ⏰ 延迟回调触发`);
           console.log(`[Undo-Timeout] 📄 selectedFileRef.current: ${selectedFileRef.current?.fileName}`);
           console.log(`[Undo-Timeout] 🎯 targetFile: ${targetFile.fileName}`);
-          console.log(`[Undo-Timeout] 📊 entry.phases 长度: ${entry.phases.length}`);
+          console.log(`[Undo-Timeout] 📊 beforePhases 长度: ${phasesToRestore.length}`);
           
           // 直接恢复历史数据
           console.log('[Undo-Timeout] 💾 开始恢复历史数据...');
-          setCurrentPhases(entry.phases);
-          syncPhasesToYaml(entry.phases);
+          setCurrentPhases(phasesToRestore);
+          // 关键修复：跨文件时传入 targetFile.id
+          syncPhasesToYaml(phasesToRestore, targetFile.id);
           setHasUnsavedChanges(true);
           setEditMode('visual');
           console.log('[Undo-Timeout] ✅ 数据恢复完成');
             
           // 应用焦点导航
           console.log('[Undo-Timeout] 🎯 应用焦点导航...');
-          applyFocusNavigation(entry.focusPath, entry.fileId);
+          applyFocusNavigation(focusToRestore, entry.fileId);
             
           message.success(`Undone: ${entry.operation} (${targetFile.fileName})`);
           
@@ -913,31 +985,31 @@ const ProjectEditor: React.FC = () => {
     } else {
       // 同一文件，直接恢复数据
       console.log('[Undo] ✨ 同文件操作，直接恢复');
-      console.log(`[Undo] 📊 entry.phases 长度: ${entry.phases.length}`);
+      console.log(`[Undo] 📊 beforePhases 长度: ${phasesToRestore.length}`);
       
-      // 计算 entry.phases 中的 Action 总数
-      const totalActions = entry.phases.reduce((sum, phase) => {
-        return sum + phase.topics.reduce((topicSum, topic) => topicSum + topic.actions.length, 0);
+      // 计算 beforePhases 中的 Action 总数
+      const totalActions = phasesToRestore.reduce((sum: number, phase: PhaseWithTopics) => {
+        return sum + phase.topics.reduce((topicSum: number, topic: TopicWithActions) => topicSum + topic.actions.length, 0);
       }, 0);
-      console.log(`[Undo] 🎯 entry 中的 Action 总数: ${totalActions}`);
+      console.log(`[Undo] 🎯 beforePhases 中的 Action 总数: ${totalActions}`);
       
       // 输出详细结构
-      entry.phases.forEach((phase, pi) => {
-        phase.topics.forEach((topic, ti) => {
+      phasesToRestore.forEach((phase: PhaseWithTopics, pi: number) => {
+        phase.topics.forEach((topic: TopicWithActions, ti: number) => {
           console.log(`[Undo]   Phase[${pi}].Topic[${ti}]: ${topic.actions.length} Actions`);
         });
       });
       
-      setCurrentPhases(entry.phases);
+      setCurrentPhases(phasesToRestore);
       console.log('[Undo] ✅ setCurrentPhases 调用完成');
       
-      syncPhasesToYaml(entry.phases);
+      syncPhasesToYaml(phasesToRestore);
       console.log('[Undo] ✅ syncPhasesToYaml 调用完成');
       
       setHasUnsavedChanges(true);
   
       // 应用焦点导航
-      applyFocusNavigation(entry.focusPath, entry.fileId);
+      applyFocusNavigation(focusToRestore, entry.fileId);
   
       message.success(`Undone: ${entry.operation}`);
       
@@ -953,6 +1025,7 @@ const ProjectEditor: React.FC = () => {
 
   /**
    * Redo 操作（需求4 - 使用全局历史管理器）
+   * 关键修复：使用 entry.afterPhases 恢复到操作后状态
    */
   const handleRedo = useCallback(() => {
     // 防止并发执行
@@ -973,7 +1046,11 @@ const ProjectEditor: React.FC = () => {
     
     processingUndoRedoRef.current = true;
 
-    // 关键修复：检查文件是否匹配
+    // 关键修复：使用 afterPhases 恢复到操作后状态
+    const phasesToRestore = entry.afterPhases;
+    const focusToRestore = entry.afterFocusPath;
+
+    // 检查文件是否匹配
     if (currentFile?.id !== entry.fileId) {
       const targetFile = files.find((f) => f.id === entry.fileId);
       if (targetFile) {
@@ -990,16 +1067,17 @@ const ProjectEditor: React.FC = () => {
         // 等待 React 批量更新完成
         setTimeout(() => {
           console.log(`[Redo] 开始恢复数据到: ${targetFile.fileName}`);
-          console.log(`[Redo] entry.phases 长度: ${entry.phases.length}`);
+          console.log(`[Redo] afterPhases 长度: ${phasesToRestore.length}`);
           
           // 直接恢复历史数据
-          setCurrentPhases(entry.phases);
-          syncPhasesToYaml(entry.phases);
+          setCurrentPhases(phasesToRestore);
+          // 关键修复：跨文件时传入 targetFile.id
+          syncPhasesToYaml(phasesToRestore, targetFile.id);
           setHasUnsavedChanges(true);
           setEditMode('visual');
           
           // 应用焦点导航
-          applyFocusNavigation(entry.focusPath, entry.fileId);
+          applyFocusNavigation(focusToRestore, entry.fileId);
           
           message.success(`Redone: ${entry.operation} (${targetFile.fileName})`);
           
@@ -1017,12 +1095,12 @@ const ProjectEditor: React.FC = () => {
     } else {
       // 同一文件，直接恢复数据
       console.log(`[Redo] 同文件恢复: ${currentFile?.fileName}`);
-      setCurrentPhases(entry.phases);
-      syncPhasesToYaml(entry.phases);
+      setCurrentPhases(phasesToRestore);
+      syncPhasesToYaml(phasesToRestore);
       setHasUnsavedChanges(true);
 
       // 应用焦点导航
-      applyFocusNavigation(entry.focusPath, entry.fileId);
+      applyFocusNavigation(focusToRestore, entry.fileId);
 
       message.success(`Redone: ${entry.operation}`);
       
@@ -1044,21 +1122,32 @@ const ProjectEditor: React.FC = () => {
 
       const { phaseIndex, topicIndex, actionIndex } = selectedActionPath;
 
-      // 更新层级结构
-      const newPhases = JSON.parse(JSON.stringify(currentPhases)); // 深拷贝
-      newPhases[phaseIndex].topics[topicIndex].actions[actionIndex] = updatedAction;
-      setCurrentPhases(newPhases);
-      
-      // 推送历史记录，带上操作描述和焦点信息
-      pushHistory(newPhases, '修改 Action', {
+      // 保存 before 状态
+      const beforePhases = JSON.parse(JSON.stringify(currentPhases));
+      const beforeFocus: FocusPath = {
         phaseIndex,
         topicIndex,
         actionIndex,
         type: 'action',
-      });
+      };
+
+      // 更新层级结构
+      const afterPhases = JSON.parse(JSON.stringify(currentPhases)); // 深拷贝
+      afterPhases[phaseIndex].topics[topicIndex].actions[actionIndex] = updatedAction;
+      setCurrentPhases(afterPhases);
+      
+      const afterFocus: FocusPath = {
+        phaseIndex,
+        topicIndex,
+        actionIndex,
+        type: 'action',
+      };
+
+      // 推送历史记录，带上操作描述和焦点信息
+      pushHistory(beforePhases, afterPhases, '修改 Action', beforeFocus, afterFocus);
 
       // 同步回 YAML
-      syncPhasesToYaml(newPhases);
+      syncPhasesToYaml(afterPhases);
       setHasUnsavedChanges(true);
       message.success('Action updated');
     },
@@ -1073,6 +1162,7 @@ const ProjectEditor: React.FC = () => {
     console.log('[handleAddPhase] 当前 currentPhases 数量:', currentPhases.length);
     console.log('[handleAddPhase] parsedScript:', parsedScript ? '存在' : '为null');
     
+    const beforePhases = JSON.parse(JSON.stringify(currentPhases));
     const newPhases = JSON.parse(JSON.stringify(currentPhases));
     const newPhaseIndex = newPhases.length;
 
@@ -1103,7 +1193,7 @@ const ProjectEditor: React.FC = () => {
 
     console.log('[handleAddPhase] 新 newPhases 数量:', newPhases.length);
     setCurrentPhases(newPhases);
-    pushHistory(newPhases, 'Add Phase', {
+    pushHistory(beforePhases, newPhases, 'Add Phase', null, {
       phaseIndex: newPhaseIndex,
       type: 'phase',
     });
@@ -1119,6 +1209,7 @@ const ProjectEditor: React.FC = () => {
    */
   const handleAddTopic = useCallback(
     (phaseIndex: number) => {
+      const beforePhases = JSON.parse(JSON.stringify(currentPhases));
       const newPhases = JSON.parse(JSON.stringify(currentPhases));
       const phase = newPhases[phaseIndex];
       const newTopicIndex = phase.topics.length;
@@ -1143,7 +1234,7 @@ const ProjectEditor: React.FC = () => {
       });
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, 'Add Topic', {
+      pushHistory(beforePhases, newPhases, 'Add Topic', null, {
         phaseIndex,
         topicIndex: newTopicIndex,
         type: 'topic',
@@ -1272,6 +1363,7 @@ const ProjectEditor: React.FC = () => {
    */
   const handleAddAction = useCallback(
     (phaseIndex: number, topicIndex: number, actionType: string) => {
+      const beforePhases = JSON.parse(JSON.stringify(currentPhases));
       const newPhases = JSON.parse(JSON.stringify(currentPhases));
       const topic = newPhases[phaseIndex].topics[topicIndex];
       const newActionIndex = topic.actions.length;
@@ -1280,7 +1372,7 @@ const ProjectEditor: React.FC = () => {
       topic.actions.push(newAction);
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, `添加 ${actionType} Action`, {
+      pushHistory(beforePhases, newPhases, `添加 ${actionType} Action`, null, {
         phaseIndex,
         topicIndex,
         actionIndex: newActionIndex,
@@ -1301,10 +1393,13 @@ const ProjectEditor: React.FC = () => {
       // 使用函数式更新，确保基于最新的 state
       setCurrentPhases((prevPhases) => {
         // 关键修复：先保存删除前的状态
-        pushHistory(prevPhases, 'Delete Phase', null);
+        const beforePhases = JSON.parse(JSON.stringify(prevPhases));
         
         const newPhases = JSON.parse(JSON.stringify(prevPhases));
         newPhases.splice(phaseIndex, 1);
+        
+        // 推送历史：before = 删除前，after = 删除后
+        pushHistory(beforePhases, newPhases, 'Delete Phase', null, null);
 
         // 如果删除的是当前选中的 phase，清空选中状态
         if (selectedActionPath?.phaseIndex === phaseIndex) {
@@ -1335,10 +1430,13 @@ const ProjectEditor: React.FC = () => {
       // 使用函数式更新，确保基于最新的 state
       setCurrentPhases((prevPhases) => {
         // 关键修复：先保存删除前的状态
-        pushHistory(prevPhases, 'Delete Topic', null);
+        const beforePhases = JSON.parse(JSON.stringify(prevPhases));
           
         const newPhases = JSON.parse(JSON.stringify(prevPhases));
         newPhases[phaseIndex].topics.splice(topicIndex, 1);
+        
+        // 推送历史
+        pushHistory(beforePhases, newPhases, 'Delete Topic', null, null);
   
         // 如果删除的是当前选中的 topic，清空选中状态
         if (
@@ -1385,9 +1483,12 @@ const ProjectEditor: React.FC = () => {
         }
 
         // 关键修复：在删除前保存当前状态
-        pushHistory(prevPhases, 'Delete Action', null);
+        const beforePhases = JSON.parse(JSON.stringify(prevPhases));
         
         topic.actions.splice(actionIndex, 1);
+        
+        // 推送历史
+        pushHistory(beforePhases, newPhases, 'Delete Action', null, null);
 
         // 如果删除的是当前选中的 action，清空选中状态
         if (
@@ -1424,12 +1525,13 @@ const ProjectEditor: React.FC = () => {
    */
   const handleMovePhase = useCallback(
     (fromIndex: number, toIndex: number) => {
+      const beforePhases = JSON.parse(JSON.stringify(currentPhases));
       const newPhases = JSON.parse(JSON.stringify(currentPhases));
       const [movedPhase] = newPhases.splice(fromIndex, 1);
       newPhases.splice(toIndex, 0, movedPhase);
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, `Move Phase from ${fromIndex} to ${toIndex}`, {
+      pushHistory(beforePhases, newPhases, `Move Phase from ${fromIndex} to ${toIndex}`, null, {
         phaseIndex: toIndex,
         type: 'phase',
       });
@@ -1450,6 +1552,7 @@ const ProjectEditor: React.FC = () => {
       toPhaseIndex: number,
       toTopicIndex: number
     ) => {
+      const beforePhases = JSON.parse(JSON.stringify(currentPhases));
       const newPhases = JSON.parse(JSON.stringify(currentPhases));
 
       // 从源位置移除 topic
@@ -1459,7 +1562,7 @@ const ProjectEditor: React.FC = () => {
       newPhases[toPhaseIndex].topics.splice(toTopicIndex, 0, movedTopic);
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, `Move Topic`, {
+      pushHistory(beforePhases, newPhases, `Move Topic`, null, {
         phaseIndex: toPhaseIndex,
         topicIndex: toTopicIndex,
         type: 'topic',
@@ -1483,6 +1586,7 @@ const ProjectEditor: React.FC = () => {
       toTopicIndex: number,
       toActionIndex: number
     ) => {
+      const beforePhases = JSON.parse(JSON.stringify(currentPhases));
       const newPhases = JSON.parse(JSON.stringify(currentPhases));
 
       // 从源位置移除 action
@@ -1495,7 +1599,7 @@ const ProjectEditor: React.FC = () => {
       newPhases[toPhaseIndex].topics[toTopicIndex].actions.splice(toActionIndex, 0, movedAction);
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, `Move Action`, {
+      pushHistory(beforePhases, newPhases, `Move Action`, null, {
         phaseIndex: toPhaseIndex,
         topicIndex: toTopicIndex,
         actionIndex: toActionIndex,
@@ -1549,6 +1653,7 @@ const ProjectEditor: React.FC = () => {
       if (selectedPhasePath === null) return;
 
       const { phaseIndex } = selectedPhasePath;
+      const beforePhases = JSON.parse(JSON.stringify(currentPhases));
       const newPhases = JSON.parse(JSON.stringify(currentPhases));
 
       newPhases[phaseIndex] = {
@@ -1559,7 +1664,7 @@ const ProjectEditor: React.FC = () => {
       };
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, 'Update Phase', {
+      pushHistory(beforePhases, newPhases, 'Update Phase', null, {
         phaseIndex,
         type: 'phase',
       });
@@ -1578,6 +1683,7 @@ const ProjectEditor: React.FC = () => {
       if (selectedTopicPath === null) return;
 
       const { phaseIndex, topicIndex } = selectedTopicPath;
+      const beforePhases = JSON.parse(JSON.stringify(currentPhases));
       const newPhases = JSON.parse(JSON.stringify(currentPhases));
 
       newPhases[phaseIndex].topics[topicIndex] = {
@@ -1589,7 +1695,7 @@ const ProjectEditor: React.FC = () => {
       };
 
       setCurrentPhases(newPhases);
-      pushHistory(newPhases, 'Update Topic', {
+      pushHistory(beforePhases, newPhases, 'Update Topic', null, {
         phaseIndex,
         topicIndex,
         type: 'topic',

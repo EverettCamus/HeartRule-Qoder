@@ -29,10 +29,12 @@ export interface HistoryEntry {
   // 快照数据
   fileId: string;                    // 所属文件ID
   fileName: string;                  // 文件名（用于显示）
-  phases: PhaseWithTopics[];         // 数据快照
+  beforePhases: PhaseWithTopics[];   // 操作前的数据快照
+  afterPhases: PhaseWithTopics[];    // 操作后的数据快照
   
   // 焦点信息
-  focusPath: FocusPath | null;
+  beforeFocusPath: FocusPath | null; // 操作前的焦点
+  afterFocusPath: FocusPath | null;  // 操作后的焦点
   
   // 操作元数据
   operation: string;                 // 操作描述，如 "添加 Action" "修改 Phase"
@@ -61,23 +63,21 @@ export class HistoryManager {
 
     console.log(`[HistoryManager] 📝 操作: ${entry.operation}`);
     console.log(`[HistoryManager] 📄 文件: ${entry.fileName} (id: ${entry.fileId})`);
-    console.log(`[HistoryManager] 📊 phases 数量: ${entry.phases.length}`);
+    console.log(`[HistoryManager] 📊 before phases 数量: ${entry.beforePhases.length}`);
+    console.log(`[HistoryManager] 📊 after phases 数量: ${entry.afterPhases.length}`);
     
     // 计算 Action 总数
-    const totalActions = entry.phases.reduce((sum, phase) => {
+    const beforeActions = entry.beforePhases.reduce((sum, phase) => {
       return sum + phase.topics.reduce((topicSum, topic) => topicSum + topic.actions.length, 0);
     }, 0);
-    console.log(`[HistoryManager] 🎯 Action 总数: ${totalActions}`);
+    const afterActions = entry.afterPhases.reduce((sum, phase) => {
+      return sum + phase.topics.reduce((topicSum, topic) => topicSum + topic.actions.length, 0);
+    }, 0);
+    console.log(`[HistoryManager] 🎯 Before Actions: ${beforeActions}, After Actions: ${afterActions}`);
     
-    console.log(`[HistoryManager] 🎯 焦点:`, entry.focusPath);
+    console.log(`[HistoryManager] 🎯 Before 焦点:`, entry.beforeFocusPath);
+    console.log(`[HistoryManager] 🎯 After 焦点:`, entry.afterFocusPath);
     console.log(`[HistoryManager] 📅 时间戳: ${new Date().toLocaleTimeString()}`);
-    
-    // 输出详细结构
-    entry.phases.forEach((phase, pi) => {
-      phase.topics.forEach((topic, ti) => {
-        console.log(`[HistoryManager]   Phase[${pi}].Topic[${ti}]: ${topic.actions.length} Actions`);
-      });
-    });
 
     // 截断未来分支（如果当前不在最新状态）
     if (this.currentIndex < this.entries.length - 1) {
@@ -91,7 +91,8 @@ export class HistoryManager {
       ...entry,
       timestamp: Date.now(),
       // 深拷贝数据，避免引用问题
-      phases: JSON.parse(JSON.stringify(entry.phases)),
+      beforePhases: JSON.parse(JSON.stringify(entry.beforePhases)),
+      afterPhases: JSON.parse(JSON.stringify(entry.afterPhases)),
     });
 
     // 限制历史栈大小
@@ -107,113 +108,123 @@ export class HistoryManager {
     console.log(`[HistoryManager] 📊 当前总数: ${this.entries.length}, 当前索引: ${this.currentIndex}`);
     console.log('[HistoryManager] 📚 历史栈摘要:');
     this.entries.forEach((e, i) => {
-      const totalActions = e.phases.reduce((sum, phase) => {
+      const afterActions = e.afterPhases.reduce((sum, phase) => {
         return sum + phase.topics.reduce((topicSum, topic) => topicSum + topic.actions.length, 0);
       }, 0);
       const marker = i === this.currentIndex ? ' ← 当前' : '';
-      console.log(`  [${i}] ${e.fileName}: ${e.operation} (${totalActions} Actions)${marker}`);
+      console.log(`  [${i}] ${e.fileName}: ${e.operation} (${afterActions} Actions)${marker}`);
     });
     console.log('========== [HistoryManager.push] 结束 ==========\n');
   }
 
   /**
    * 撤销操作
-   * 返回到上一个状态（currentIndex - 1）
-   * @returns 上一个历史记录，如果无法撤销返回 null
+   * 返回当前操作记录，使用其 beforePhases 恢复到操作前状态
+   * @returns 当前操作记录（包含 before/after），如果无法撤销返回 null
    */
   undo(): HistoryEntry | null {
     console.log('\n========== [HistoryManager.undo] 开始 ==========')
     console.log(`[HistoryManager] 当前索引: ${this.currentIndex}, 总数: ${this.entries.length}`);
-    console.log(`[HistoryManager] 📚 当前状态: ${this.entries[this.currentIndex]?.operation}`);
-      
+        
     if (!this.canUndo()) {
       console.log('[HistoryManager] ⚠️ 无法撤销，已是最早状态');
       console.log('========== [HistoryManager.undo] 结束 ==========\n');
       return null;
     }
-  
-    this.isUndoRedoActive = true;
-      
-    // currentIndex 指向“当前已应用的操作”
-    // undo 时返回 entries[currentIndex - 1]，然后 currentIndex--
-    const targetIndex = this.currentIndex - 1;
-    const entry = this.entries[targetIndex];
     
+    this.isUndoRedoActive = true;
+        
+    // 关键修复：undo 时返回「当前操作」的记录，让调用方用 beforePhases 恢复
+    const entry = this.entries[this.currentIndex];
+      
     // 计算 Action 总数
-    const currentActions = this.entries[this.currentIndex].phases.reduce((sum, phase) => {
+    const beforeActions = entry.beforePhases.reduce((sum, phase) => {
       return sum + phase.topics.reduce((topicSum, topic) => topicSum + topic.actions.length, 0);
     }, 0);
-    const targetActions = entry.phases.reduce((sum, phase) => {
+    const afterActions = entry.afterPhases.reduce((sum, phase) => {
       return sum + phase.topics.reduce((topicSum, topic) => topicSum + topic.actions.length, 0);
     }, 0);
-        
-    console.log(`[HistoryManager] ⬅️ 撤销操作: "${this.entries[this.currentIndex].operation}" (${currentActions} Actions)`);
-    console.log(`[HistoryManager] ➡️ 恢复到: "${entry.operation}" (${targetActions} Actions)`);
-    console.log(`[HistoryManager] 📊 索引变化: ${this.currentIndex} -> ${targetIndex}`);
+          
+    console.log(`[HistoryManager] ⬅️ 撤销操作: "${entry.operation}"`);
+    console.log(`[HistoryManager] 📊 Before Actions: ${beforeActions}, After Actions: ${afterActions}`);
     console.log(`[HistoryManager] 📄 文件: ${entry.fileName} (id: ${entry.fileId})`);
-    console.log(`[HistoryManager] 📊 phases 长度: ${entry.phases.length}`);
-        
-    // 移动索引
-    this.currentIndex = targetIndex;
-        
+    console.log(`[HistoryManager] 📊 将使用 beforePhases 恢复`);
+          
+    // 移动索引（下次 undo 会轮到前一条）
+    this.currentIndex -= 1;
+    console.log(`[HistoryManager] 📊 索引变化: ${this.currentIndex + 1} -> ${this.currentIndex}`);
+          
     console.log('[HistoryManager] 📚 历史栈摘要:');
     this.entries.forEach((e, i) => {
-      const totalActions = e.phases.reduce((sum, phase) => {
+      const afterActions = e.afterPhases.reduce((sum, phase) => {
         return sum + phase.topics.reduce((topicSum, topic) => topicSum + topic.actions.length, 0);
       }, 0);
       const marker = i === this.currentIndex ? ' ← 当前' : '';
-      console.log(`  [${i}] ${e.fileName}: ${e.operation} (${totalActions} Actions)${marker}`);
+      console.log(`  [${i}] ${e.fileName}: ${e.operation} (${afterActions} Actions)${marker}`);
     });
     console.log('========== [HistoryManager.undo] 结束 ==========\n');
-        
+          
     // 返回深拷贝
     return {
       ...entry,
-      phases: JSON.parse(JSON.stringify(entry.phases)),
+      beforePhases: JSON.parse(JSON.stringify(entry.beforePhases)),
+      afterPhases: JSON.parse(JSON.stringify(entry.afterPhases)),
     };
   }
 
   /**
    * 重做操作
-   * 恢复到下一个状态（currentIndex + 1）
-   * @returns 下一个历史记录，如果无法重做则返回 null
+   * 返回下一个操作记录，使用其 afterPhases 恢复到操作后状态
+   * @returns 下一个操作记录（包含 before/after），如果无法重做则返回 null
    */
   redo(): HistoryEntry | null {
     console.log('\n========== [HistoryManager.redo] 开始 ==========')
     console.log(`[HistoryManager] 当前索引: ${this.currentIndex}, 总数: ${this.entries.length}`);
-    console.log(`[HistoryManager] 📚 当前状态: ${this.entries[this.currentIndex]?.operation}`);
-    
+      
     if (!this.canRedo()) {
       console.log('[HistoryManager] ⚠️ 无法重做，已是最新状态');
       console.log('========== [HistoryManager.redo] 结束 ==========\n');
       return null;
     }
-
+  
     this.isUndoRedoActive = true;
-    
-    // redo 应该恢复到“下一个状态”，即 currentIndex + 1
+      
+    // redo 应该恢复到"下一个状态"，即 currentIndex + 1
     const targetIndex = this.currentIndex + 1;
     const entry = this.entries[targetIndex];
-    
-    console.log(`[HistoryManager] ➡️ 重做操作: “${entry.operation}”`);
-    console.log(`[HistoryManager] 📊 索引变化: ${this.currentIndex} -> ${targetIndex}`);
+      
+    // 计算 Action 总数
+    const beforeActions = entry.beforePhases.reduce((sum, phase) => {
+      return sum + phase.topics.reduce((topicSum, topic) => topicSum + topic.actions.length, 0);
+    }, 0);
+    const afterActions = entry.afterPhases.reduce((sum, phase) => {
+      return sum + phase.topics.reduce((topicSum, topic) => topicSum + topic.actions.length, 0);
+    }, 0);
+      
+    console.log(`[HistoryManager] ➡️ 重做操作: "${entry.operation}"`);
+    console.log(`[HistoryManager] 📊 Before Actions: ${beforeActions}, After Actions: ${afterActions}`);
     console.log(`[HistoryManager] 📄 文件: ${entry.fileName} (id: ${entry.fileId})`);
-    console.log(`[HistoryManager] 📊 phases 长度: ${entry.phases.length}`);
-    
+    console.log(`[HistoryManager] 📊 将使用 afterPhases 恢复`);
+    console.log(`[HistoryManager] 📊 索引变化: ${this.currentIndex} -> ${targetIndex}`);
+      
     // 移动索引
     this.currentIndex = targetIndex;
-    
+      
     console.log('[HistoryManager] 📚 历史栈摘要:');
     this.entries.forEach((e, i) => {
+      const afterActions = e.afterPhases.reduce((sum, phase) => {
+        return sum + phase.topics.reduce((topicSum, topic) => topicSum + topic.actions.length, 0);
+      }, 0);
       const marker = i === this.currentIndex ? ' ← 当前' : '';
-      console.log(`  [${i}] ${e.fileName}: ${e.operation}${marker}`);
+      console.log(`  [${i}] ${e.fileName}: ${e.operation} (${afterActions} Actions)${marker}`);
     });
     console.log('========== [HistoryManager.redo] 结束 ==========\n');
-    
+      
     // 返回深拷贝
     return {
       ...entry,
-      phases: JSON.parse(JSON.stringify(entry.phases)),
+      beforePhases: JSON.parse(JSON.stringify(entry.beforePhases)),
+      afterPhases: JSON.parse(JSON.stringify(entry.afterPhases)),
     };
   }
 
@@ -234,11 +245,21 @@ export class HistoryManager {
 
   /**
    * 检查是否可以撤销
-   * 现在索引 0 保存的是“初始状态”，所以 currentIndex > 0 时就可以 undo
-   * （注意：不能 undo 到索引 0，因为那是初始状态，再 undo 就没有状态了）
+   * 不能撤销"初始状态"操作（其 beforePhases 为空数组）
+   * 只有当前操作不是初始状态时才能 undo
    */
   canUndo(): boolean {
-    return this.currentIndex > 0;
+    if (this.currentIndex < 0) {
+      return false;
+    }
+      
+    // 检查当前操作是否为"初始状态"
+    const currentEntry = this.entries[this.currentIndex];
+    if (currentEntry && currentEntry.operation === '初始状态') {
+      return false; // 不能 undo 初始状态
+    }
+      
+    return true;
   }
 
   /**
