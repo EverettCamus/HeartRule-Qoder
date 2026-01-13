@@ -73,15 +73,28 @@ const ProjectList: React.FC = () => {
     }
   };
 
-  const handleCreateProject = async (_values: any) => {
+  const handleCreateProject = async (values: any) => {
     try {
-      // TODO: 调用API创建项目
-      message.success('Project created successfully');
-      setIsCreateModalVisible(false);
-      form.resetFields();
-      loadProjects();
+      const response = await projectsApi.createProject({
+        projectName: values.projectName,
+        description: values.description || '',
+        engineVersion: values.engineVersion || '1.2.0',
+        engineVersionMin: '1.0.0',
+        author: 'LEO', // TODO: 从用户信息获取
+        tags: values.tags || [],
+      });
+
+      if (response.success) {
+        message.success('Project created successfully');
+        setIsCreateModalVisible(false);
+        form.resetFields();
+        loadProjects();
+      } else {
+        message.error('Failed to create project');
+      }
     } catch (error) {
-      message.error('Failed to create project');
+      console.error('创建工程失败:', error);
+      message.error('Failed to create project: ' + (error as any).message);
     }
   };
 
@@ -305,7 +318,10 @@ const ProjectList: React.FC = () => {
           </Form.Item>
 
           <Form.Item label="Project Description" name="description">
-            <Input.TextArea rows={3} placeholder="Briefly describe the purpose and content of the project" />
+            <Input.TextArea
+              rows={3}
+              placeholder="Briefly describe the purpose and content of the project"
+            />
           </Form.Item>
 
           <Form.Item
