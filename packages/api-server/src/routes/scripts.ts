@@ -157,6 +157,104 @@ export async function registerScriptRoutes(app: FastifyInstance) {
     }
   );
 
+  // 导入脚本（用于调试功能）
+  app.post(
+    '/api/scripts/import',
+    {
+      schema: {
+        tags: ['scripts'],
+        description: '导入YAML脚本内容到数据库（用于调试）',
+        body: {
+          type: 'object',
+          required: ['yamlContent', 'scriptName'],
+          properties: {
+            yamlContent: { type: 'string', minLength: 1 },
+            scriptName: { type: 'string', minLength: 1 },
+            description: { type: 'string' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  scriptId: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { yamlContent, scriptName, description } = request.body as {
+        yamlContent: string;
+        scriptName: string;
+        description?: string;
+      };
+
+      try {
+        // 检查脚本是否已存在
+        const existingScript = await db.query.scripts.findFirst({
+          where: eq(scripts.scriptName, scriptName),
+        });
+
+        let scriptId: string;
+        const now = new Date();
+
+        if (existingScript) {
+          // 脚本已存在，更新内容
+          scriptId = existingScript.id;
+          await db
+            .update(scripts)
+            .set({
+              scriptContent: yamlContent,
+              description: description || existingScript.description,
+              updatedAt: now,
+            })
+            .where(eq(scripts.id, scriptId));
+
+          app.log.info({ scriptId, scriptName }, 'Script updated successfully');
+        } else {
+          // 脚本不存在，插入新记录
+          scriptId = uuidv4();
+          await db.insert(scripts).values({
+            id: scriptId,
+            scriptName: scriptName,
+            scriptType: 'session', // 调试脚本默认为session类型
+            scriptContent: yamlContent,
+            version: '1.0.0',
+            status: 'draft',
+            author: 'debug_user',
+            description: description || `Debug script: ${scriptName}`,
+            tags: ['debug'],
+            createdAt: now,
+            updatedAt: now,
+          });
+
+          app.log.info({ scriptId, scriptName }, 'Script imported successfully');
+        }
+
+        return {
+          success: true,
+          data: {
+            scriptId: scriptId,
+          },
+        };
+      } catch (error) {
+        app.log.error(error);
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to import script',
+          details: (error as Error).message,
+        });
+      }
+    }
+  );
+
   // 验证脚本
   app.post(
     '/api/scripts/:id/validate',

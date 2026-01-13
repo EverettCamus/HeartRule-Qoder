@@ -16,6 +16,7 @@ import {
   AppstoreOutlined,
   LeftOutlined,
   RightOutlined,
+  BugOutlined,
 } from '@ant-design/icons';
 import {
   Layout,
@@ -43,6 +44,8 @@ import { ActionNodeList } from '../../components/ActionNodeList';
 import type { ActionNodeListRef } from '../../components/ActionNodeList';
 import { ActionPropertyPanel } from '../../components/ActionPropertyPanel';
 import { PhaseTopicPropertyPanel } from '../../components/PhaseTopicPropertyPanel';
+import DebugConfigModal from '../../components/DebugConfigModal';
+import DebugChatPanel from '../../components/DebugChatPanel';
 import type { Action, SessionScript, Step } from '../../types/action';
 import { globalHistoryManager } from '../../utils/history-manager';
 import type { FocusPath } from '../../utils/history-manager';
@@ -80,6 +83,12 @@ const ProjectEditor: React.FC = () => {
   const [publishModalVisible, setPublishModalVisible] = useState(false);
   const [versionNote, setVersionNote] = useState('');
   const [leftCollapsed, setLeftCollapsed] = useState(false); // 左侧文件树折叠状态
+
+  // 调试功能相关状态
+  const [debugConfigVisible, setDebugConfigVisible] = useState(false);
+  const [debugPanelVisible, setDebugPanelVisible] = useState(false);
+  const [debugSessionId, setDebugSessionId] = useState<string | null>(null);
+  const [debugInitialMessage, setDebugInitialMessage] = useState<string>('');
 
   // 可视化编辑相关状态
   const [editMode, setEditMode] = useState<'yaml' | 'visual'>('yaml'); // 编辑模式：YAML/可视化
@@ -1889,6 +1898,13 @@ const ProjectEditor: React.FC = () => {
           </Space>
           <Space>
             <Button
+              icon={<BugOutlined />}
+              onClick={() => setDebugConfigVisible(true)}
+              disabled={!project || files.filter(f => f.fileType === 'session').length === 0}
+            >
+              Debug
+            </Button>
+            <Button
               type="primary"
               icon={<SaveOutlined />}
               loading={saving}
@@ -2275,6 +2291,32 @@ const ProjectEditor: React.FC = () => {
           </div>
         </Space>
       </Modal>
+
+      {/* 调试配置弹窗 */}
+      <DebugConfigModal
+        visible={debugConfigVisible}
+        currentProject={project}
+        sessionFiles={files.filter((f) => f.fileType === 'session')}
+        onStart={(sessionId, aiMessage) => {
+          setDebugSessionId(sessionId);
+          setDebugInitialMessage(aiMessage);
+          setDebugConfigVisible(false);
+          setDebugPanelVisible(true);
+        }}
+        onCancel={() => setDebugConfigVisible(false)}
+      />
+
+      {/* 调试对话面板 */}
+      <DebugChatPanel
+        visible={debugPanelVisible}
+        sessionId={debugSessionId}
+        initialMessage={debugInitialMessage}
+        onClose={() => {
+          setDebugPanelVisible(false);
+          setDebugSessionId(null);
+          setDebugInitialMessage('');
+        }}
+      />
     </Layout>
   );
 };

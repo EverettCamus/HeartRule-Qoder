@@ -186,6 +186,76 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     }
   );
 
+  // 发送消息到会话（用于调试功能）
+  app.post(
+    '/api/sessions/:id/messages',
+    {
+      schema: {
+        tags: ['sessions'],
+        description: '向会话发送消息并获取AI响应',
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['content'],
+          properties: {
+            content: { type: 'string', minLength: 1 },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              aiMessage: { type: 'string' },
+              sessionStatus: { type: 'string' },
+              executionStatus: { type: 'string' },
+              variables: { type: 'object', additionalProperties: true },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { content } = request.body as { content: string };
+
+      try {
+        // 验证会话是否存在
+        const session = await db.query.sessions.findFirst({
+          where: eq(sessions.id, id),
+        });
+
+        if (!session) {
+          return reply.status(404).send({
+            error: 'Session not found',
+          });
+        }
+
+        // 调用SessionManager处理用户输入
+        const sessionManager = new SessionManager();
+        const result = await sessionManager.processUserInput(id, content);
+
+        return {
+          aiMessage: result.aiMessage,
+          sessionStatus: result.sessionStatus,
+          executionStatus: result.executionStatus,
+          variables: result.variables,
+        };
+      } catch (error) {
+        app.log.error(error);
+        return reply.status(500).send({
+          error: 'Failed to process message',
+          details: (error as Error).message,
+        });
+      }
+    }
+  );
+
   // 获取会话变量
   app.get(
     '/api/sessions/:id/variables',
