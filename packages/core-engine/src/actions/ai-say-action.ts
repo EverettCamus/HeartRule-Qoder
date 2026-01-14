@@ -28,12 +28,23 @@ export class AiSayAction extends BaseAction {
       }
 
       const requireAcknowledgment = this.config.require_acknowledgment || this.config.requireAcknowledgment || false;
+      
+      // 🔵 调试日志
+      console.log(`[AiSayAction] 🔵 Executing:`, {
+        actionId: this.actionId,
+        requireAcknowledgment,
+        config_require_acknowledgment: this.config.require_acknowledgment,
+        config_requireAcknowledgment: this.config.requireAcknowledgment,
+        currentRound: this.currentRound,
+        maxRounds: this.maxRounds,
+      });
 
       // 2. 变量替换
       const content = this.substituteVariables(rawContent, context);
 
       // 如果不需要确认，直接完成
       if (!requireAcknowledgment) {
+        console.log(`[AiSayAction] ⚡ No acknowledgment required, completing immediately`);
         // 注意：这里返回 completed=true，会导致脚本执行器立即推进到下一个 action
         // 如果需要显示这条消息，应设置 require_acknowledgment=true
         return {
