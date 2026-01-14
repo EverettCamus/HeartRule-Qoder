@@ -359,6 +359,15 @@ export class ScriptExecutor {
     const actionType = actionConfig.action_type;
     const actionId = actionConfig.action_id;
     const config = actionConfig.config || {};
+    
+    // 🔵 调试日志
+    console.log(`[ScriptExecutor] 🛠️ Creating action:`, {
+      actionType,
+      actionId,
+      config,
+      hasConfig: !!actionConfig.config,
+      configKeys: Object.keys(config),
+    });
 
     return createAction(actionType, actionId, config);
   }
