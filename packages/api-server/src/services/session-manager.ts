@@ -147,23 +147,31 @@ export class SessionManager {
       hasMessage: !!executionState.lastAiMessage,
     });
 
-    // 保存 AI 消息
-    if (executionState.lastAiMessage) {
-      const aiMessageId = uuidv4();
-      console.log('[SessionManager] 💾 Saving AI message (init):', {
-        messageId: aiMessageId,
-        content: executionState.lastAiMessage,
+    // 保存所有新增的 AI 消息（从 conversationHistory）
+    const aiMessages = executionState.conversationHistory.filter(
+      (msg) => msg.role === 'assistant'
+    );
+    
+    if (aiMessages.length > 0) {
+      console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s) (init):`, {
+        messages: aiMessages.map(m => ({ actionId: m.actionId, content: m.content.substring(0, 50) }))
       });
-      await db.insert(messages).values({
-        id: aiMessageId,
-        sessionId,
-        role: 'assistant',
-        content: executionState.lastAiMessage,
-        metadata: {},
-        timestamp: new Date(),
-      });
+      
+      // 批量保存所有 AI 消息
+      for (const msg of aiMessages) {
+        const aiMessageId = uuidv4();
+        await db.insert(messages).values({
+          id: aiMessageId,
+          sessionId,
+          role: 'assistant',
+          content: msg.content,
+          actionId: msg.actionId,
+          metadata: msg.metadata || {},
+          timestamp: new Date(),
+        });
+      }
     } else {
-      console.log('[SessionManager] ⚠️ No AI message to save (init)');
+      console.log('[SessionManager] ⚠️ No AI messages to save (init)');
     }
 
     // 在更新 sessions 之前，记录变量变化快照
@@ -299,23 +307,31 @@ export class SessionManager {
       hasMessage: !!executionState.lastAiMessage,
     });
 
-    // 保存 AI 消息
-    if (executionState.lastAiMessage) {
-      const aiMessageId = uuidv4();
-      console.log('[SessionManager] 💾 Saving AI message:', {
-        messageId: aiMessageId,
-        content: executionState.lastAiMessage,
+    // 保存所有新增的 AI 消息（从 conversationHistory）
+    const aiMessages = executionState.conversationHistory.filter(
+      (msg) => msg.role === 'assistant'
+    );
+    
+    if (aiMessages.length > 0) {
+      console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s):`, {
+        messages: aiMessages.map(m => ({ actionId: m.actionId, content: m.content.substring(0, 50) }))
       });
-      await db.insert(messages).values({
-        id: aiMessageId,
-        sessionId,
-        role: 'assistant',
-        content: executionState.lastAiMessage,
-        metadata: {},
-        timestamp: new Date(),
-      });
+      
+      // 批量保存所有 AI 消息
+      for (const msg of aiMessages) {
+        const aiMessageId = uuidv4();
+        await db.insert(messages).values({
+          id: aiMessageId,
+          sessionId,
+          role: 'assistant',
+          content: msg.content,
+          actionId: msg.actionId,
+          metadata: msg.metadata || {},
+          timestamp: new Date(),
+        });
+      }
     } else {
-      console.log('[SessionManager] ⚠️ No AI message to save');
+      console.log('[SessionManager] ⚠️ No AI messages to save');
     }
 
     // 在更新 sessions 之前，记录变量变化快照
