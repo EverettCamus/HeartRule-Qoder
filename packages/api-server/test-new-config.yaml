@@ -1,0 +1,49 @@
+metadata:
+  name: "测试新配置项"
+  version: "1.0"
+  author: "Test"
+  description: "测试ai_say和ai_ask的新配置项"
+
+session:
+  session_id: "test_new_config"
+  session_name: "测试新配置项"
+  
+  phases:
+    - phase_id: "phase_1"
+      phase_name: "测试阶段"
+      
+      topics:
+        - topic_id: "topic_1"
+          topic_name: "测试话题"
+          
+          actions:
+            # 测试 ai_say 的新配置项
+            - action_type: "ai_say"
+              action_id: "say_1"
+              config:
+                content_template: "欢迎来到测试环境，这是一条需要确认的消息。"
+                require_acknowledgment: true
+                max_rounds: 2
+            
+            # 测试 ai_ask 的新配置项
+            - action_type: "ai_ask"
+              action_id: "ask_1"
+              config:
+                question_template: "请告诉我你的名字"
+                target_variable: "user_name"
+                extraction_prompt: "从用户回答中提取姓名"
+                required: true
+                max_rounds: 3
+                exit: "成功获取用户名称"
+            
+            # 测试 ai_ask 的output数组配置
+            - action_type: "ai_ask"
+              action_id: "ask_2"
+              config:
+                content_template: "请描述你的症状"
+                output:
+                  - get: "symptom_description"
+                    define: "症状描述"
+                  - get: "severity_level"
+                    define: "严重程度"
+                max_rounds: 5

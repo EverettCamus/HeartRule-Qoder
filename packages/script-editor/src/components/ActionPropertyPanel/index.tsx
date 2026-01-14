@@ -11,6 +11,9 @@ import {
   Row,
   Col,
   Collapse,
+  Switch,
+  InputNumber,
+  Checkbox,
 } from 'antd';
 import React, { useRef } from 'react';
 
@@ -46,11 +49,18 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
       if (action.type === 'ai_say') {
         formValues.ai_say = action.ai_say;
         formValues.tone = action.tone || '';
+        formValues.require_acknowledgment = action.require_acknowledgment ?? true; // 默认为true
+        formValues.max_rounds = action.max_rounds ?? 1; // 默认为1
       } else if (action.type === 'ai_ask') {
         formValues.ai_ask = action.ai_ask;
         formValues.tone = action.tone || '';
         formValues.exit = action.exit || '';
         formValues.tolist = action.tolist || '';
+        formValues.question_template = action.question_template || action.ai_ask;
+        formValues.target_variable = action.target_variable || action.output?.[0]?.get || '';
+        formValues.extraction_prompt = action.extraction_prompt || action.output?.[0]?.define || '';
+        formValues.required = action.required ?? false;
+        formValues.max_rounds = action.max_rounds ?? 3;
         formValues.output = action.output || [];
       } else if (action.type === 'ai_think') {
         formValues.think = action.think;
@@ -87,6 +97,8 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
         Object.assign(updatedAction, {
           ai_say: values.ai_say,
           tone: values.tone || undefined,
+          require_acknowledgment: values.require_acknowledgment,
+          max_rounds: values.max_rounds,
         });
       } else if (action.type === 'ai_ask') {
         Object.assign(updatedAction, {
@@ -94,6 +106,11 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
           tone: values.tone || undefined,
           exit: values.exit || undefined,
           tolist: values.tolist || undefined,
+          question_template: values.question_template || values.ai_ask,
+          target_variable: values.target_variable,
+          extraction_prompt: values.extraction_prompt,
+          required: values.required,
+          max_rounds: values.max_rounds,
           output: values.output || undefined,
         });
       } else if (action.type === 'ai_think') {
@@ -177,6 +194,28 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
               <Form.Item label="Tone Style" name="tone">
                 <Input placeholder="e.g. gentle, encouraging, serious" />
               </Form.Item>
+
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item 
+                    label="Require Acknowledgment" 
+                    name="require_acknowledgment"
+                    valuePropName="checked"
+                    tooltip="是否需要用户确认后才继续"
+                  >
+                    <Switch />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item 
+                    label="Max Rounds" 
+                    name="max_rounds"
+                    tooltip="最大交互轮数"
+                  >
+                    <InputNumber min={1} max={10} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
             </>
           )}
 
@@ -184,11 +223,42 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
           {action.type === 'ai_ask' && (
             <>
               <Form.Item
-                label="Prompt Content"
+                label="Question Template"
                 name="ai_ask"
-                rules={[{ required: true, message: 'Please enter the prompt content' }]}
+                rules={[{ required: true, message: 'Please enter the question template' }]}
+                tooltip="向用户提问的问题模板"
               >
-                <TextArea rows={8} placeholder="Enter the prompt for AI questions..." showCount />
+                <TextArea rows={6} placeholder="Enter the question template for AI..." showCount />
+              </Form.Item>
+
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item 
+                    label="Target Variable" 
+                    name="target_variable"
+                    tooltip="将用户回答提取到的变量名"
+                  >
+                    <Input placeholder="e.g. user_name" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item 
+                    label="Required" 
+                    name="required"
+                    valuePropName="checked"
+                    tooltip="是否必填"
+                  >
+                    <Checkbox />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.Item 
+                label="Extraction Prompt" 
+                name="extraction_prompt"
+                tooltip="如何从用户回答中提取信息的提示词"
+              >
+                <TextArea rows={2} placeholder="Describe how to extract information from user response..." />
               </Form.Item>
 
               <Row gutter={16}>
@@ -198,17 +268,29 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="Append to List" name="tolist">
+                  <Form.Item 
+                    label="Max Rounds" 
+                    name="max_rounds"
+                    tooltip="最大交互轮数"
+                  >
+                    <InputNumber min={1} max={10} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item label="Append to List" name="tolist" tooltip="将结果添加到列表变量">
                     <Input placeholder="List variable name" />
                   </Form.Item>
                 </Col>
               </Row>
 
-              <Form.Item label="Exit Condition" name="exit">
+              <Form.Item label="Exit Condition" name="exit" tooltip="什么情况下退出该Action">
                 <TextArea rows={2} placeholder="Describe when to exit this Action..." />
               </Form.Item>
 
-              <Divider orientation="left">Output Variable Configuration</Divider>
+              <Divider orientation="left">Advanced Output Configuration</Divider>
               <Form.List name="output">
                 {(fields, { add, remove}) => (
                   <>

@@ -240,16 +240,23 @@ const ProjectEditor: React.FC = () => {
                   ai_say: action.config?.content_template || '',
                   tone: action.config?.tone,
                   condition: action.config?.condition,
+                  require_acknowledgment: action.config?.require_acknowledgment,
+                  max_rounds: action.config?.max_rounds,
                   action_id: action.action_id,
                   _raw: action, // 保留原始数据用于反向转换
                 });
               } else if (action.action_type === 'ai_ask') {
                 actions.push({
                   type: 'ai_ask',
-                  ai_ask: action.config?.question_template || '',
+                  ai_ask: action.config?.question_template || action.config?.content_template || '',
                   tone: action.config?.tone,
                   exit: action.config?.exit,
                   tolist: action.config?.tolist,
+                  question_template: action.config?.question_template,
+                  target_variable: action.config?.target_variable,
+                  extraction_prompt: action.config?.extraction_prompt,
+                  required: action.config?.required,
+                  max_rounds: action.config?.max_rounds,
                   output: action.config?.target_variable
                     ? [
                         {
@@ -257,7 +264,7 @@ const ProjectEditor: React.FC = () => {
                           define: action.config.extraction_prompt || '',
                         },
                       ]
-                    : [],
+                    : action.config?.output || [],
                   condition: action.config?.condition,
                   action_id: action.action_id,
                   _raw: action,
@@ -730,6 +737,8 @@ const ProjectEditor: React.FC = () => {
                             content_template: action.ai_say,
                             tone: action.tone,
                             condition: action.condition,
+                            require_acknowledgment: action.require_acknowledgment,
+                            max_rounds: action.max_rounds,
                           },
                         };
                       } else if (action.type === 'ai_ask') {
@@ -738,11 +747,15 @@ const ProjectEditor: React.FC = () => {
                           config: {
                             ...rawAction.config,
                             question_template: action.ai_ask,
+                            content_template: action.ai_ask,
                             tone: action.tone,
                             exit: action.exit,
                             tolist: action.tolist,
-                            target_variable: action.output?.[0]?.get,
-                            extraction_prompt: action.output?.[0]?.define,
+                            target_variable: action.target_variable || action.output?.[0]?.get,
+                            extraction_prompt: action.extraction_prompt || action.output?.[0]?.define,
+                            required: action.required,
+                            max_rounds: action.max_rounds,
+                            output: action.output && action.output.length > 1 ? action.output : undefined,
                             condition: action.condition,
                           },
                         };

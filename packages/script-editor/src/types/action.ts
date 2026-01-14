@@ -23,6 +23,8 @@ export interface AiSayAction extends BaseAction {
   type: 'ai_say';
   ai_say: string;      // 提示词内容
   tone?: string;       // 语气风格
+  require_acknowledgment?: boolean;  // 是否需要用户确认
+  max_rounds?: number; // 最大轮数
 }
 
 // AI 提问 Action
@@ -33,6 +35,11 @@ export interface AiAskAction extends BaseAction {
   exit?: string;       // 退出条件
   output?: OutputField[];  // 输出变量配置
   tolist?: string;     // 添加到列表变量
+  question_template?: string;  // 问题模板(与ai_ask同义)
+  target_variable?: string;    // 目标变量名
+  extraction_prompt?: string;  // 提取提示词
+  required?: boolean;          // 是否必填
+  max_rounds?: number;         // 最大轮数
 }
 
 // AI 思考 Action
