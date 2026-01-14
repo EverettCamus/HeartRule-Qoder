@@ -165,6 +165,28 @@ export async function registerSessionRoutes(app: FastifyInstance) {
             id: { type: 'string', format: 'uuid' },
           },
         },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    messageId: { type: 'string' },
+                    role: { type: 'string' },
+                    content: { type: 'string' },
+                    timestamp: { type: 'string' },
+                    actionId: { type: 'string' },
+                    metadata: { type: 'object' },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     },
     async (request, reply) => {
@@ -176,10 +198,24 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           orderBy: (messages, { asc }) => [asc(messages.timestamp)],
         });
 
-        return sessionMessages;
+        // 转换为前端期望的格式
+        const formattedMessages = sessionMessages.map((msg) => ({
+          messageId: msg.id,
+          role: msg.role === 'assistant' ? 'ai' : msg.role, // 'assistant' -> 'ai'
+          content: msg.content,
+          timestamp: msg.timestamp.toISOString(),
+          actionId: msg.actionId,
+          metadata: msg.metadata,
+        }));
+
+        return {
+          success: true,
+          data: formattedMessages,
+        };
       } catch (error) {
         app.log.error(error);
         return reply.status(500).send({
+          success: false,
           error: 'Failed to get messages',
         });
       }
