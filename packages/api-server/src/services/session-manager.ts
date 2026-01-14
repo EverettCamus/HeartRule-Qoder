@@ -124,7 +124,10 @@ export class SessionManager {
     console.log('[SessionManager] 📄 Parsed YAML script:', {
       sessionId: scriptContent.session?.session_id,
       sessionName: scriptContent.session?.session_name,
-      phasesCount: scriptContent.phases?.length || 0,
+      phasesCount: scriptContent.session?.phases?.length || 0,
+      firstPhase: scriptContent.session?.phases?.[0]?.phase_name,
+      firstTopic: scriptContent.session?.phases?.[0]?.topics?.[0]?.topic_name,
+      actionsCount: scriptContent.session?.phases?.[0]?.topics?.[0]?.actions?.length || 0,
     });
 
     // 执行脚本（初始化，没有用户输入）

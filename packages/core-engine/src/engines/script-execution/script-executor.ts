@@ -194,15 +194,18 @@ export class ScriptExecutor {
   ): Promise<void> {
     const topicId = topic.topic_id;
     const actions = topic.actions;
+    console.log(`[ScriptExecutor] 🔵 Executing topic: ${topicId}, actions count: ${actions.length}`);
 
     // 执行Actions
     while (executionState.currentActionIdx < actions.length) {
       const actionConfig = actions[executionState.currentActionIdx];
+      console.log(`[ScriptExecutor] 🎯 Executing action [${executionState.currentActionIdx}]: ${actionConfig.action_id} (${actionConfig.action_type})`);
 
       // 创建或获取Action实例
       if (!executionState.currentAction) {
         const action = this.createAction(actionConfig);
         executionState.currentAction = action;
+        console.log(`[ScriptExecutor] ✨ Created action instance: ${action.actionId}`);
       }
 
       const action = executionState.currentAction;
@@ -216,12 +219,20 @@ export class ScriptExecutor {
         executionState,
         userInput
       );
+      console.log(`[ScriptExecutor] ✅ Action result:`, {
+        actionId: action.actionId,
+        completed: result.completed,
+        success: result.success,
+        hasAiMessage: !!result.aiMessage,
+        aiMessage: result.aiMessage?.substring(0, 50),
+      });
 
       // user_input 只用一次
       userInput = null;
 
       // 处理执行结果
       if (!result.completed) {
+        console.log(`[ScriptExecutor] ⏸️ Action not completed, waiting for input`);
         // Action未完成，但可能有 AI 消息（如 ai_ask 的问题）
         if (result.aiMessage) {
           executionState.lastAiMessage = result.aiMessage;
@@ -237,10 +248,12 @@ export class ScriptExecutor {
         executionState.status = ExecutionStatus.WAITING_INPUT;
         // 保存 Action 内部状态
         executionState.metadata.actionState = this.serializeActionState(action);
+        console.log(`[ScriptExecutor] 🔴 Returning to wait for user input`);
         return;
       }
 
       // Action完成，处理结果
+      console.log(`[ScriptExecutor] ✅ Action completed successfully`);
       if (result.success) {
         // 更新变量
         if (result.extractedVariables) {
@@ -272,9 +285,11 @@ export class ScriptExecutor {
       executionState.currentActionIdx += 1;
       // 清除保存的 Action 状态
       delete executionState.metadata.actionState;
+      console.log(`[ScriptExecutor] ➡️ Moving to next action, new actionIdx: ${executionState.currentActionIdx}`);
     }
 
     // Topic 所有 Actions 已执行完成
+    console.log(`[ScriptExecutor] ✅ Topic completed: ${topicId}`);
     executionState.status = ExecutionStatus.RUNNING;
   }
 
