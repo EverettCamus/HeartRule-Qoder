@@ -3,10 +3,10 @@
  * 
  * 参照: legacy-python/src/actions/ai_say.py
  * 
- * 更新说明：
- * - 当 require_acknowledgment=false 时，ai_say 会立即完成，不等待用户回复
- * - 这会导致脚本执行器立即推进到下一个 action
- * - 如果想让 ai_say 的消息显示给用户，应该设置 require_acknowledgment=true
+ * 行为说明：
+ * - 默认 require_acknowledgment=true，需要用户确认后才继续
+ * - 当 require_acknowledgment=false 时，消息会发送给用户，但脚本立即推进到下一个 action
+ * - 无论是否需要确认，消息都会被保存并发送给客户端
  * - TODO: 未来集成LLM处理 content_template，生成更自然的表达
  */
 
@@ -27,7 +27,15 @@ export class AiSayAction extends BaseAction {
         rawContent = this.config.content || '';
       }
 
-      const requireAcknowledgment = this.config.require_acknowledgment || this.config.requireAcknowledgment || false;
+      // 明确检查 require_acknowledgment 是否被设置
+      // 默认为 true（需要用户确认）
+      let requireAcknowledgment = true;
+      
+      if (this.config.require_acknowledgment !== undefined) {
+        requireAcknowledgment = this.config.require_acknowledgment;
+      } else if (this.config.requireAcknowledgment !== undefined) {
+        requireAcknowledgment = this.config.requireAcknowledgment;
+      }
       
       // 🔵 调试日志
       console.log(`[AiSayAction] 🔵 Executing:`, {
@@ -35,6 +43,7 @@ export class AiSayAction extends BaseAction {
         requireAcknowledgment,
         config_require_acknowledgment: this.config.require_acknowledgment,
         config_requireAcknowledgment: this.config.requireAcknowledgment,
+        configKeys: Object.keys(this.config),
         currentRound: this.currentRound,
         maxRounds: this.maxRounds,
       });
@@ -42,15 +51,14 @@ export class AiSayAction extends BaseAction {
       // 2. 变量替换
       const content = this.substituteVariables(rawContent, context);
 
-      // 如果不需要确认，直接完成
+      // 如果不需要确认，发送消息后立即完成
+      // 消息仍会被保存并发送给客户端，只是不等待用户回复
       if (!requireAcknowledgment) {
-        console.log(`[AiSayAction] ⚡ No acknowledgment required, completing immediately`);
-        // 注意：这里返回 completed=true，会导致脚本执行器立即推进到下一个 action
-        // 如果需要显示这条消息，应设置 require_acknowledgment=true
+        console.log(`[AiSayAction] ⚡ No acknowledgment required, message will be sent and script continues`);
         return {
           success: true,
-          completed: true,
-          aiMessage: content,
+          completed: true,  // 立即完成，脚本继续执行
+          aiMessage: content,  // 消息仍会被发送给用户
           metadata: {
             actionType: AiSayAction.actionType,
             requireAcknowledgment: false,
