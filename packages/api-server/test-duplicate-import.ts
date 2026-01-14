@@ -2,7 +2,9 @@
  * 测试重复导入同名脚本（UPSERT功能）
  */
 
-const API_BASE = 'http://localhost:8000/api';
+// 使用立即执行函数避免全局变量冲突
+(async function() {
+  const API_BASE = 'http://localhost:8000/api';
 
 const testScriptName = 'duplicate-test.yaml';
 const testScriptV1 = `metadata:
@@ -117,3 +119,4 @@ async function testDuplicateImport() {
 }
 
 testDuplicateImport();
+})();

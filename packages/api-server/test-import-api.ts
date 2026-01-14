@@ -1,8 +1,10 @@
 /**
- * 测试导入脚本API接口
+ * 测试导入脚本 API接口
  */
 
-const API_BASE = 'http://localhost:8000/api';
+// 使用立即执行函数避免全局变量冲突
+(async function() {
+  const API_BASE = 'http://localhost:8000/api';
 
 // 更完整的测试脚本内容（符合引擎要求的格式）
 const testScriptContent = `metadata:
@@ -113,3 +115,4 @@ async function testImportApi() {
 
 // 执行测试
 testImportApi();
+})();
