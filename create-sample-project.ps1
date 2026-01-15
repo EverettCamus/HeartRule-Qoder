@@ -19,4 +19,4 @@ Write-Host "工程ID: $($project.data.id)"
 Write-Host "工程名称: $($project.data.projectName)"
 
 # 保存工程ID到文件
-$project.data.id | Out-File -FilePath "..\..\project-id.txt" -NoNewline
+$project.data.id | Out-File -FilePath "project-id.txt" -NoNewline

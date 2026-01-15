@@ -16,7 +16,7 @@ async function testSessionFlow() {
   console.log('='.repeat(60));
 
   // 1. 读取脚本
-  const scriptPath = './scripts/sessions/cbt_depression_assessment.yaml';
+  const scriptPath = '../../scripts/sessions/cbt_depression_assessment.yaml';
   const scriptYaml = fs.readFileSync(scriptPath, 'utf-8');
   const scriptParsed = yaml.parse(scriptYaml);
   const scriptJson = JSON.stringify(scriptParsed);
