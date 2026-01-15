@@ -46,6 +46,11 @@ export interface ExecutionState {
   }>;
   metadata: Record<string, any>;
   lastAiMessage: string | null;
+  // 扩展位置信息
+  currentPhaseId?: string;
+  currentTopicId?: string;
+  currentActionId?: string;
+  currentActionType?: string;
 }
 
 /**
@@ -125,11 +130,29 @@ export class ScriptExecutor {
         executionState.currentActionIdx += 1;
         // 清除保存的 Action 状态
         delete executionState.metadata.actionState;
+
+        // 预设置下一个 Action 的 ID（如果存在）
+        const currentPhase = phases[executionState.currentPhaseIdx];
+        if (currentPhase) {
+          const currentTopic = currentPhase.topics[executionState.currentTopicIdx];
+          if (currentTopic && executionState.currentActionIdx < currentTopic.actions.length) {
+            const nextActionConfig = currentTopic.actions[executionState.currentActionIdx];
+            executionState.currentActionId = nextActionConfig.action_id;
+            executionState.currentActionType = nextActionConfig.action_type;
+            console.log(
+              `[ScriptExecutor] ➡️ Continue: moving to next action: ${nextActionConfig.action_id}`
+            );
+          } else {
+            executionState.currentActionId = undefined;
+            executionState.currentActionType = undefined;
+          }
+        }
       }
 
       // 执行脚本流程
       while (executionState.currentPhaseIdx < phases.length) {
         const phase = phases[executionState.currentPhaseIdx];
+        executionState.currentPhaseId = phase.phase_id;
 
         // 执行Phase
         await this.executePhase(phase, sessionId, executionState, userInput);
@@ -142,6 +165,36 @@ export class ScriptExecutor {
         executionState.currentPhaseIdx += 1;
         executionState.currentTopicIdx = 0;
         executionState.currentActionIdx = 0;
+
+        // 预设置下一个 Phase 的第一个 Topic 的第一个 Action ID（如果存在）
+        if (executionState.currentPhaseIdx < phases.length) {
+          const nextPhase = phases[executionState.currentPhaseIdx];
+          executionState.currentPhaseId = nextPhase.phase_id;
+          if (nextPhase.topics && nextPhase.topics.length > 0) {
+            const firstTopic = nextPhase.topics[0];
+            executionState.currentTopicId = firstTopic.topic_id;
+            if (firstTopic.actions && firstTopic.actions.length > 0) {
+              const firstActionConfig = firstTopic.actions[0];
+              executionState.currentActionId = firstActionConfig.action_id;
+              executionState.currentActionType = firstActionConfig.action_type;
+              console.log(
+                `[ScriptExecutor] ➡️ Moving to next phase: ${nextPhase.phase_id}, first action: ${firstActionConfig.action_id}`
+              );
+            } else {
+              executionState.currentActionId = undefined;
+              executionState.currentActionType = undefined;
+            }
+          } else {
+            executionState.currentTopicId = undefined;
+            executionState.currentActionId = undefined;
+            executionState.currentActionType = undefined;
+          }
+        } else {
+          executionState.currentPhaseId = undefined;
+          executionState.currentTopicId = undefined;
+          executionState.currentActionId = undefined;
+          executionState.currentActionType = undefined;
+        }
       }
 
       // 所有Phase执行完成
@@ -169,6 +222,7 @@ export class ScriptExecutor {
     // 执行Topics
     while (executionState.currentTopicIdx < topics.length) {
       const topic = topics[executionState.currentTopicIdx];
+      executionState.currentTopicId = topic.topic_id;
 
       await this.executeTopic(topic, phaseId, sessionId, executionState, userInput);
 
@@ -179,6 +233,27 @@ export class ScriptExecutor {
       // Topic完成，进入下一个
       executionState.currentTopicIdx += 1;
       executionState.currentActionIdx = 0;
+
+      // 预设置下一个 Topic 的第一个 Action ID（如果存在）
+      if (executionState.currentTopicIdx < topics.length) {
+        const nextTopic = topics[executionState.currentTopicIdx];
+        executionState.currentTopicId = nextTopic.topic_id;
+        if (nextTopic.actions && nextTopic.actions.length > 0) {
+          const firstActionConfig = nextTopic.actions[0];
+          executionState.currentActionId = firstActionConfig.action_id;
+          executionState.currentActionType = firstActionConfig.action_type;
+          console.log(
+            `[ScriptExecutor] ➡️ Moving to next topic: ${nextTopic.topic_id}, first action: ${firstActionConfig.action_id}`
+          );
+        } else {
+          executionState.currentActionId = undefined;
+          executionState.currentActionType = undefined;
+        }
+      } else {
+        executionState.currentTopicId = undefined;
+        executionState.currentActionId = undefined;
+        executionState.currentActionType = undefined;
+      }
     }
   }
 
@@ -194,17 +269,23 @@ export class ScriptExecutor {
   ): Promise<void> {
     const topicId = topic.topic_id;
     const actions = topic.actions;
-    console.log(`[ScriptExecutor] 🔵 Executing topic: ${topicId}, actions count: ${actions.length}`);
+    console.log(
+      `[ScriptExecutor] 🔵 Executing topic: ${topicId}, actions count: ${actions.length}`
+    );
 
     // 执行Actions
     while (executionState.currentActionIdx < actions.length) {
       const actionConfig = actions[executionState.currentActionIdx];
-      console.log(`[ScriptExecutor] 🎯 Executing action [${executionState.currentActionIdx}]: ${actionConfig.action_id} (${actionConfig.action_type})`);
+      console.log(
+        `[ScriptExecutor] 🎯 Executing action [${executionState.currentActionIdx}]: ${actionConfig.action_id} (${actionConfig.action_type})`
+      );
 
       // 创建或获取Action实例
       if (!executionState.currentAction) {
         const action = this.createAction(actionConfig);
         executionState.currentAction = action;
+        executionState.currentActionId = actionConfig.action_id;
+        executionState.currentActionType = actionConfig.action_type;
         console.log(`[ScriptExecutor] ✨ Created action instance: ${action.actionId}`);
       }
 
@@ -285,7 +366,21 @@ export class ScriptExecutor {
       executionState.currentActionIdx += 1;
       // 清除保存的 Action 状态
       delete executionState.metadata.actionState;
-      console.log(`[ScriptExecutor] ➡️ Moving to next action, new actionIdx: ${executionState.currentActionIdx}`);
+
+      // 预设置下一个 Action 的 ID（如果存在）
+      if (executionState.currentActionIdx < actions.length) {
+        const nextActionConfig = actions[executionState.currentActionIdx];
+        executionState.currentActionId = nextActionConfig.action_id;
+        executionState.currentActionType = nextActionConfig.action_type;
+        console.log(
+          `[ScriptExecutor] ➡️ Moving to next action: ${nextActionConfig.action_id} (${nextActionConfig.action_type})`
+        );
+      } else {
+        // Topic 中没有更多 Action 了
+        executionState.currentActionId = undefined;
+        executionState.currentActionType = undefined;
+        console.log(`[ScriptExecutor] ➡️ No more actions in this topic`);
+      }
     }
 
     // Topic 所有 Actions 已执行完成
@@ -359,7 +454,7 @@ export class ScriptExecutor {
     const actionType = actionConfig.action_type;
     const actionId = actionConfig.action_id;
     const config = actionConfig.config || {};
-    
+
     // 🔵 调试日志
     console.log(`[ScriptExecutor] 🛠️ Creating action:`, {
       actionType,

@@ -14,6 +14,11 @@ export interface ExecutionPosition {
   phaseIndex: number;
   topicIndex: number;
   actionIndex: number;
+  // 扩展的 ID 字段（可选，用于导航树定位）
+  phaseId?: string;
+  topicId?: string;
+  actionId?: string;
+  actionType?: string;
 }
 
 /**
@@ -23,6 +28,10 @@ export const ExecutionPositionSchema = z.object({
   phaseIndex: z.number().int().min(0),
   topicIndex: z.number().int().min(0),
   actionIndex: z.number().int().min(0),
+  phaseId: z.string().optional(),
+  topicId: z.string().optional(),
+  actionId: z.string().optional(),
+  actionType: z.string().optional(),
 });
 
 /**

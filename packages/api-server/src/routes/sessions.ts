@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { sessions, messages, scripts } from '../db/schema.js';
 import { SessionManager } from '../services/session-manager.js';
+import { sendErrorResponse, logError } from '../utils/error-handler.js';
 
 /**
  * 注册会话相关路由
@@ -47,15 +48,17 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         initialVariables?: Record<string, unknown>;
       };
 
+      let script: any = null;
+
       try {
         // 验证脚本是否存在
-        const script = await db.query.scripts.findFirst({
+        script = await db.query.scripts.findFirst({
           where: eq(scripts.id, scriptId),
         });
 
         if (!script) {
-          return reply.status(404).send({
-            error: 'Script not found',
+          return sendErrorResponse(reply, new Error('Script not found'), {
+            scriptId,
           });
         }
 
@@ -96,16 +99,17 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           createdAt: now.toISOString(),
           aiMessage: initResult.aiMessage,
           executionStatus: initResult.executionStatus,
+          position: initResult.position,
         };
 
         app.log.info({ responseData }, 'Returning response');
 
         return responseData;
       } catch (error) {
-        app.log.error(error);
-        return reply.status(500).send({
-          error: 'Failed to create session',
-          details: (error as Error).message,
+        logError(app.log, error, { userId, scriptId });
+        return sendErrorResponse(reply, error, {
+          scriptId,
+          scriptName: script?.scriptName,
         });
       }
     }
@@ -141,7 +145,80 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           });
         }
 
-        return session;
+        // 获取脚本信息以便构建导航树
+        const script = await db.query.scripts.findFirst({
+          where: eq(scripts.id, session.scriptId),
+        });
+
+        app.log.info(
+          {
+            sessionId: id,
+            scriptId: session.scriptId,
+            hasScript: !!script,
+            hasParsedContent: !!script?.parsedContent,
+            parsedContentKeys: script?.parsedContent
+              ? Object.keys(script.parsedContent as any)
+              : [],
+          },
+          'Session detail - script info'
+        );
+
+        // 返回会话信息，包含脚本的解析内容
+        const response: any = Object.assign({}, session);
+        response.metadata = Object.assign({}, session.metadata || {});
+        response.metadata.script = script?.parsedContent || null;
+
+        // 构建完整的 position 信息（包含 ID 字段）
+        if (script?.parsedContent && session.position) {
+          const pos = session.position as any;
+          const parsedScript = script.parsedContent as any;
+          const sessionData = parsedScript.session || parsedScript;
+          const phases = sessionData.phases || [];
+
+          if (phases.length > pos.phaseIndex) {
+            const phase = phases[pos.phaseIndex];
+            response.position = {
+              phaseIndex: pos.phaseIndex,
+              phaseId: phase.phase_id || `phase_${pos.phaseIndex}`,
+              topicIndex: pos.topicIndex,
+              topicId: '',
+              actionIndex: pos.actionIndex,
+              actionId: '',
+              actionType: '',
+            };
+
+            if (phase.topics && phase.topics.length > pos.topicIndex) {
+              const topic = phase.topics[pos.topicIndex];
+              response.position.topicId = topic.topic_id || `topic_${pos.topicIndex}`;
+
+              if (topic.actions && topic.actions.length > pos.actionIndex) {
+                const action = topic.actions[pos.actionIndex];
+                response.position.actionId = action.action_id || `action_${pos.actionIndex}`;
+                response.position.actionType = action.action_type || 'unknown';
+              }
+            }
+
+            app.log.info(
+              {
+                originalPosition: pos,
+                enhancedPosition: response.position,
+              },
+              'Session detail - enhanced position with IDs'
+            );
+          }
+        }
+
+        app.log.info(
+          {
+            hasMetadataScript: !!response.metadata.script,
+            metadataScriptKeys: response.metadata.script
+              ? Object.keys(response.metadata.script)
+              : [],
+          },
+          'Session detail - response metadata'
+        );
+
+        return response;
       } catch (error) {
         app.log.error(error);
         return reply.status(500).send({
@@ -251,6 +328,18 @@ export async function registerSessionRoutes(app: FastifyInstance) {
               sessionStatus: { type: 'string' },
               executionStatus: { type: 'string' },
               variables: { type: 'object', additionalProperties: true },
+              position: {
+                type: 'object',
+                properties: {
+                  phaseIndex: { type: 'number' },
+                  phaseId: { type: 'string' },
+                  topicIndex: { type: 'number' },
+                  topicId: { type: 'string' },
+                  actionIndex: { type: 'number' },
+                  actionId: { type: 'string' },
+                  actionType: { type: 'string' },
+                },
+              },
             },
           },
         },
@@ -260,33 +349,59 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
       const { content } = request.body as { content: string };
 
+      let session: any = null;
+      let script: any = null;
+
       try {
         // 验证会话是否存在
-        const session = await db.query.sessions.findFirst({
+        session = await db.query.sessions.findFirst({
           where: eq(sessions.id, id),
         });
 
         if (!session) {
-          return reply.status(404).send({
-            error: 'Session not found',
+          return sendErrorResponse(reply, new Error('Session not found'), {
+            sessionId: id,
           });
         }
+
+        // 获取脚本信息
+        script = await db.query.scripts.findFirst({
+          where: eq(scripts.id, session.scriptId),
+        });
 
         // 调用SessionManager处理用户输入
         const sessionManager = new SessionManager();
         const result = await sessionManager.processUserInput(id, content);
+
+        app.log.info(
+          {
+            sessionId: id,
+            hasPosition: !!result.position,
+            position: result.position,
+          },
+          'Sending response with position'
+        );
 
         return {
           aiMessage: result.aiMessage,
           sessionStatus: result.sessionStatus,
           executionStatus: result.executionStatus,
           variables: result.variables,
+          position: result.position,
         };
       } catch (error) {
-        app.log.error(error);
-        return reply.status(500).send({
-          error: 'Failed to process message',
-          details: (error as Error).message,
+        logError(app.log, error, { sessionId: id, userInput: content });
+        return sendErrorResponse(reply, error, {
+          sessionId: id,
+          scriptId: session?.scriptId,
+          scriptName: script?.scriptName,
+          position: session?.position
+            ? {
+                phaseIndex: session.position.phaseIndex,
+                topicIndex: session.position.topicIndex,
+                actionIndex: session.position.actionIndex,
+              }
+            : undefined,
         });
       }
     }

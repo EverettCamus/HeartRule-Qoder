@@ -3,13 +3,30 @@
   right: 0;
   top: 64px; /* 避开顶部导航 */
   bottom: 0;
-  width: 450px;
+  width: 800px; /* 增加宽度以容纳导航树 */
   background: #fff;
   border-left: 1px solid #e8e8e8;
   display: flex;
-  flex-direction: column;
+  flex-direction: row; /* 水平布局：导航树 + 主内容 */
   box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
   z-index: 100;
+}
+
+/* 导航树容器 */
+.debug-navigation-tree {
+  width: 300px;
+  border-right: 1px solid #e8e8e8;
+  overflow-y: auto;
+  background: #fafafa;
+  flex-shrink: 0;
+}
+
+/* 主内容区域 */
+.debug-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* 允许收缩 */
 }
 
 .debug-chat-header {

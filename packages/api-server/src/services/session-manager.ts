@@ -73,6 +73,15 @@ export class SessionManager {
     sessionStatus: string;
     executionStatus: string;
     variables?: Record<string, unknown>;
+    position?: {
+      phaseIndex: number;
+      phaseId: string;
+      topicIndex: number;
+      topicId: string;
+      actionIndex: number;
+      actionId: string;
+      actionType: string;
+    };
   }> {
     console.log('[SessionManager] 🔵 initializeSession called', { sessionId });
 
@@ -148,15 +157,16 @@ export class SessionManager {
     });
 
     // 保存所有新增的 AI 消息（从 conversationHistory）
-    const aiMessages = executionState.conversationHistory.filter(
-      (msg) => msg.role === 'assistant'
-    );
-    
+    const aiMessages = executionState.conversationHistory.filter((msg) => msg.role === 'assistant');
+
     if (aiMessages.length > 0) {
       console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s) (init):`, {
-        messages: aiMessages.map(m => ({ actionId: m.actionId, content: m.content.substring(0, 50) }))
+        messages: aiMessages.map((m) => ({
+          actionId: m.actionId,
+          content: m.content.substring(0, 50),
+        })),
       });
-      
+
       // 批量保存所有 AI 消息
       for (const msg of aiMessages) {
         const aiMessageId = uuidv4();
@@ -206,6 +216,15 @@ export class SessionManager {
       sessionStatus: session.status,
       executionStatus: executionState.status,
       variables: executionState.variables,
+      position: {
+        phaseIndex: executionState.currentPhaseIdx,
+        phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
+        topicIndex: executionState.currentTopicIdx,
+        topicId: executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`,
+        actionIndex: executionState.currentActionIdx,
+        actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
+        actionType: executionState.currentActionType || 'unknown',
+      },
     };
     console.log('[SessionManager] 🏁 initializeSession completed:', result);
     return result;
@@ -222,6 +241,15 @@ export class SessionManager {
     sessionStatus: string;
     executionStatus: string;
     variables?: Record<string, unknown>;
+    position?: {
+      phaseIndex: number;
+      phaseId: string;
+      topicIndex: number;
+      topicId: string;
+      actionIndex: number;
+      actionId: string;
+      actionType: string;
+    };
   }> {
     console.log('[SessionManager] 🔵 processUserInput called', { sessionId, userInput });
 
@@ -257,7 +285,10 @@ export class SessionManager {
 
     // 保存用户消息
     const userMessageId = uuidv4();
-    console.log('[SessionManager] 💾 Saving user message:', { messageId: userMessageId, content: userInput });
+    console.log('[SessionManager] 💾 Saving user message:', {
+      messageId: userMessageId,
+      content: userInput,
+    });
     await db.insert(messages).values({
       id: userMessageId,
       sessionId,
@@ -308,15 +339,16 @@ export class SessionManager {
     });
 
     // 保存所有新增的 AI 消息（从 conversationHistory）
-    const aiMessages = executionState.conversationHistory.filter(
-      (msg) => msg.role === 'assistant'
-    );
-    
+    const aiMessages = executionState.conversationHistory.filter((msg) => msg.role === 'assistant');
+
     if (aiMessages.length > 0) {
       console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s):`, {
-        messages: aiMessages.map(m => ({ actionId: m.actionId, content: m.content.substring(0, 50) }))
+        messages: aiMessages.map((m) => ({
+          actionId: m.actionId,
+          content: m.content.substring(0, 50),
+        })),
       });
-      
+
       // 批量保存所有 AI 消息
       for (const msg of aiMessages) {
         const aiMessageId = uuidv4();
@@ -366,6 +398,15 @@ export class SessionManager {
       sessionStatus: session.status,
       executionStatus: executionState.status,
       variables: executionState.variables,
+      position: {
+        phaseIndex: executionState.currentPhaseIdx,
+        phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
+        topicIndex: executionState.currentTopicIdx,
+        topicId: executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`,
+        actionIndex: executionState.currentActionIdx,
+        actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
+        actionType: executionState.currentActionType || 'unknown',
+      },
     };
     console.log('[SessionManager] 🏁 processUserInput completed:', result);
     return result;

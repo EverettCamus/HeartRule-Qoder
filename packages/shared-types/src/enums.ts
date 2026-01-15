@@ -77,6 +77,33 @@ export enum ActionType {
   USE_SKILL = 'use_skill',
 }
 
+/**
+ * 错误类型枚举
+ */
+export enum ErrorType {
+  SYNTAX = 'syntax',
+  CONFIGURATION = 'configuration',
+  RUNTIME = 'runtime',
+  SESSION = 'session',
+  SYSTEM = 'system',
+}
+
+/**
+ * 错误代码枚举
+ */
+export enum ErrorCode {
+  SCRIPT_NOT_FOUND = 'SCRIPT_NOT_FOUND',
+  SCRIPT_PARSE_ERROR = 'SCRIPT_PARSE_ERROR',
+  SCRIPT_VALIDATION_ERROR = 'SCRIPT_VALIDATION_ERROR',
+  SESSION_NOT_FOUND = 'SESSION_NOT_FOUND',
+  SESSION_EXECUTION_ERROR = 'SESSION_EXECUTION_ERROR',
+  ACTION_EXECUTION_ERROR = 'ACTION_EXECUTION_ERROR',
+  LLM_SERVICE_ERROR = 'LLM_SERVICE_ERROR',
+  VARIABLE_EXTRACTION_ERROR = 'VARIABLE_EXTRACTION_ERROR',
+  DATABASE_ERROR = 'DATABASE_ERROR',
+  INTERNAL_SERVER_ERROR = 'INTERNAL_SERVER_ERROR',
+}
+
 // Zod Schema 枚举验证
 export const SessionStatusSchema = z.nativeEnum(SessionStatus);
 export const ExecutionStatusSchema = z.nativeEnum(ExecutionStatus);
@@ -86,3 +113,5 @@ export const ScriptStatusSchema = z.nativeEnum(ScriptStatus);
 export const VariableScopeSchema = z.nativeEnum(VariableScope);
 export const VariableUpdateModeSchema = z.nativeEnum(VariableUpdateMode);
 export const ActionTypeSchema = z.nativeEnum(ActionType);
+export const ErrorTypeSchema = z.nativeEnum(ErrorType);
+export const ErrorCodeSchema = z.nativeEnum(ErrorCode);

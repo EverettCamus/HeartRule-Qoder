@@ -14,6 +14,7 @@
 ### 范围说明
 
 本设计覆盖以下任务：
+
 - **P0-T2**：编辑器内的调试入口配置与工程选择
 - **P0-T3**：基础调试对话面板
 
@@ -29,11 +30,11 @@
 
 调试配置包含以下核心参数：
 
-| 配置项 | 说明 | 数据来源 | 是否必填 |
-|--------|------|----------|----------|
-| 当前工程 | 要调试的脚本工程 | 从已加载的工程上下文获取，或从工程列表选择 | 是 |
-| 入口脚本 | 调试的起始Session脚本 | 从当前工程的Session类型文件中选择 | 是 |
-| 用户ID | 模拟的用户标识 | 默认为"debug_user"，可自定义 | 否 |
+| 配置项   | 说明                  | 数据来源                                   | 是否必填 |
+| -------- | --------------------- | ------------------------------------------ | -------- |
+| 当前工程 | 要调试的脚本工程      | 从已加载的工程上下文获取，或从工程列表选择 | 是       |
+| 入口脚本 | 调试的起始Session脚本 | 从当前工程的Session类型文件中选择          | 是       |
+| 用户ID   | 模拟的用户标识        | 默认为"debug_user"，可自定义               | 否       |
 
 #### 交互流程
 
@@ -63,13 +64,13 @@ graph TD
 
 前端需要维护的调试相关状态：
 
-| 状态字段 | 类型 | 说明 |
-|---------|------|------|
-| debugSessionId | string 或 null | 当前调试会话的ID |
-| debugConfigVisible | boolean | 调试配置弹窗的显示状态 |
-| debugPanelVisible | boolean | 调试对话面板的显示状态 |
-| selectedSessionFile | ScriptFile 或 null | 选中的入口脚本文件 |
-| debugUserId | string | 模拟的用户ID |
+| 状态字段            | 类型               | 说明                   |
+| ------------------- | ------------------ | ---------------------- |
+| debugSessionId      | string 或 null     | 当前调试会话的ID       |
+| debugConfigVisible  | boolean            | 调试配置弹窗的显示状态 |
+| debugPanelVisible   | boolean            | 调试对话面板的显示状态 |
+| selectedSessionFile | ScriptFile 或 null | 选中的入口脚本文件     |
+| debugUserId         | string             | 模拟的用户ID           |
 
 ### 2.2 基础调试对话面板（P0-T3）
 
@@ -104,23 +105,23 @@ graph TD
 
 消息列表中需要区分不同角色的消息：
 
-| 消息角色 | 显示样式 | 对齐方式 | 背景色建议 |
-|---------|---------|---------|-----------|
-| AI | 带"AI："前缀 | 左对齐 | 浅蓝色 |
-| 用户 | 带"用户："前缀 | 右对齐 | 浅灰色 |
-| 系统 | 带"系统："前缀 | 居中 | 浅黄色 |
+| 消息角色 | 显示样式       | 对齐方式 | 背景色建议 |
+| -------- | -------------- | -------- | ---------- |
+| AI       | 带"AI："前缀   | 左对齐   | 浅蓝色     |
+| 用户     | 带"用户："前缀 | 右对齐   | 浅灰色     |
+| 系统     | 带"系统："前缀 | 居中     | 浅黄色     |
 
 #### 消息数据结构
 
 前端消息对象的结构定义：
 
-| 字段 | 类型 | 说明 |
-|-----|------|------|
-| messageId | string | 消息唯一标识 |
-| role | 'ai' / 'user' / 'system' | 消息角色 |
-| content | string | 消息内容 |
-| timestamp | Date 或 string | 消息时间戳 |
-| metadata | object | 元数据（可选） |
+| 字段      | 类型                     | 说明           |
+| --------- | ------------------------ | -------------- |
+| messageId | string                   | 消息唯一标识   |
+| role      | 'ai' / 'user' / 'system' | 消息角色       |
+| content   | string                   | 消息内容       |
+| timestamp | Date 或 string           | 消息时间戳     |
+| metadata  | object                   | 元数据（可选） |
 
 #### 对话交互流程
 
@@ -131,7 +132,7 @@ sequenceDiagram
     participant U as 用户
     participant P as 调试面板
     participant A as API接口
-    
+
     U->>P: 输入消息并点击发送
     P->>P: 将用户消息添加到列表
     P->>P: 禁用输入框和发送按钮
@@ -167,23 +168,23 @@ graph TD
 
 当调试相关的API调用失败时，应按以下方式处理：
 
-| 错误场景 | 处理方式 |
-|---------|---------|
-| 创建会话失败 | 在配置弹窗中显示错误提示，允许用户重试 |
-| 获取会话失败 | 在对话面板中显示错误提示，提供重新加载按钮 |
+| 错误场景     | 处理方式                                     |
+| ------------ | -------------------------------------------- |
+| 创建会话失败 | 在配置弹窗中显示错误提示，允许用户重试       |
+| 获取会话失败 | 在对话面板中显示错误提示，提供重新加载按钮   |
 | 发送消息失败 | 保留用户输入，显示发送失败提示，允许重新发送 |
-| 网络超时 | 显示超时提示，提供重试选项 |
+| 网络超时     | 显示超时提示，提供重试选项                   |
 
 #### 用户操作约束
 
 为避免无效操作和数据不一致，需要实施以下约束：
 
-| 约束场景 | 约束规则 |
-|---------|---------|
-| 未选择工程 | 调试按钮禁用或点击后提示 |
+| 约束场景          | 约束规则                     |
+| ----------------- | ---------------------------- |
+| 未选择工程        | 调试按钮禁用或点击后提示     |
 | 工程无Session文件 | 不允许开始调试，给出明确提示 |
-| 正在发送消息 | 禁用输入框和发送按钮 |
-| 会话已结束 | 显示会话结束提示，禁用输入 |
+| 正在发送消息      | 禁用输入框和发送按钮         |
+| 会话已结束        | 显示会话结束提示，禁用输入   |
 
 ## 3. 数据交互设计
 
@@ -192,97 +193,98 @@ graph TD
 #### 请求接口
 
 ```
-POST /debug/sessions
+POST /api/sessions
 ```
 
 #### 请求参数
 
-| 参数 | 类型 | 必填 | 说明 |
-|-----|------|------|------|
-| projectId | string | 是 | 工程ID |
-| sessionFileId | string | 是 | Session脚本文件ID |
-| userId | string | 否 | 用户ID，默认"debug_user" |
+| 参数          | 类型   | 必填 | 说明                     |
+| ------------- | ------ | ---- | ------------------------ |
+| projectId     | string | 是   | 工程ID                   |
+| sessionFileId | string | 是   | Session脚本文件ID        |
+| userId        | string | 否   | 用户ID，默认"debug_user" |
 
 实际请求可能需要传递scriptId（脚本在数据库中的ID），需要通过以下方式获取：
+
 - 从工程文件中读取yamlContent
 - 临时导入为script记录
 - 或后端支持通过projectId和fileId直接创建会话
 
 #### 响应数据
 
-| 字段 | 类型 | 说明 |
-|-----|------|------|
-| sessionId | string | 调试会话的唯一标识 |
-| status | string | 会话状态 |
-| createdAt | string | 创建时间 |
-| aiMessage | string | 初始欢迎消息 |
-| executionStatus | string | 执行状态 |
+| 字段            | 类型   | 说明               |
+| --------------- | ------ | ------------------ |
+| sessionId       | string | 调试会话的唯一标识 |
+| status          | string | 会话状态           |
+| createdAt       | string | 创建时间           |
+| aiMessage       | string | 初始欢迎消息       |
+| executionStatus | string | 执行状态           |
 
 ### 3.2 获取会话状态
 
 #### 请求接口
 
 ```
-GET /debug/sessions/{id}
+GET /api/sessions/{id}
 ```
 
 #### 路径参数
 
-| 参数 | 类型 | 说明 |
-|-----|------|------|
-| id | string | 会话ID |
+| 参数 | 类型   | 说明   |
+| ---- | ------ | ------ |
+| id   | string | 会话ID |
 
 #### 响应数据
 
-| 字段 | 类型 | 说明 |
-|-----|------|------|
-| sessionId | string | 会话ID |
-| userId | string | 用户ID |
-| scriptId | string | 脚本ID |
-| status | string | 会话状态 |
-| executionStatus | string | 执行状态 |
-| position | object | 当前执行位置（phaseIndex, topicIndex, actionIndex） |
-| variables | object | 会话变量 |
-| metadata | object | 元数据 |
-| messages | array | 消息历史列表 |
+| 字段            | 类型   | 说明                                                |
+| --------------- | ------ | --------------------------------------------------- |
+| sessionId       | string | 会话ID                                              |
+| userId          | string | 用户ID                                              |
+| scriptId        | string | 脚本ID                                              |
+| status          | string | 会话状态                                            |
+| executionStatus | string | 执行状态                                            |
+| position        | object | 当前执行位置（phaseIndex, topicIndex, actionIndex） |
+| variables       | object | 会话变量                                            |
+| metadata        | object | 元数据                                              |
+| messages        | array  | 消息历史列表                                        |
 
 消息历史列表中每条消息的结构：
 
-| 字段 | 类型 | 说明 |
-|-----|------|------|
-| messageId | string | 消息ID |
-| role | string | 消息角色（ai/user/system） |
-| content | string | 消息内容 |
-| timestamp | string | 时间戳 |
+| 字段      | 类型   | 说明                       |
+| --------- | ------ | -------------------------- |
+| messageId | string | 消息ID                     |
+| role      | string | 消息角色（ai/user/system） |
+| content   | string | 消息内容                   |
+| timestamp | string | 时间戳                     |
 
 ### 3.3 发送用户消息
 
 #### 请求接口
 
 ```
-POST /debug/sessions/{id}/messages
+POST /api/sessions/{id}/messages
 ```
 
 #### 路径参数
 
-| 参数 | 类型 | 说明 |
-|-----|------|------|
-| id | string | 会话ID |
+| 参数 | 类型   | 说明   |
+| ---- | ------ | ------ |
+| id   | string | 会话ID |
 
 #### 请求参数
 
-| 参数 | 类型 | 必填 | 说明 |
-|-----|------|------|------|
-| content | string | 是 | 用户输入的消息内容 |
+| 参数    | 类型   | 必填 | 说明               |
+| ------- | ------ | ---- | ------------------ |
+| content | string | 是   | 用户输入的消息内容 |
 
 #### 响应数据
 
-| 字段 | 类型 | 说明 |
-|-----|------|------|
-| aiMessage | string | AI的回复消息 |
-| sessionStatus | string | 会话状态 |
-| executionStatus | string | 执行状态 |
-| variables | object | 更新后的变量（可选） |
+| 字段            | 类型   | 说明                 |
+| --------------- | ------ | -------------------- |
+| aiMessage       | string | AI的回复消息         |
+| sessionStatus   | string | 会话状态             |
+| executionStatus | string | 执行状态             |
+| variables       | object | 更新后的变量（可选） |
 
 ## 4. 组件设计
 
@@ -294,22 +296,22 @@ POST /debug/sessions/{id}/messages
 
 **属性定义**：
 
-| 属性 | 类型 | 说明 |
-|-----|------|------|
-| visible | boolean | 弹窗显示状态 |
-| currentProject | Project 或 null | 当前工程对象 |
-| sessionFiles | ScriptFile[] | 可选的Session文件列表 |
-| onStart | (config) => void | 开始调试的回调函数 |
-| onCancel | () => void | 取消的回调函数 |
+| 属性           | 类型             | 说明                  |
+| -------------- | ---------------- | --------------------- |
+| visible        | boolean          | 弹窗显示状态          |
+| currentProject | Project 或 null  | 当前工程对象          |
+| sessionFiles   | ScriptFile[]     | 可选的Session文件列表 |
+| onStart        | (config) => void | 开始调试的回调函数    |
+| onCancel       | () => void       | 取消的回调函数        |
 
 **内部状态**：
 
-| 状态 | 类型 | 说明 |
-|-----|------|------|
+| 状态           | 类型           | 说明                |
+| -------------- | -------------- | ------------------- |
 | selectedFileId | string 或 null | 选中的Session文件ID |
-| userId | string | 用户ID输入值 |
-| loading | boolean | 请求加载状态 |
-| error | string 或 null | 错误信息 |
+| userId         | string         | 用户ID输入值        |
+| loading        | boolean        | 请求加载状态        |
+| error          | string 或 null | 错误信息            |
 
 **主要方法**：
 
@@ -326,21 +328,21 @@ POST /debug/sessions/{id}/messages
 
 **属性定义**：
 
-| 属性 | 类型 | 说明 |
-|-----|------|------|
-| visible | boolean | 面板显示状态 |
-| sessionId | string 或 null | 当前调试会话ID |
-| onClose | () => void | 关闭面板的回调函数 |
+| 属性      | 类型           | 说明               |
+| --------- | -------------- | ------------------ |
+| visible   | boolean        | 面板显示状态       |
+| sessionId | string 或 null | 当前调试会话ID     |
+| onClose   | () => void     | 关闭面板的回调函数 |
 
 **内部状态**：
 
-| 状态 | 类型 | 说明 |
-|-----|------|------|
-| messages | Message[] | 消息列表 |
-| inputValue | string | 输入框内容 |
-| loading | boolean | 消息发送中状态 |
-| sessionInfo | object 或 null | 会话基本信息 |
-| error | string 或 null | 错误信息 |
+| 状态        | 类型           | 说明           |
+| ----------- | -------------- | -------------- |
+| messages    | Message[]      | 消息列表       |
+| inputValue  | string         | 输入框内容     |
+| loading     | boolean        | 消息发送中状态 |
+| sessionInfo | object 或 null | 会话基本信息   |
+| error       | string 或 null | 错误信息       |
 
 **主要方法**：
 
@@ -358,17 +360,17 @@ POST /debug/sessions/{id}/messages
 
 **属性定义**：
 
-| 属性 | 类型 | 说明 |
-|-----|------|------|
+| 属性     | 类型      | 说明     |
+| -------- | --------- | -------- |
 | messages | Message[] | 消息数组 |
-| loading | boolean | 加载状态 |
+| loading  | boolean   | 加载状态 |
 
 **消息项组件**：MessageItem
 
 **属性定义**：
 
-| 属性 | 类型 | 说明 |
-|-----|------|------|
+| 属性    | 类型    | 说明         |
+| ------- | ------- | ------------ |
 | message | Message | 单条消息对象 |
 
 ## 5. 页面集成方案
@@ -390,11 +392,11 @@ POST /debug/sessions/{id}/messages
 
 在ProjectEditor组件的state中新增：
 
-| 状态字段 | 类型 | 初始值 | 说明 |
-|---------|------|--------|------|
-| debugConfigVisible | boolean | false | 调试配置弹窗显示状态 |
-| debugPanelVisible | boolean | false | 调试面板显示状态 |
-| debugSessionId | string 或 null | null | 当前调试会话ID |
+| 状态字段           | 类型           | 初始值 | 说明                 |
+| ------------------ | -------------- | ------ | -------------------- |
+| debugConfigVisible | boolean        | false  | 调试配置弹窗显示状态 |
+| debugPanelVisible  | boolean        | false  | 调试面板显示状态     |
+| debugSessionId     | string 或 null | null   | 当前调试会话ID       |
 
 #### 布局调整
 
@@ -422,11 +424,11 @@ POST /debug/sessions/{id}/messages
 
 **导出的API方法**：
 
-| 方法名 | 说明 | 返回类型 |
-|-------|------|---------|
-| createDebugSession | 创建调试会话 | Promise&lt;ApiResponse&lt;DebugSession&gt;&gt; |
-| getDebugSession | 获取调试会话详情 | Promise&lt;ApiResponse&lt;DebugSessionDetail&gt;&gt; |
-| sendDebugMessage | 发送调试消息 | Promise&lt;ApiResponse&lt;DebugMessageResponse&gt;&gt; |
+| 方法名             | 说明             | 返回类型                                               |
+| ------------------ | ---------------- | ------------------------------------------------------ |
+| createDebugSession | 创建调试会话     | Promise&lt;ApiResponse&lt;DebugSession&gt;&gt;         |
+| getDebugSession    | 获取调试会话详情 | Promise&lt;ApiResponse&lt;DebugSessionDetail&gt;&gt;   |
+| sendDebugMessage   | 发送调试消息     | Promise&lt;ApiResponse&lt;DebugMessageResponse&gt;&gt; |
 
 ### 6.2 类型定义
 
@@ -434,45 +436,45 @@ POST /debug/sessions/{id}/messages
 
 #### DebugSession
 
-| 字段 | 类型 | 说明 |
-|-----|------|------|
-| sessionId | string | 会话ID |
-| status | string | 会话状态 |
-| createdAt | string | 创建时间 |
-| aiMessage | string | 初始AI消息 |
-| executionStatus | string | 执行状态 |
+| 字段            | 类型   | 说明       |
+| --------------- | ------ | ---------- |
+| sessionId       | string | 会话ID     |
+| status          | string | 会话状态   |
+| createdAt       | string | 创建时间   |
+| aiMessage       | string | 初始AI消息 |
+| executionStatus | string | 执行状态   |
 
 #### DebugSessionDetail
 
-| 字段 | 类型 | 说明 |
-|-----|------|------|
-| sessionId | string | 会话ID |
-| userId | string | 用户ID |
-| scriptId | string | 脚本ID |
-| status | string | 会话状态 |
-| executionStatus | string | 执行状态 |
-| position | ExecutionPosition | 执行位置 |
-| variables | Record&lt;string, unknown&gt; | 变量 |
-| metadata | Record&lt;string, unknown&gt; | 元数据 |
-| messages | DebugMessage[] | 消息列表 |
+| 字段            | 类型                          | 说明     |
+| --------------- | ----------------------------- | -------- |
+| sessionId       | string                        | 会话ID   |
+| userId          | string                        | 用户ID   |
+| scriptId        | string                        | 脚本ID   |
+| status          | string                        | 会话状态 |
+| executionStatus | string                        | 执行状态 |
+| position        | ExecutionPosition             | 执行位置 |
+| variables       | Record&lt;string, unknown&gt; | 变量     |
+| metadata        | Record&lt;string, unknown&gt; | 元数据   |
+| messages        | DebugMessage[]                | 消息列表 |
 
 #### DebugMessage
 
-| 字段 | 类型 | 说明 |
-|-----|------|------|
-| messageId | string | 消息ID |
-| role | 'ai' \| 'user' \| 'system' | 角色 |
-| content | string | 内容 |
-| timestamp | string | 时间戳 |
+| 字段      | 类型                       | 说明   |
+| --------- | -------------------------- | ------ |
+| messageId | string                     | 消息ID |
+| role      | 'ai' \| 'user' \| 'system' | 角色   |
+| content   | string                     | 内容   |
+| timestamp | string                     | 时间戳 |
 
 #### DebugMessageResponse
 
-| 字段 | 类型 | 说明 |
-|-----|------|------|
-| aiMessage | string | AI回复 |
-| sessionStatus | string | 会话状态 |
-| executionStatus | string | 执行状态 |
-| variables | Record&lt;string, unknown&gt; | 变量 |
+| 字段            | 类型                          | 说明     |
+| --------------- | ----------------------------- | -------- |
+| aiMessage       | string                        | AI回复   |
+| sessionStatus   | string                        | 会话状态 |
+| executionStatus | string                        | 执行状态 |
+| variables       | Record&lt;string, unknown&gt; | 变量     |
 
 ### 6.3 错误处理封装
 
@@ -489,34 +491,34 @@ API调用应统一处理以下情况：
 
 在以下操作中需要显示加载状态：
 
-| 操作 | 提示方式 | 提示内容 |
-|-----|---------|---------|
-| 创建调试会话 | 弹窗内loading | "正在创建调试会话..." |
+| 操作         | 提示方式                | 提示内容              |
+| ------------ | ----------------------- | --------------------- |
+| 创建调试会话 | 弹窗内loading           | "正在创建调试会话..." |
 | 加载会话数据 | 面板内skeleton或spinner | "正在加载对话历史..." |
-| 发送消息 | 禁用输入，按钮loading | "发送中..." |
+| 发送消息     | 禁用输入，按钮loading   | "发送中..."           |
 
 ### 7.2 成功反馈
 
-| 操作 | 反馈方式 |
-|-----|---------|
+| 操作         | 反馈方式                       |
+| ------------ | ------------------------------ |
 | 会话创建成功 | 自动关闭配置弹窗，打开对话面板 |
-| 消息发送成功 | 清空输入框，显示AI回复 |
+| 消息发送成功 | 清空输入框，显示AI回复         |
 
 ### 7.3 错误提示
 
-| 错误类型 | 提示位置 | 提示方式 |
-|---------|---------|---------|
-| 配置验证错误 | 配置弹窗内 | 表单字段下方红色提示文字 |
-| API调用错误 | 弹窗或面板顶部 | Alert组件显示错误信息 |
-| 网络错误 | 面板顶部 | Alert组件，提供重试按钮 |
+| 错误类型     | 提示位置       | 提示方式                 |
+| ------------ | -------------- | ------------------------ |
+| 配置验证错误 | 配置弹窗内     | 表单字段下方红色提示文字 |
+| API调用错误  | 弹窗或面板顶部 | Alert组件显示错误信息    |
+| 网络错误     | 面板顶部       | Alert组件，提供重试按钮  |
 
 ### 7.4 空状态处理
 
-| 场景 | 显示内容 |
-|-----|---------|
+| 场景              | 显示内容                            |
+| ----------------- | ----------------------------------- |
 | 工程无Session文件 | "当前工程没有Session脚本，请先创建" |
-| 消息列表为空 | "暂无消息记录" |
-| 会话加载失败 | "加载失败，请重试" |
+| 消息列表为空      | "暂无消息记录"                      |
+| 会话加载失败      | "加载失败，请重试"                  |
 
 ## 8. 实现优先级
 
@@ -619,6 +621,7 @@ API调用应统一处理以下情况：
 ### 11.2 执行状态可视化
 
 在调试面板中增加执行状态区域，显示：
+
 - 当前执行位置（Phase > Topic > Action）
 - 执行进度百分比
 - 已执行和未执行节点数量
@@ -626,6 +629,7 @@ API调用应统一处理以下情况：
 ### 11.3 变量查看面板
 
 增加变量查看功能，展示当前会话的变量状态：
+
 - Session级变量
 - Topic级局部变量
 - 变量值的实时更新
@@ -633,30 +637,40 @@ API调用应统一处理以下情况：
 ### 11.4 调试工具栏
 
 增加调试控制按钮：
+
 - 重新开始调试
 - 停止调试
 - 清空对话历史
 - 导出调试日志
-- Session级变量
-- Topic级局部变量
-- 变量值的实时更新
 
-### 11.4 调试工具栏
+### 11.5 消息重试机制
 
-增加调试控制按钮：
-- 重新开始调试
-- 停止调试
-- 清空对话历史
-- 导出调试日志
-增加变量查看功能，展示当前会话的变量状态：
-- Session级变量
-- Topic级局部变量
-- 变量值的实时更新
+当消息发送失败时：
 
-### 11.4 调试工具栏
+- 保留用户输入的内容
+- 显示“重试”按钮
+- 点击后重新发送相同的消息
 
-增加调试控制按钮：
-- 重新开始调试
-- 停止调试
-- 清空对话历史
-- 导出调试日志
+### 11.6 会话状态恢复
+
+支持页面刷新后恢复调试会话：
+
+- 将sessionId存入localStorage
+- 页面加载时检查是否有未完成的会话
+- 提示用户是否继续
+
+### 11.7 调试会话列表
+
+支持多个调试会话并存：
+
+- 以Tab形式管理多个会话
+- 可以快速切换
+- 显示每个会话的基本信息
+
+### 11.8 消息加载优化
+
+实现分页加载：
+
+- 默认加载最近20条消息
+- 滚动到顶部时加载更多历史消息
+- 显示加载中和“没有更多”状态

@@ -21,6 +21,11 @@ export interface ExecutionState {
   conversationHistory: Message[];
   metadata: Map<string, unknown>;
   lastAiMessage?: string;
+  // 扩展位置信息
+  currentPhaseId?: string;
+  currentTopicId?: string;
+  currentActionId?: string;
+  currentActionType?: string;
 }
 
 /**
@@ -94,6 +99,7 @@ export class ScriptExecutor {
       // 执行脚本流程
       while (executionState.currentPhaseIdx < phases.length) {
         const phase = phases[executionState.currentPhaseIdx];
+        executionState.currentPhaseId = phase['phase_id'] as string;
 
         const state = await this.executePhase(phase, session, executionState, userInput);
 
@@ -104,6 +110,10 @@ export class ScriptExecutor {
         executionState.currentPhaseIdx++;
         executionState.currentTopicIdx = 0;
         executionState.currentActionIdx = 0;
+        executionState.currentPhaseId = undefined;
+        executionState.currentTopicId = undefined;
+        executionState.currentActionId = undefined;
+        executionState.currentActionType = undefined;
       }
 
       // 所有Phase执行完成
@@ -129,6 +139,7 @@ export class ScriptExecutor {
 
     while (executionState.currentTopicIdx < topics.length) {
       const topic = topics[executionState.currentTopicIdx];
+      executionState.currentTopicId = topic['topic_id'] as string;
 
       const state = await this.executeTopic(
         topic,
@@ -144,6 +155,9 @@ export class ScriptExecutor {
 
       executionState.currentTopicIdx++;
       executionState.currentActionIdx = 0;
+      executionState.currentTopicId = undefined;
+      executionState.currentActionId = undefined;
+      executionState.currentActionType = undefined;
     }
 
     return executionState;
@@ -168,6 +182,8 @@ export class ScriptExecutor {
       if (!executionState.currentAction) {
         const action = this.createAction(actionConfig);
         executionState.currentAction = action;
+        executionState.currentActionId = actionConfig['action_id'] as string;
+        executionState.currentActionType = actionConfig['action_type'] as string;
       }
 
       // 执行Action
@@ -209,6 +225,8 @@ export class ScriptExecutor {
 
       executionState.currentAction = undefined;
       executionState.currentActionIdx++;
+      executionState.currentActionId = undefined;
+      executionState.currentActionType = undefined;
     }
 
     executionState.status = ExecutionStatus.RUNNING;

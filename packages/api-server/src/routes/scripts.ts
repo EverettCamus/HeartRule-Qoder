@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
+import * as yaml from 'yaml';
 
 import { db } from '../db/index.js';
 import { scripts } from '../db/schema.js';
@@ -44,11 +45,21 @@ export async function registerScriptRoutes(app: FastifyInstance) {
         const scriptId = uuidv4();
         const now = new Date();
 
+        // 解析 YAML 内容
+        let parsedContent: any = null;
+        try {
+          parsedContent = yaml.parse(body.scriptContent);
+          app.log.info({ scriptId }, 'YAML parsed successfully');
+        } catch (parseError) {
+          app.log.warn({ scriptId, error: parseError }, 'Failed to parse YAML, storing as null');
+        }
+
         await db.insert(scripts).values({
           id: scriptId,
           scriptName: body.scriptName,
           scriptType: body.scriptType as 'session' | 'technique' | 'awareness',
           scriptContent: body.scriptContent,
+          parsedContent, // 保存解析后的内容
           version: '1.0.0',
           status: 'draft',
           author: body.author,
@@ -205,6 +216,15 @@ export async function registerScriptRoutes(app: FastifyInstance) {
         let scriptId: string;
         const now = new Date();
 
+        // 解析 YAML 内容
+        let parsedContent: any = null;
+        try {
+          parsedContent = yaml.parse(yamlContent);
+          app.log.info({ scriptName }, 'YAML parsed successfully for import');
+        } catch (parseError) {
+          app.log.warn({ scriptName, error: parseError }, 'Failed to parse YAML during import');
+        }
+
         if (existingScript) {
           // 脚本已存在，更新内容
           scriptId = existingScript.id;
@@ -212,6 +232,7 @@ export async function registerScriptRoutes(app: FastifyInstance) {
             .update(scripts)
             .set({
               scriptContent: yamlContent,
+              parsedContent, // 更新解析后的内容
               description: description || existingScript.description,
               updatedAt: now,
             })
@@ -226,6 +247,7 @@ export async function registerScriptRoutes(app: FastifyInstance) {
             scriptName: scriptName,
             scriptType: 'session', // 调试脚本默认为session类型
             scriptContent: yamlContent,
+            parsedContent, // 保存解析后的内容
             version: '1.0.0',
             status: 'draft',
             author: 'debug_user',
