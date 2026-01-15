@@ -34,7 +34,7 @@ async function createSampleProject() {
   console.log('   工程名称:', project.projectName);
 
   // 2. 读取会话脚本文件
-  const scriptPath = path.join(__dirname, 'scripts', 'sessions', 'cbt_depression_assessment.yaml');
+  const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'sessions', 'cbt_depression_assessment.yaml');
   const yamlContent = fs.readFileSync(scriptPath, 'utf-8');
 
   // 3. 创建会话文件
