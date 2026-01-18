@@ -1,9 +1,18 @@
-import { CloseOutlined, SendOutlined } from '@ant-design/icons';
+import { CloseOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons';
 import { Button, Input, Spin, Alert, Empty } from 'antd';
 import React, { useState, useEffect, useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 
 import { debugApi } from '../../api/debug';
 import type { DebugMessage } from '../../api/debug';
+import type {
+  DebugBubble,
+  DebugOutputFilter,
+  ErrorBubbleContent,
+  VariableBubbleContent,
+  LLMPromptBubbleContent,
+  LLMResponseBubbleContent,
+} from '../../types/debug';
 import type { DetailedError } from '../../types/error';
 import type {
   NavigationTree as NavigationTreeType,
@@ -12,6 +21,12 @@ import type {
   TopicNode,
   ActionNode,
 } from '../../types/navigation';
+import { loadDebugFilter, saveDebugFilter } from '../../utils/debug-filter-storage';
+import ErrorBubble from '../DebugBubbles/ErrorBubble';
+import LLMPromptBubble from '../DebugBubbles/LLMPromptBubble';
+import LLMResponseBubble from '../DebugBubbles/LLMResponseBubble';
+import VariableBubble from '../DebugBubbles/VariableBubble';
+import DebugFilterModal from '../DebugFilterModal/DebugFilterModal';
 import ErrorBanner from '../ErrorBanner/ErrorBanner';
 import ErrorDetailModal from '../ErrorDetailModal/ErrorDetailModal';
 import NavigationTree from '../NavigationTree/NavigationTree';
@@ -23,6 +38,7 @@ interface DebugChatPanelProps {
   visible: boolean;
   sessionId: string | null;
   initialMessage?: string;
+  initialDebugInfo?: any;
   onClose: () => void;
 }
 
@@ -30,6 +46,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   visible,
   sessionId,
   initialMessage,
+  initialDebugInfo,
   onClose,
 }) => {
   const [messages, setMessages] = useState<DebugMessage[]>([]);
@@ -45,6 +62,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   const [showErrorDetail, setShowErrorDetail] = useState(false);
   const [navigationTree, setNavigationTree] = useState<NavigationTreeType | null>(null);
   const [currentPosition, setCurrentPosition] = useState<CurrentPosition | undefined>(undefined);
+
+  // 调试气泡相关状态
+  const [debugBubbles, setDebugBubbles] = useState<DebugBubble[]>([]);
+  const [debugFilter, setDebugFilter] = useState<DebugOutputFilter>(() => loadDebugFilter());
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -100,6 +122,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                     actionIndex: actionIdx,
                     displayName: action.action_id || `Action ${actionIdx}`,
                     status: 'pending',
+                    config: action.config || {},
                   });
                 });
               }
@@ -144,6 +167,44 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       console.error('[DebugChat] Failed to build navigation tree:', error);
       console.error('[DebugChat] Session detail:', sessionDetail);
       return null;
+    }
+  };
+
+  // 气泡操作函数
+  const addDebugBubble = (bubble: DebugBubble) => {
+    setDebugBubbles((prev) => [...prev, bubble]);
+  };
+
+  const toggleBubbleExpand = (bubbleId: string) => {
+    setDebugBubbles((prev) =>
+      prev.map((b) => (b.id === bubbleId ? { ...b, isExpanded: !b.isExpanded } : b))
+    );
+  };
+
+  const handleFilterChange = (newFilter: DebugOutputFilter) => {
+    setDebugFilter(newFilter);
+    saveDebugFilter(newFilter);
+  };
+
+  const handleExpandAll = () => {
+    setDebugBubbles((prev) => prev.map((b) => ({ ...b, isExpanded: true })));
+  };
+
+  const handleCollapseAll = () => {
+    setDebugBubbles((prev) => prev.map((b) => ({ ...b, isExpanded: false })));
+  };
+
+  const handleRestartFromError = async () => {
+    if (!sessionId) return;
+    try {
+      // 这里可以调用重启会话的API
+      console.log('[DebugChat] Restarting session:', sessionId);
+      // 重新加载会话数据
+      await loadSessionData();
+      // 清空气泡
+      setDebugBubbles([]);
+    } catch (err) {
+      console.error('[DebugChat] Failed to restart session:', err);
     }
   };
 
@@ -224,6 +285,53 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           };
           console.log('[DebugChat] 💬 Created initial message:', initialMsg);
           setMessages([initialMsg]);
+        }
+      }
+
+      // 处理初始的 debugInfo（来自会话创建时的第一个 action）
+      if (initialDebugInfo) {
+        console.log('[DebugChat] 🔍 Processing initial debugInfo:', initialDebugInfo);
+        
+        // 创建 LLM 提示词气泡
+        const promptBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'llm_prompt',
+          timestamp: initialDebugInfo.timestamp || new Date().toISOString(),
+          isExpanded: false,
+          actionId: sessionDetail.position?.actionId,
+          actionType: sessionDetail.position?.actionType,
+          content: {
+            type: 'llm_prompt',
+            systemPrompt: '',
+            userPrompt: initialDebugInfo.prompt || '',
+            conversationHistory: [],
+            preview: (initialDebugInfo.prompt || '').substring(0, 100) + '...',
+          } as LLMPromptBubbleContent,
+        };
+        addDebugBubble(promptBubble);
+        console.log('[DebugChat] ✅ Created initial LLM prompt bubble');
+
+        // 创建 LLM 响应气泡
+        if (initialDebugInfo.response) {
+          const responseBubble: DebugBubble = {
+            id: uuidv4(),
+            type: 'llm_response',
+            timestamp: initialDebugInfo.timestamp || new Date().toISOString(),
+            isExpanded: false,
+            actionId: sessionDetail.position?.actionId,
+            actionType: sessionDetail.position?.actionType,
+            content: {
+              type: 'llm_response',
+              model: initialDebugInfo.model || 'unknown',
+              tokens: initialDebugInfo.tokensUsed || 0,
+              maxTokens: initialDebugInfo.config?.maxTokens || 0,
+              rawResponse: JSON.stringify(initialDebugInfo.response.raw || initialDebugInfo.response),
+              processedResponse: initialDebugInfo.response.text || '',
+              preview: (initialDebugInfo.response.text || '').substring(0, 100) + '...',
+            } as LLMResponseBubbleContent,
+          };
+          addDebugBubble(responseBubble);
+          console.log('[DebugChat] ✅ Created initial LLM response bubble');
         }
       }
 
@@ -310,29 +418,136 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       const response = await debugApi.sendDebugMessage(sessionId, {
         content: userMessage,
       });
+      
+      // 🔍 详细调试日志
+      console.log('[DebugChat] 🔍 Full response object:', response);
+      console.log('[DebugChat] 🔍 Response keys:', Object.keys(response));
+      console.log('[DebugChat] 🔍 debugInfo value:', response.debugInfo);
+      console.log('[DebugChat] 🔍 debugInfo type:', typeof response.debugInfo);
+      
       console.log('[DebugChat] ✅ API Response received:', {
         aiMessage: response.aiMessage,
         sessionStatus: response.sessionStatus,
         executionStatus: response.executionStatus,
         hasVariables: !!response.variables,
+        hasDebugInfo: !!response.debugInfo,
+        debugInfo: response.debugInfo,
       });
 
       // 检查响应中是否包含错误信息
-      if ((response as any).error) {
-        const errorData = (response as any).error;
+      if (response.error) {
+        const errorData = response.error;
         setDetailedError(errorData);
+        
+        // 创建错误气泡
+        const errorBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          isExpanded: true, // 错误默认展开
+          actionId: response.position?.actionId,
+          actionType: response.position?.actionType,
+          content: {
+            type: 'error',
+            code: errorData.code || 'UNKNOWN_ERROR',
+            errorType: errorData.errorType || 'execution',
+            message: errorData.message || 'An error occurred',
+            details: errorData.details,
+            position: response.position ? {
+              phaseId: response.position.phaseId || '',
+              phaseName: '',  // 此字段不在API响应中
+              topicId: response.position.topicId || '',
+              topicName: '',  // 此字段不在API响应中
+              actionId: response.position.actionId || '',
+            } : undefined,
+            recovery: errorData.recovery,
+            stackTrace: errorData.stackTrace,
+          } as ErrorBubbleContent,
+        };
+        addDebugBubble(errorBubble);
+      }
+
+      // 检查变量变化并创建变量气泡
+      if (response.variables) {
+        const newVariables = response.variables;
+        // TODO: 这里需要比较前后变量状态，暂时创建一个简单的变量气泡
+        const variableBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'variable',
+          timestamp: new Date().toISOString(),
+          isExpanded: false, // 变量默认折叠
+          actionId: response.position?.actionId,
+          actionType: response.position?.actionType,
+          content: {
+            type: 'variable',
+            changedVariables: [], // TODO: 计算变化的变量
+            allVariables: {
+              session: newVariables.session || {},
+              phase: newVariables.phase || {},
+              topic: newVariables.topic || {},
+            },
+            summary: '变量更新', // 简单摘要
+          } as VariableBubbleContent,
+        };
+        addDebugBubble(variableBubble);
+      }
+
+      // 检查 LLM 调试信息并创建 LLM 气泡
+      if (response.debugInfo) {
+        const debugInfo = response.debugInfo;
+        console.log('[DebugChat] 📍 Received LLM debugInfo:', debugInfo);
+
+        // 创建 LLM 提示词气泡
+        const promptBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'llm_prompt',
+          timestamp: debugInfo.timestamp || new Date().toISOString(),
+          isExpanded: false,
+          actionId: response.position?.actionId,
+          actionType: response.position?.actionType,
+          content: {
+            type: 'llm_prompt',
+            systemPrompt: '',  // 服务端暂未返回
+            userPrompt: debugInfo.prompt || '',
+            conversationHistory: [],  // 服务端暂未返回
+            preview: (debugInfo.prompt || '').substring(0, 100) + '...',
+          } as LLMPromptBubbleContent,
+        };
+        addDebugBubble(promptBubble);
+
+        // 创建 LLM 响应气泡
+        const responseBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'llm_response',
+          timestamp: debugInfo.timestamp || new Date().toISOString(),
+          isExpanded: false,
+          actionId: response.position?.actionId,
+          actionType: response.position?.actionType,
+          content: {
+            type: 'llm_response',
+            model: debugInfo.model || 'unknown',
+            tokens: debugInfo.tokensUsed || 0,
+            maxTokens: debugInfo.config?.maxTokens || 0,
+            rawResponse: JSON.stringify(debugInfo.response, null, 2),
+            processedResponse: debugInfo.response?.text || response.aiMessage || '',
+            preview: (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
+          } as LLMResponseBubbleContent,
+        };
+        addDebugBubble(responseBubble);
+
+        console.log('[DebugChat] ✅ Created LLM prompt and response bubbles');
       }
 
       // 更新执行位置（如果响应中包含）
-      if ((response as any).position) {
+      if (response.position) {
         const pos: CurrentPosition = {
-          phaseIndex: (response as any).position.phaseIndex || 0,
-          phaseId: (response as any).position.phaseId || '',
-          topicIndex: (response as any).position.topicIndex || 0,
-          topicId: (response as any).position.topicId || '',
-          actionIndex: (response as any).position.actionIndex || 0,
-          actionId: (response as any).position.actionId || '',
-          actionType: (response as any).position.actionType || '',
+          phaseIndex: response.position.phaseIndex || 0,
+          phaseId: response.position.phaseId || '',
+          topicIndex: response.position.topicIndex || 0,
+          topicId: response.position.topicId || '',
+          actionIndex: response.position.actionIndex || 0,
+          actionId: response.position.actionId || '',
+          actionType: response.position.actionType || '',
         };
         console.log('[DebugChat] Updating position from response:', pos);
         setCurrentPosition(pos);
@@ -466,12 +681,20 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               </span>
             )}
           </div>
-          <Button
-            type="text"
-            icon={<CloseOutlined />}
-            onClick={onClose}
-            className="debug-chat-close-btn"
-          />
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button
+              type="text"
+              icon={<SettingOutlined />}
+              onClick={() => setFilterModalVisible(true)}
+              title="调试输出选项"
+            />
+            <Button
+              type="text"
+              icon={<CloseOutlined />}
+              onClick={onClose}
+              className="debug-chat-close-btn"
+            />
+          </div>
         </div>
 
         {/* 错误提示 - 使用新的 ErrorBanner */}
@@ -503,21 +726,100 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             <div className="debug-chat-loading">
               <Spin tip="Loading conversation history..." />
             </div>
-          ) : messages.length === 0 ? (
+          ) : messages.length === 0 && debugBubbles.length === 0 ? (
             <Empty description="No messages yet" style={{ marginTop: 50 }} />
           ) : (
             <>
-              {messages.map((msg) => (
-                <div key={msg.messageId} className={`debug-message debug-message-${msg.role}`}>
-                  <div className="debug-message-header">
-                    <span className="debug-message-role">
-                      {msg.role === 'ai' ? 'AI' : msg.role === 'user' ? 'User' : 'System'}:
-                    </span>
-                    <span className="debug-message-time">{formatTimestamp(msg.timestamp)}</span>
-                  </div>
-                  <div className="debug-message-content">{msg.content}</div>
-                </div>
-              ))}
+              {(() => {
+                // 合并消息和气泡，按时间顺序排列
+                const items: Array<{type: 'message' | 'bubble', data: any, timestamp: string}> = [];
+                
+                // 添加消息
+                messages.forEach(msg => {
+                  items.push({
+                    type: 'message',
+                    data: msg,
+                    timestamp: msg.timestamp
+                  });
+                });
+                
+                // 添加气泡
+                debugBubbles.forEach(bubble => {
+                  // 根据过滤器过滤气泡
+                  if (bubble.type === 'error' && !debugFilter.showError) return;
+                  if (bubble.type === 'llm_prompt' && !debugFilter.showLLMPrompt) return;
+                  if (bubble.type === 'llm_response' && !debugFilter.showLLMResponse) return;
+                  if (bubble.type === 'variable' && !debugFilter.showVariable) return;
+                  if (bubble.type === 'execution_log' && !debugFilter.showExecutionLog) return;
+                  if (bubble.type === 'position' && !debugFilter.showPosition) return;
+                  
+                  items.push({
+                    type: 'bubble',
+                    data: bubble,
+                    timestamp: bubble.timestamp
+                  });
+                });
+                
+                // 按时间排序
+                items.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                
+                // 渲染
+                return items.map((item, index) => (
+                  <React.Fragment key={`${item.type}-${index}`}>
+                    {item.type === 'message' ? (
+                      <div className={`debug-message debug-message-${item.data.role}`}>
+                        <div className="debug-message-header">
+                          <span className="debug-message-role">
+                            {item.data.role === 'ai' ? 'AI' : item.data.role === 'user' ? 'User' : 'System'}:
+                          </span>
+                          <span className="debug-message-time">{formatTimestamp(item.data.timestamp)}</span>
+                        </div>
+                        <div className="debug-message-content">{item.data.content}</div>
+                      </div>
+                    ) : (
+                      <div style={{ margin: '8px 0' }}>
+                        {item.data.type === 'error' && (
+                          <ErrorBubble
+                            content={item.data.content as ErrorBubbleContent}
+                            isExpanded={item.data.isExpanded}
+                            timestamp={item.data.timestamp}
+                            onToggleExpand={() => toggleBubbleExpand(item.data.id)}
+                            onRestart={handleRestartFromError}
+                          />
+                        )}
+                        {item.data.type === 'variable' && (
+                          <VariableBubble
+                            content={item.data.content as VariableBubbleContent}
+                            isExpanded={item.data.isExpanded}
+                            timestamp={item.data.timestamp}
+                            actionId={item.data.actionId}
+                            onToggleExpand={() => toggleBubbleExpand(item.data.id)}
+                          />
+                        )}
+                        {item.data.type === 'llm_prompt' && (
+                          <LLMPromptBubble
+                            content={item.data.content as LLMPromptBubbleContent}
+                            isExpanded={item.data.isExpanded}
+                            timestamp={item.data.timestamp}
+                            actionId={item.data.actionId}
+                            onToggleExpand={() => toggleBubbleExpand(item.data.id)}
+                          />
+                        )}
+                        {item.data.type === 'llm_response' && (
+                          <LLMResponseBubble
+                            content={item.data.content as LLMResponseBubbleContent}
+                            isExpanded={item.data.isExpanded}
+                            timestamp={item.data.timestamp}
+                            actionId={item.data.actionId}
+                            onToggleExpand={() => toggleBubbleExpand(item.data.id)}
+                          />
+                        )}
+                        {/* TODO: 添加其他类型气泡 (ExecutionLog, Position) */}
+                      </div>
+                    )}
+                  </React.Fragment>
+                ));
+              })()}
               <div ref={messagesEndRef} />
             </>
           )}
@@ -554,6 +856,16 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             onClose={() => setShowErrorDetail(false)}
           />
         )}
+
+        {/* 调试输出过滤器弹窗 */}
+        <DebugFilterModal
+          visible={filterModalVisible}
+          filter={debugFilter}
+          onFilterChange={handleFilterChange}
+          onClose={() => setFilterModalVisible(false)}
+          onExpandAll={handleExpandAll}
+          onCollapseAll={handleCollapseAll}
+        />
       </div>
     </div>
   );

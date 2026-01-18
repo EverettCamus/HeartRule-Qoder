@@ -89,6 +89,7 @@ const ProjectEditor: React.FC = () => {
   const [debugPanelVisible, setDebugPanelVisible] = useState(false);
   const [debugSessionId, setDebugSessionId] = useState<string | null>(null);
   const [debugInitialMessage, setDebugInitialMessage] = useState<string>('');
+  const [debugInitialDebugInfo, setDebugInitialDebugInfo] = useState<any>(null);
 
   // 可视化编辑相关状态
   const [editMode, setEditMode] = useState<'yaml' | 'visual'>('yaml'); // 编辑模式：YAML/可视化
@@ -2310,9 +2311,10 @@ const ProjectEditor: React.FC = () => {
         visible={debugConfigVisible}
         currentProject={project}
         sessionFiles={files.filter((f) => f.fileType === 'session')}
-        onStart={(sessionId, aiMessage) => {
+        onStart={(sessionId, aiMessage, debugInfo) => {
           setDebugSessionId(sessionId);
           setDebugInitialMessage(aiMessage);
+          setDebugInitialDebugInfo(debugInfo);
           setDebugConfigVisible(false);
           setDebugPanelVisible(true);
         }}
@@ -2324,10 +2326,12 @@ const ProjectEditor: React.FC = () => {
         visible={debugPanelVisible}
         sessionId={debugSessionId}
         initialMessage={debugInitialMessage}
+        initialDebugInfo={debugInitialDebugInfo}
         onClose={() => {
           setDebugPanelVisible(false);
           setDebugSessionId(null);
           setDebugInitialMessage('');
+          setDebugInitialDebugInfo(null);
         }}
       />
     </Layout>

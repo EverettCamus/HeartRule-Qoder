@@ -6,6 +6,7 @@
 
 import { BaseAction } from './base-action.js';
 import type { ActionContext, ActionResult } from './base-action.js';
+import type { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
 
 interface ValidationRule {
   required?: boolean;
@@ -18,10 +19,12 @@ interface ValidationRule {
 
 export class AiAskAction extends BaseAction {
   static actionType = 'ai_ask';
+  private llmOrchestrator?: LLMOrchestrator;
 
-  constructor(actionId: string, config: Record<string, any>) {
+  constructor(actionId: string, config: Record<string, any>, llmOrchestrator?: LLMOrchestrator) {
     super(actionId, config);
     this.maxRounds = config.max_rounds || config.maxRounds || 3;
+    this.llmOrchestrator = llmOrchestrator;
   }
 
   async execute(context: ActionContext, userInput?: string | null): Promise<ActionResult> {
@@ -62,13 +65,44 @@ export class AiAskAction extends BaseAction {
 
       // 第一轮：发送问题
       if (this.currentRound === 0) {
-        const question = this.substituteVariables(questionTemplate, context);
+        let question = this.substituteVariables(questionTemplate, context);
+        let debugInfo;
+        
+        // ai_ask 默认使用 LLM 生成更自然的问题
+        if (this.llmOrchestrator) {
+          console.log(`[AiAskAction] 🤖 Using LLM to generate natural question`);
+          
+          // 构造 LLM 提示词
+          const systemPrompt = `你是一位专业的心理咨询师，请将以下内容改写为更自然、更温暖的提问方式，保持原意不变。`;
+          const userPrompt = `请改写：${question}`;
+          
+          try {
+            const result = await this.llmOrchestrator.generateText(
+              `${systemPrompt}\n\n${userPrompt}`,
+              {
+                temperature: 0.7,
+                maxTokens: 500,
+              }
+            );
+            
+            question = result.text;
+            debugInfo = result.debugInfo;
+            console.log(`[AiAskAction] ✅ LLM generated: ${question.substring(0, 50)}...`);
+          } catch (error: any) {
+            console.error(`[AiAskAction] ❌ LLM generation failed:`, error);
+            // 失败时使用原内容
+          }
+        } else {
+          console.warn(`[AiAskAction] ⚠️ LLMOrchestrator not available, using template content directly`);
+        }
+        
         this.currentRound += 1;
 
         return {
           success: true,
           completed: false, // 等待用户回答
           aiMessage: question,
+          debugInfo,  // 传递 LLM 调试信息
           metadata: {
             actionType: AiAskAction.actionType,
             waitingFor: 'answer',

@@ -36,6 +36,29 @@ export async function registerSessionRoutes(app: FastifyInstance) {
               createdAt: { type: 'string' },
               aiMessage: { type: 'string' },
               executionStatus: { type: 'string' },
+              position: { type: 'object', additionalProperties: true },
+              debugInfo: {
+                type: 'object',
+                properties: {
+                  prompt: { type: 'string' },
+                  response: { type: 'object', additionalProperties: true },
+                  model: { type: 'string' },
+                  config: { type: 'object', additionalProperties: true },
+                  timestamp: { type: 'string' },
+                  tokensUsed: { type: 'number' },
+                },
+              },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  type: { type: 'string' },
+                  message: { type: 'string' },
+                  details: { type: 'string' },
+                  context: { type: 'object' },
+                  recovery: { type: 'object' },
+                },
+              },
             },
           },
         },
@@ -88,19 +111,26 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           {
             aiMessage: initResult.aiMessage,
             executionStatus: initResult.executionStatus,
+            hasError: !!initResult.error,
             fullResult: initResult,
           },
           'Session initialized'
         );
 
-        const responseData = {
+        const responseData: any = {
           sessionId,
           status: 'active',
           createdAt: now.toISOString(),
           aiMessage: initResult.aiMessage,
           executionStatus: initResult.executionStatus,
           position: initResult.position,
+          debugInfo: initResult.debugInfo, // 添加 LLM 调试信息
         };
+
+        // 如果有错误信息，添加到响应中
+        if (initResult.error) {
+          responseData.error = initResult.error;
+        }
 
         app.log.info({ responseData }, 'Returning response');
 
@@ -340,6 +370,55 @@ export async function registerSessionRoutes(app: FastifyInstance) {
                   actionType: { type: 'string' },
                 },
               },
+              debugInfo: {
+                type: 'object',
+                properties: {
+                  prompt: { type: 'string' },
+                  response: { type: 'object', additionalProperties: true },
+                  model: { type: 'string' },
+                  config: { type: 'object', additionalProperties: true },
+                  timestamp: { type: 'string' },
+                  tokensUsed: { type: 'number' },
+                },
+              },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  type: { type: 'string' },
+                  message: { type: 'string' },
+                  details: { type: 'string' },
+                  context: {
+                    type: 'object',
+                    properties: {
+                      scriptId: { type: 'string' },
+                      scriptName: { type: 'string' },
+                      sessionId: { type: 'string' },
+                      timestamp: { type: 'string' },
+                      position: {
+                        type: 'object',
+                        properties: {
+                          phaseIndex: { type: 'number' },
+                          phaseId: { type: 'string' },
+                          topicIndex: { type: 'number' },
+                          topicId: { type: 'string' },
+                          actionIndex: { type: 'number' },
+                          actionId: { type: 'string' },
+                          actionType: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                  recovery: {
+                    type: 'object',
+                    properties: {
+                      canRetry: { type: 'boolean' },
+                      retryAction: { type: 'string' },
+                      suggestion: { type: 'string' },
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -378,17 +457,26 @@ export async function registerSessionRoutes(app: FastifyInstance) {
             sessionId: id,
             hasPosition: !!result.position,
             position: result.position,
+            hasError: !!result.error,
           },
-          'Sending response with position'
+          'Sending response with position and error'
         );
 
-        return {
+        const response: any = {
           aiMessage: result.aiMessage,
           sessionStatus: result.sessionStatus,
           executionStatus: result.executionStatus,
           variables: result.variables,
           position: result.position,
+          debugInfo: result.debugInfo, // 添加 LLM 调试信息
         };
+
+        // 如果有错误信息，添加到响应中
+        if (result.error) {
+          response.error = result.error;
+        }
+
+        return response;
       } catch (error) {
         logError(app.log, error, { sessionId: id, userInput: content });
         return sendErrorResponse(reply, error, {

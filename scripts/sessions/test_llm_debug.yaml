@@ -1,0 +1,22 @@
+session:
+  session_id: test_llm_debug
+  session_name: "LLM调试信息测试会话"
+  phases:
+    - phase_id: test_phase
+      phase_name: "测试阶段"
+      topics:
+        - topic_id: test_topic
+          topic_name: "测试话题"
+          actions:
+            - action_id: action_1
+              action_type: ai_say
+              config:
+                content: "欢迎来到游心谷心理咨询服务"
+                require_acknowledgment: false
+            
+            - action_id: action_2
+              action_type: ai_ask
+              config:
+                prompt_template: "请问您希望如何称呼您？"
+                target_variable: "user_name"
+                required: true

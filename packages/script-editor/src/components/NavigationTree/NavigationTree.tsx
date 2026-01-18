@@ -36,7 +36,7 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentP
     let foundCurrentAction = false;
 
     // 通过 actionId 查找对应的 Phase 和 Topic，并标记已执行的 Action
-    const newExecutedActions = new Set<string>(executedActions);
+    const newExecutedActions = new Set<string>();
 
     for (const phase of tree.phases) {
       for (const topic of phase.topics) {
@@ -83,7 +83,7 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentP
         }
       }, 300);
     }
-  }, [currentPosition, tree, executedActions]);
+  }, [currentPosition, tree]);
 
   if (!tree) {
     return <div style={{ padding: '16px', color: '#999' }}>No script loaded</div>;
@@ -126,6 +126,50 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentP
     return '○'; // 未执行
   };
 
+  const getActionStatus = (action: ActionNode): string => {
+    if (currentPosition && action.actionId === currentPosition.actionId) {
+      return '执行中';
+    }
+    if (executedActions.has(action.actionId)) {
+      return '已执行';
+    }
+    if (action.status === 'error') {
+      return '错误';
+    }
+    return '未执行';
+  };
+
+  const getActionTooltip = (action: ActionNode): string => {
+    const status = getActionStatus(action);
+    const lines = [
+      `Action ID: ${action.actionId}`,
+      `类型: ${action.actionType}`,
+      `状态: ${status}`,
+    ];
+
+    // 如果有配置摘要信息，添加到 Tooltip
+    if (action.config && typeof action.config === 'object') {
+      // ai_say 或 ai_think 的提示词
+      if (action.config.content_template) {
+        const content = String(action.config.content_template);
+        const preview = content.substring(0, 50);
+        lines.push(`提示词: "${preview}${content.length > 50 ? '...' : ''}"`);
+      }
+      // ai_ask 的问题模板
+      if (action.config.question_template) {
+        const question = String(action.config.question_template);
+        const preview = question.substring(0, 50);
+        lines.push(`问题: "${preview}${question.length > 50 ? '...' : ''}"`);
+      }
+      // 变量提取目标
+      if (action.config.target_variable) {
+        lines.push(`变量提取: ${action.config.target_variable}`);
+      }
+    }
+
+    return lines.join('\n');
+  };
+
   const getActionStyle = (action: ActionNode): React.CSSProperties => {
     const isExecuting = currentPosition && action.actionId === currentPosition.actionId;
     return {
@@ -149,7 +193,7 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentP
           ...getActionStyle(action),
           transition: 'all 0.3s ease',
         }}
-        title={`${action.actionType}: ${action.actionId}`}
+        title={getActionTooltip(action)}
       >
         <span style={{ marginRight: '8px' }}>{getActionIcon(action)}</span>
         Action: {action.actionId}

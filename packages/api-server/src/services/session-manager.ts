@@ -6,12 +6,14 @@
 
 import { ScriptExecutor, ExecutionStatus } from '@heartrule/core-engine';
 import type { ExecutionState } from '@heartrule/core-engine';
+import type { DetailedApiError } from '@heartrule/shared-types';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
 
 import { db } from '../db/index.js';
 import { sessions, messages, scripts, variables, type NewVariable } from '../db/schema.js';
+import { buildDetailedError } from '../utils/error-handler.js';
 
 /**
  * 会话管理器
@@ -82,6 +84,8 @@ export class SessionManager {
       actionId: string;
       actionType: string;
     };
+    debugInfo?: any; // LLM调试信息
+    error?: DetailedApiError;
   }> {
     console.log('[SessionManager] 🔵 initializeSession called', { sessionId });
 
@@ -116,118 +120,138 @@ export class SessionManager {
       contentLength: script.scriptContent.length,
     });
 
-    // 创建初始执行状态
-    let executionState: ExecutionState = ScriptExecutor.createInitialState();
-    executionState.variables = (session.variables as Record<string, unknown>) || {};
-    console.log('[SessionManager] 📋 Initial execution state:', {
-      status: executionState.status,
-      phaseIdx: executionState.currentPhaseIdx,
-      topicIdx: executionState.currentTopicIdx,
-      actionIdx: executionState.currentActionIdx,
-      variables: executionState.variables,
-    });
-
-    // 转换 YAML 为 JSON
-    const scriptContent = yaml.parse(script.scriptContent);
-    const scriptJson = JSON.stringify(scriptContent);
-    console.log('[SessionManager] 📄 Parsed YAML script:', {
-      sessionId: scriptContent.session?.session_id,
-      sessionName: scriptContent.session?.session_name,
-      phasesCount: scriptContent.session?.phases?.length || 0,
-      firstPhase: scriptContent.session?.phases?.[0]?.phase_name,
-      firstTopic: scriptContent.session?.phases?.[0]?.topics?.[0]?.topic_name,
-      actionsCount: scriptContent.session?.phases?.[0]?.topics?.[0]?.actions?.length || 0,
-    });
-
-    // 执行脚本（初始化，没有用户输入）
-    console.log('[SessionManager] ⏳ Executing script (initialization)...');
-    executionState = await this.scriptExecutor.executeSession(
-      scriptJson,
-      sessionId,
-      executionState,
-      null
-    );
-    console.log('[SessionManager] ✅ Script execution completed:', {
-      status: executionState.status,
-      phaseIdx: executionState.currentPhaseIdx,
-      topicIdx: executionState.currentTopicIdx,
-      actionIdx: executionState.currentActionIdx,
-      lastAiMessage: executionState.lastAiMessage,
-      hasMessage: !!executionState.lastAiMessage,
-    });
-
-    // 保存所有新增的 AI 消息（从 conversationHistory）
-    const aiMessages = executionState.conversationHistory.filter((msg) => msg.role === 'assistant');
-
-    if (aiMessages.length > 0) {
-      console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s) (init):`, {
-        messages: aiMessages.map((m) => ({
-          actionId: m.actionId,
-          content: m.content.substring(0, 50),
-        })),
+    try {
+      // 创建初始执行状态
+      let executionState: ExecutionState = ScriptExecutor.createInitialState();
+      executionState.variables = (session.variables as Record<string, unknown>) || {};
+      console.log('[SessionManager] 📋 Initial execution state:', {
+        status: executionState.status,
+        phaseIdx: executionState.currentPhaseIdx,
+        topicIdx: executionState.currentTopicIdx,
+        actionIdx: executionState.currentActionIdx,
+        variables: executionState.variables,
       });
 
-      // 批量保存所有 AI 消息
-      for (const msg of aiMessages) {
-        const aiMessageId = uuidv4();
-        await db.insert(messages).values({
-          id: aiMessageId,
-          sessionId,
-          role: 'assistant',
-          content: msg.content,
-          actionId: msg.actionId,
-          metadata: msg.metadata || {},
-          timestamp: new Date(),
+      // 转换 YAML 为 JSON
+      const scriptContent = yaml.parse(script.scriptContent);
+      const scriptJson = JSON.stringify(scriptContent);
+      console.log('[SessionManager] 📄 Parsed YAML script:', {
+        sessionId: scriptContent.session?.session_id,
+        sessionName: scriptContent.session?.session_name,
+        phasesCount: scriptContent.session?.phases?.length || 0,
+        firstPhase: scriptContent.session?.phases?.[0]?.phase_name,
+        firstTopic: scriptContent.session?.phases?.[0]?.topics?.[0]?.topic_name,
+        actionsCount: scriptContent.session?.phases?.[0]?.topics?.[0]?.actions?.length || 0,
+      });
+
+      // 执行脚本（初始化，没有用户输入）
+      console.log('[SessionManager] ⏳ Executing script (initialization)...');
+      executionState = await this.scriptExecutor.executeSession(
+        scriptJson,
+        sessionId,
+        executionState,
+        null
+      );
+      console.log('[SessionManager] ✅ Script execution completed:', {
+        status: executionState.status,
+        phaseIdx: executionState.currentPhaseIdx,
+        topicIdx: executionState.currentTopicIdx,
+        actionIdx: executionState.currentActionIdx,
+        lastAiMessage: executionState.lastAiMessage,
+        hasMessage: !!executionState.lastAiMessage,
+      });
+
+      // 保存所有新增的 AI 消息（从 conversationHistory）
+      const aiMessages = executionState.conversationHistory.filter((msg) => msg.role === 'assistant');
+
+      if (aiMessages.length > 0) {
+        console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s) (init):`, {
+          messages: aiMessages.map((m) => ({
+            actionId: m.actionId,
+            content: m.content.substring(0, 50),
+          })),
         });
+
+        // 批量保存所有 AI 消息
+        for (const msg of aiMessages) {
+          const aiMessageId = uuidv4();
+          await db.insert(messages).values({
+            id: aiMessageId,
+            sessionId,
+            role: 'assistant',
+            content: msg.content,
+            actionId: msg.actionId,
+            metadata: msg.metadata || {},
+            timestamp: new Date(),
+          });
+        }
+      } else {
+        console.log('[SessionManager] ⚠️ No AI messages to save (init)');
       }
-    } else {
-      console.log('[SessionManager] ⚠️ No AI messages to save (init)');
-    }
 
-    // 在更新 sessions 之前，记录变量变化快照
-    const previousVars = (session.variables as Record<string, unknown> | null) || null;
-    const newVars = (executionState.variables || {}) as Record<string, unknown>;
+      // 在更新 sessions 之前，记录变量变化快照
+      const previousVars = (session.variables as Record<string, unknown> | null) || null;
+      const newVars = (executionState.variables || {}) as Record<string, unknown>;
 
-    const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
-    if (snapshots.length > 0) {
-      console.log('[SessionManager] 💾 Saving variable snapshots (init):', snapshots.length);
-      await db.insert(variables).values(snapshots);
-    }
+      const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
+      if (snapshots.length > 0) {
+        console.log('[SessionManager] 💾 Saving variable snapshots (init):', snapshots.length);
+        await db.insert(variables).values(snapshots);
+      }
 
-    // 更新会话状态
-    console.log('[SessionManager] 💾 Updating session state in DB (init)');
-    await db
-      .update(sessions)
-      .set({
+      // 更新会话状态
+      console.log('[SessionManager] 💾 Updating session state in DB (init)');
+      await db
+        .update(sessions)
+        .set({
+          position: {
+            phaseIndex: executionState.currentPhaseIdx,
+            topicIndex: executionState.currentTopicIdx,
+            actionIndex: executionState.currentActionIdx,
+          },
+          variables: executionState.variables,
+          executionStatus: executionState.status,
+          metadata: executionState.metadata,
+          updatedAt: new Date(),
+        })
+        .where(eq(sessions.id, sessionId));
+
+      const result = {
+        aiMessage: executionState.lastAiMessage || '',
+        sessionStatus: session.status,
+        executionStatus: executionState.status,
+        variables: executionState.variables,
+        debugInfo: executionState.lastLLMDebugInfo, // 添加LLM调试信息
         position: {
           phaseIndex: executionState.currentPhaseIdx,
+          phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
           topicIndex: executionState.currentTopicIdx,
+          topicId: executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`,
           actionIndex: executionState.currentActionIdx,
+          actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
+          actionType: executionState.currentActionType || 'unknown',
         },
-        variables: executionState.variables,
-        executionStatus: executionState.status,
-        metadata: executionState.metadata,
-        updatedAt: new Date(),
-      })
-      .where(eq(sessions.id, sessionId));
+      };
+      console.log('[SessionManager] 🏁 initializeSession completed:', result);
+      return result;
+    } catch (error) {
+      console.error('[SessionManager] ❌ Error during initialization:', error);
+      
+      // 构建详细错误信息
+      const detailedError = buildDetailedError(error, {
+        scriptId: script.id,
+        scriptName: script.scriptName,
+        sessionId: sessionId,
+      });
 
-    const result = {
-      aiMessage: executionState.lastAiMessage || '',
-      sessionStatus: session.status,
-      executionStatus: executionState.status,
-      variables: executionState.variables,
-      position: {
-        phaseIndex: executionState.currentPhaseIdx,
-        phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
-        topicIndex: executionState.currentTopicIdx,
-        topicId: executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`,
-        actionIndex: executionState.currentActionIdx,
-        actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
-        actionType: executionState.currentActionType || 'unknown',
-      },
-    };
-    console.log('[SessionManager] 🏁 initializeSession completed:', result);
-    return result;
+      // 返回错误信息（而不是抛出异常）
+      return {
+        aiMessage: '',
+        sessionStatus: session.status,
+        executionStatus: ExecutionStatus.ERROR,
+        error: detailedError,
+      };
+    }
   }
 
   /**
@@ -250,6 +274,8 @@ export class SessionManager {
       actionId: string;
       actionType: string;
     };
+    debugInfo?: any; // LLM调试信息
+    error?: DetailedApiError;
   }> {
     console.log('[SessionManager] 🔵 processUserInput called', { sessionId, userInput });
 
@@ -298,117 +324,142 @@ export class SessionManager {
       timestamp: new Date(),
     });
 
-    // 恢复执行状态
-    let executionState: ExecutionState = {
-      status: (session.executionStatus as ExecutionStatus) || ExecutionStatus.RUNNING,
-      currentPhaseIdx: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
-      currentTopicIdx: ((session.position as Record<string, unknown>)?.topicIndex as number) || 0,
-      currentActionIdx: ((session.position as Record<string, unknown>)?.actionIndex as number) || 0,
-      currentAction: null, // 会在执行器中重建
-      variables: (session.variables as Record<string, unknown>) || {},
-      conversationHistory: [],
-      metadata: (session.metadata as Record<string, unknown>) || {},
-      lastAiMessage: null,
-    };
-    console.log('[SessionManager] 📋 Restored execution state:', {
-      status: executionState.status,
-      phaseIdx: executionState.currentPhaseIdx,
-      topicIdx: executionState.currentTopicIdx,
-      actionIdx: executionState.currentActionIdx,
-    });
-
-    // 转换 YAML 为 JSON
-    const scriptContent = yaml.parse(script.scriptContent);
-    const scriptJson = JSON.stringify(scriptContent);
-
-    // 执行脚本（传入用户输入）
-    console.log('[SessionManager] ⏳ Executing script with user input...');
-    executionState = await this.scriptExecutor.executeSession(
-      scriptJson,
-      sessionId,
-      executionState,
-      userInput
-    );
-    console.log('[SessionManager] ✅ Script execution completed:', {
-      status: executionState.status,
-      phaseIdx: executionState.currentPhaseIdx,
-      topicIdx: executionState.currentTopicIdx,
-      actionIdx: executionState.currentActionIdx,
-      lastAiMessage: executionState.lastAiMessage,
-      hasMessage: !!executionState.lastAiMessage,
-    });
-
-    // 保存所有新增的 AI 消息（从 conversationHistory）
-    const aiMessages = executionState.conversationHistory.filter((msg) => msg.role === 'assistant');
-
-    if (aiMessages.length > 0) {
-      console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s):`, {
-        messages: aiMessages.map((m) => ({
-          actionId: m.actionId,
-          content: m.content.substring(0, 50),
-        })),
+    try {
+      // 恢复执行状态
+      let executionState: ExecutionState = {
+        status: (session.executionStatus as ExecutionStatus) || ExecutionStatus.RUNNING,
+        currentPhaseIdx: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
+        currentTopicIdx: ((session.position as Record<string, unknown>)?.topicIndex as number) || 0,
+        currentActionIdx: ((session.position as Record<string, unknown>)?.actionIndex as number) || 0,
+        currentAction: null, // 会在执行器中重建
+        variables: (session.variables as Record<string, unknown>) || {},
+        conversationHistory: [],
+        metadata: (session.metadata as Record<string, unknown>) || {},
+        lastAiMessage: null,
+      };
+      console.log('[SessionManager] 📋 Restored execution state:', {
+        status: executionState.status,
+        phaseIdx: executionState.currentPhaseIdx,
+        topicIdx: executionState.currentTopicIdx,
+        actionIdx: executionState.currentActionIdx,
       });
 
-      // 批量保存所有 AI 消息
-      for (const msg of aiMessages) {
-        const aiMessageId = uuidv4();
-        await db.insert(messages).values({
-          id: aiMessageId,
-          sessionId,
-          role: 'assistant',
-          content: msg.content,
-          actionId: msg.actionId,
-          metadata: msg.metadata || {},
-          timestamp: new Date(),
+      // 转换 YAML 为 JSON
+      const scriptContent = yaml.parse(script.scriptContent);
+      const scriptJson = JSON.stringify(scriptContent);
+
+      // 执行脚本（传入用户输入）
+      console.log('[SessionManager] ⏳ Executing script with user input...');
+      executionState = await this.scriptExecutor.executeSession(
+        scriptJson,
+        sessionId,
+        executionState,
+        userInput
+      );
+      console.log('[SessionManager] ✅ Script execution completed:', {
+        status: executionState.status,
+        phaseIdx: executionState.currentPhaseIdx,
+        topicIdx: executionState.currentTopicIdx,
+        actionIdx: executionState.currentActionIdx,
+        lastAiMessage: executionState.lastAiMessage,
+        hasMessage: !!executionState.lastAiMessage,
+      });
+
+      // 保存所有新增的 AI 消息（从 conversationHistory）
+      const aiMessages = executionState.conversationHistory.filter((msg) => msg.role === 'assistant');
+
+      if (aiMessages.length > 0) {
+        console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s):`, {
+          messages: aiMessages.map((m) => ({
+            actionId: m.actionId,
+            content: m.content.substring(0, 50),
+          })),
         });
+
+        // 批量保存所有 AI 消息
+        for (const msg of aiMessages) {
+          const aiMessageId = uuidv4();
+          await db.insert(messages).values({
+            id: aiMessageId,
+            sessionId,
+            role: 'assistant',
+            content: msg.content,
+            actionId: msg.actionId,
+            metadata: msg.metadata || {},
+            timestamp: new Date(),
+          });
+        }
+      } else {
+        console.log('[SessionManager] ⚠️ No AI messages to save');
       }
-    } else {
-      console.log('[SessionManager] ⚠️ No AI messages to save');
-    }
 
-    // 在更新 sessions 之前，记录变量变化快照
-    const previousVars = (session.variables as Record<string, unknown> | null) || null;
-    const newVars = (executionState.variables || {}) as Record<string, unknown>;
+      // 在更新 sessions 之前，记录变量变化快照
+      const previousVars = (session.variables as Record<string, unknown> | null) || null;
+      const newVars = (executionState.variables || {}) as Record<string, unknown>;
 
-    const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
-    if (snapshots.length > 0) {
-      console.log('[SessionManager] 💾 Saving variable snapshots:', snapshots.length);
-      await db.insert(variables).values(snapshots);
-    }
+      const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
+      if (snapshots.length > 0) {
+        console.log('[SessionManager] 💾 Saving variable snapshots:', snapshots.length);
+        await db.insert(variables).values(snapshots);
+      }
 
-    // 更新会话状态
-    console.log('[SessionManager] 💾 Updating session state in DB');
-    await db
-      .update(sessions)
-      .set({
+      // 更新会话状态
+      console.log('[SessionManager] 💾 Updating session state in DB');
+      await db
+        .update(sessions)
+        .set({
+          position: {
+            phaseIndex: executionState.currentPhaseIdx,
+            topicIndex: executionState.currentTopicIdx,
+            actionIndex: executionState.currentActionIdx,
+          },
+          variables: executionState.variables,
+          executionStatus: executionState.status,
+          metadata: executionState.metadata,
+          updatedAt: new Date(),
+        })
+        .where(eq(sessions.id, sessionId));
+
+      const result = {
+        aiMessage: executionState.lastAiMessage || '',
+        sessionStatus: session.status,
+        executionStatus: executionState.status,
+        variables: executionState.variables,
+        debugInfo: executionState.lastLLMDebugInfo, // 添加LLM调试信息
         position: {
           phaseIndex: executionState.currentPhaseIdx,
+          phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
           topicIndex: executionState.currentTopicIdx,
+          topicId: executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`,
           actionIndex: executionState.currentActionIdx,
+          actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
+          actionType: executionState.currentActionType || 'unknown',
         },
-        variables: executionState.variables,
-        executionStatus: executionState.status,
-        metadata: executionState.metadata,
-        updatedAt: new Date(),
-      })
-      .where(eq(sessions.id, sessionId));
+      };
+      console.log('[SessionManager] 🏁 processUserInput completed:', result);
+      return result;
+    } catch (error) {
+      console.error('[SessionManager] ❌ Error during user input processing:', error);
+      
+      // 构建详细错误信息
+      const detailedError = buildDetailedError(error, {
+        scriptId: script.id,
+        scriptName: script.scriptName,
+        sessionId: sessionId,
+        position: {
+          phaseIndex: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
+          topicIndex: ((session.position as Record<string, unknown>)?.topicIndex as number) || 0,
+          actionIndex: ((session.position as Record<string, unknown>)?.actionIndex as number) || 0,
+        },
+      });
 
-    const result = {
-      aiMessage: executionState.lastAiMessage || '',
-      sessionStatus: session.status,
-      executionStatus: executionState.status,
-      variables: executionState.variables,
-      position: {
-        phaseIndex: executionState.currentPhaseIdx,
-        phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
-        topicIndex: executionState.currentTopicIdx,
-        topicId: executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`,
-        actionIndex: executionState.currentActionIdx,
-        actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
-        actionType: executionState.currentActionType || 'unknown',
-      },
-    };
-    console.log('[SessionManager] 🏁 processUserInput completed:', result);
-    return result;
+      // 返回错误信息（而不是抛出异常）
+      return {
+        aiMessage: '',
+        sessionStatus: session.status,
+        executionStatus: ExecutionStatus.ERROR,
+        error: detailedError,
+      };
+    }
   }
 }

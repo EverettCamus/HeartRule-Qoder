@@ -2,6 +2,26 @@ import { generateText, streamText } from 'ai';
 import type { LanguageModel } from 'ai';
 
 /**
+ * LLM调试信息
+ */
+export interface LLMDebugInfo {
+  prompt: string;           // 完整的提示词
+  response: any;            // 原始响应（JSON格式）
+  model: string;            // 使用的模型
+  config: Partial<LLMConfig>; // LLM配置
+  timestamp: string;        // 调用时间
+  tokensUsed?: number;      // 使用的token数
+}
+
+/**
+ * LLM生成结果（包含调试信息）
+ */
+export interface LLMGenerateResult {
+  text: string;             // 生成的文本
+  debugInfo: LLMDebugInfo;  // 调试信息
+}
+
+/**
  * LLM配置
  */
 export interface LLMConfig {
@@ -18,7 +38,7 @@ export interface LLMConfig {
  */
 export interface LLMProvider {
   getModel(): LanguageModel;
-  generateText(prompt: string, config?: Partial<LLMConfig>): Promise<string>;
+  generateText(prompt: string, config?: Partial<LLMConfig>): Promise<LLMGenerateResult>;
   streamText(prompt: string, config?: Partial<LLMConfig>): AsyncIterable<string>;
 }
 
@@ -61,7 +81,7 @@ export class LLMOrchestrator {
     prompt: string,
     config?: Partial<LLMConfig>,
     providerName?: string
-  ): Promise<string> {
+  ): Promise<LLMGenerateResult> {
     const provider = this.getProvider(providerName);
     return provider.generateText(prompt, config);
   }
@@ -134,7 +154,7 @@ export class LLMOrchestrator {
     prompts: string[],
     config?: Partial<LLMConfig>,
     providerName?: string
-  ): Promise<string[]> {
+  ): Promise<LLMGenerateResult[]> {
     const provider = this.getProvider(providerName);
     return Promise.all(prompts.map((prompt) => provider.generateText(prompt, config)));
   }
@@ -159,9 +179,10 @@ export abstract class BaseLLMProvider implements LLMProvider {
 
   abstract getModel(): LanguageModel;
 
-  async generateText(prompt: string, config?: Partial<LLMConfig>): Promise<string> {
+  async generateText(prompt: string, config?: Partial<LLMConfig>): Promise<LLMGenerateResult> {
     const model = this.getModel();
     const mergedConfig = { ...this.config, ...config };
+    const timestamp = new Date().toISOString();
 
     const result = await generateText({
       model,
@@ -173,7 +194,26 @@ export abstract class BaseLLMProvider implements LLMProvider {
       presencePenalty: mergedConfig.presencePenalty,
     });
 
-    return result.text;
+    // 构建调试信息
+    const debugInfo: LLMDebugInfo = {
+      prompt,
+      response: {
+        text: result.text,
+        finishReason: result.finishReason,
+        usage: result.usage,
+        // 完整的响应对象
+        raw: result,
+      },
+      model: mergedConfig.model,
+      config: mergedConfig,
+      timestamp,
+      tokensUsed: result.usage?.totalTokens,
+    };
+
+    return {
+      text: result.text,
+      debugInfo,
+    };
   }
 
   async *streamText(prompt: string, config?: Partial<LLMConfig>): AsyncIterable<string> {

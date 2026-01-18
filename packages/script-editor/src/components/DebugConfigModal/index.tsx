@@ -10,7 +10,7 @@ interface DebugConfigModalProps {
   visible: boolean;
   currentProject: Project | null;
   sessionFiles: ScriptFile[];
-  onStart: (sessionId: string, aiMessage: string) => void;
+  onStart: (sessionId: string, aiMessage: string, debugInfo?: any) => void;
   onCancel: () => void;
 }
 
@@ -127,8 +127,10 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
         console.log('[DebugConfig] 🎉 Calling onStart callback with:', {
           sessionId: sessionResult.sessionId,
           aiMessage: sessionResult.aiMessage || '',
+          hasDebugInfo: !!sessionResult.debugInfo,
+          debugInfo: sessionResult.debugInfo,
         });
-        onStart(sessionResult.sessionId, sessionResult.aiMessage || '');
+        onStart(sessionResult.sessionId, sessionResult.aiMessage || '', sessionResult.debugInfo);
       } catch (apiError: any) {
         console.error('[DebugConfig] ❌ API Error:', {
           error: apiError,

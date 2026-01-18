@@ -4,6 +4,8 @@
  * 参照 Python 版本: legacy-python/src/actions/base.py
  */
 
+import type { LLMDebugInfo } from '../engines/llm-orchestration/orchestrator.js';
+
 export interface ActionContext {
   sessionId: string;
   phaseId: string;
@@ -27,6 +29,7 @@ export interface ActionResult {
   nextAction?: string | null; // 下一个要执行的Action ID
   error?: string | null; // 错误信息
   metadata?: Record<string, any>; // 额外元数据
+  debugInfo?: LLMDebugInfo; // LLM调试信息（可选）
 }
 
 /**

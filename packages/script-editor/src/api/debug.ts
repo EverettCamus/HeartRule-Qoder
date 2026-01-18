@@ -10,6 +10,31 @@ export interface DebugSession {
   createdAt: string;
   aiMessage: string;
   executionStatus: string;
+  position?: ExecutionPosition;
+  debugInfo?: {
+    prompt: string;
+    response: {
+      text: string;
+      finishReason: string;
+      usage: {
+        completionTokens: number;
+        promptTokens: number;
+        totalTokens: number;
+      };
+      raw: any;
+    };
+    model: string;
+    config: {
+      temperature: number;
+      maxTokens: number;
+      topP: number;
+      frequencyPenalty: number;
+      presencePenalty: number;
+      model: string;
+    };
+    timestamp: string;
+    tokensUsed: number;
+  };
 }
 
 export interface DebugMessage {
@@ -50,6 +75,32 @@ export interface DebugMessageResponse {
   sessionStatus: string;
   executionStatus: string;
   variables?: Record<string, unknown>;
+  position?: ExecutionPosition;
+  debugInfo?: {
+    prompt: string;
+    response: {
+      text: string;
+      finishReason: string;
+      usage: {
+        completionTokens: number;
+        promptTokens: number;
+        totalTokens: number;
+      };
+      raw: any;
+    };
+    model: string;
+    config: {
+      temperature: number;
+      maxTokens: number;
+      topP: number;
+      frequencyPenalty: number;
+      presencePenalty: number;
+      model: string;
+    };
+    timestamp: string;
+    tokensUsed: number;
+  };
+  error?: any;
 }
 
 export interface CreateDebugSessionRequest {

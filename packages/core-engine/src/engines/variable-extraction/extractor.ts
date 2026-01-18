@@ -165,10 +165,10 @@ export class VariableExtractor {
 
       // TODO: 使用streamObject进行结构化提取
       // 当前返回简化实现
-      const response = await this.llmOrchestrator.generateText(prompt);
+      const result = await this.llmOrchestrator.generateText(prompt);
 
       // 尝试解析LLM响应
-      return this.parseExtractionResponse(response, config.type);
+      return this.parseExtractionResponse(result.text, config.type);
     } catch (error) {
       console.warn(`LLM extraction failed for ${config.name}:`, error);
       return undefined;

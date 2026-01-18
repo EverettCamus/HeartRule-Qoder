@@ -2,9 +2,16 @@
  * 查看 new-session111.yaml 脚本的内容
  */
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { config } from 'dotenv';
+import { eq } from 'drizzle-orm';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+config({ path: path.resolve(__dirname, '../../.env') });
+
 import { db } from './src/db/index.js';
 import { scripts } from './src/db/schema.js';
-import { eq } from 'drizzle-orm';
 
 async function main() {
   try {

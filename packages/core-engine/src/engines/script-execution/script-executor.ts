@@ -7,6 +7,11 @@
 
 import { createAction } from '../../actions/action-registry.js';
 import type { BaseAction, ActionContext, ActionResult } from '../../actions/base-action.js';
+import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
+import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
+import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.js';
+import { AiSayAction } from '../../actions/ai-say-action.js';
+import { AiAskAction } from '../../actions/ai-ask-action.js';
 
 /**
  * 执行状态
@@ -51,12 +56,45 @@ export interface ExecutionState {
   currentTopicId?: string;
   currentActionId?: string;
   currentActionType?: string;
+  // LLM调试信息（最近一次LLM调用）
+  lastLLMDebugInfo?: LLMDebugInfo;
 }
 
 /**
  * 脚本执行器
  */
 export class ScriptExecutor {
+  private llmOrchestrator: LLMOrchestrator;
+
+  constructor() {
+    // 初始化 LLM 编排器
+    // 从环境变量读取配置（兼容 VOLCANO 和 VOLCENGINE 前缀）
+    const apiKey = process.env.VOLCENGINE_API_KEY || process.env.VOLCANO_API_KEY || process.env.ARK_API_KEY || '';
+    const endpointId = process.env.VOLCENGINE_MODEL || process.env.VOLCANO_ENDPOINT_ID || 'deepseek-v3-250324';
+    const baseUrl = process.env.VOLCENGINE_BASE_URL || process.env.VOLCANO_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3';
+    
+    // 创建火山引擎 DeepSeek Provider
+    const provider = new VolcanoDeepSeekProvider(
+      {
+        model: endpointId,
+        temperature: 0.7,
+        maxTokens: 2000,
+      },
+      apiKey,
+      endpointId,
+      baseUrl
+    );
+    
+    // 创建 LLM Orchestrator
+    this.llmOrchestrator = new LLMOrchestrator(provider, 'volcano');
+    
+    console.log('[ScriptExecutor] 🤖 LLM Orchestrator initialized:', {
+      provider: 'volcano',
+      endpointId,
+      hasApiKey: !!apiKey,
+      baseUrl,
+    });
+  }
   /**
    * 执行会谈流程脚本
    */
@@ -117,6 +155,11 @@ export class ScriptExecutor {
               metadata: result.metadata,
             });
             executionState.lastAiMessage = result.aiMessage;
+          }
+
+          // 保存LLM调试信息（如果有）
+          if (result.debugInfo) {
+            executionState.lastLLMDebugInfo = result.debugInfo;
           }
         } else {
           // Action执行失败
@@ -325,6 +368,14 @@ export class ScriptExecutor {
             metadata: result.metadata,
           });
         }
+        // 保存LLM调试信息（即使Action未完成）
+        if (result.debugInfo) {
+          executionState.lastLLMDebugInfo = result.debugInfo;
+          console.log('[ScriptExecutor] 💾 Saved LLM debug info (action not completed):', {
+            hasPrompt: !!result.debugInfo.prompt,
+            hasResponse: !!result.debugInfo.response,
+          });
+        }
         // 需要等待用户输入
         executionState.status = ExecutionStatus.WAITING_INPUT;
         // 保存 Action 内部状态
@@ -353,6 +404,16 @@ export class ScriptExecutor {
             metadata: result.metadata,
           });
           executionState.lastAiMessage = result.aiMessage;
+        }
+
+        // 保存LLM调试信息（如果有）
+        if (result.debugInfo) {
+          executionState.lastLLMDebugInfo = result.debugInfo;
+          console.log('[ScriptExecutor] 💾 Saved LLM debug info:', {
+            hasPrompt: !!result.debugInfo.prompt,
+            hasResponse: !!result.debugInfo.response,
+            model: result.debugInfo.model,
+          });
         }
       } else {
         // Action执行失败
@@ -448,13 +509,13 @@ export class ScriptExecutor {
   }
 
   /**
-   * 创建Action实例
+   * 创建 Action 实例
    */
   private createAction(actionConfig: any): BaseAction {
     const actionType = actionConfig.action_type;
     const actionId = actionConfig.action_id;
     const config = actionConfig.config || {};
-
+  
     // 🔵 调试日志
     console.log(`[ScriptExecutor] 🛠️ Creating action:`, {
       actionType,
@@ -463,7 +524,17 @@ export class ScriptExecutor {
       hasConfig: !!actionConfig.config,
       configKeys: Object.keys(config),
     });
-
+  
+    // 对于 ai_say 和 ai_ask Action，传递 LLMOrchestrator
+    if (actionType === 'ai_say') {
+      return new AiSayAction(actionId, config, this.llmOrchestrator);
+    }
+    
+    if (actionType === 'ai_ask') {
+      return new AiAskAction(actionId, config, this.llmOrchestrator);
+    }
+  
+    // 其他 Action 类型使用默认创建方式
     return createAction(actionType, actionId, config);
   }
 
@@ -501,7 +572,12 @@ export class ScriptExecutor {
    * 从保存的状态恢复 Action 实例
    */
   private deserializeActionState(actionState: any): BaseAction {
-    const action = createAction(actionState.actionType, actionState.actionId, actionState.config);
+    // 使用 this.createAction 而不是 createAction，确保 ai_say 能获得 LLMOrchestrator
+    const action = this.createAction({
+      action_type: actionState.actionType,
+      action_id: actionState.actionId,
+      config: actionState.config,
+    });
     // 恢复内部状态
     action['currentRound'] = actionState.currentRound || 0;
     action['maxRounds'] = actionState.maxRounds || 3;
