@@ -291,7 +291,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       // 处理初始的 debugInfo（来自会话创建时的第一个 action）
       if (initialDebugInfo) {
         console.log('[DebugChat] 🔍 Processing initial debugInfo:', initialDebugInfo);
-        
+
         // 创建 LLM 提示词气泡
         const promptBubble: DebugBubble = {
           id: uuidv4(),
@@ -325,7 +325,9 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               model: initialDebugInfo.model || 'unknown',
               tokens: initialDebugInfo.tokensUsed || 0,
               maxTokens: initialDebugInfo.config?.maxTokens || 0,
-              rawResponse: JSON.stringify(initialDebugInfo.response.raw || initialDebugInfo.response),
+              rawResponse: JSON.stringify(
+                initialDebugInfo.response.raw || initialDebugInfo.response
+              ),
               processedResponse: initialDebugInfo.response.text || '',
               preview: (initialDebugInfo.response.text || '').substring(0, 100) + '...',
             } as LLMResponseBubbleContent,
@@ -418,13 +420,13 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       const response = await debugApi.sendDebugMessage(sessionId, {
         content: userMessage,
       });
-      
+
       // 🔍 详细调试日志
       console.log('[DebugChat] 🔍 Full response object:', response);
       console.log('[DebugChat] 🔍 Response keys:', Object.keys(response));
       console.log('[DebugChat] 🔍 debugInfo value:', response.debugInfo);
       console.log('[DebugChat] 🔍 debugInfo type:', typeof response.debugInfo);
-      
+
       console.log('[DebugChat] ✅ API Response received:', {
         aiMessage: response.aiMessage,
         sessionStatus: response.sessionStatus,
@@ -438,7 +440,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       if (response.error) {
         const errorData = response.error;
         setDetailedError(errorData);
-        
+
         // 创建错误气泡
         const errorBubble: DebugBubble = {
           id: uuidv4(),
@@ -453,13 +455,15 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             errorType: errorData.errorType || 'execution',
             message: errorData.message || 'An error occurred',
             details: errorData.details,
-            position: response.position ? {
-              phaseId: response.position.phaseId || '',
-              phaseName: '',  // 此字段不在API响应中
-              topicId: response.position.topicId || '',
-              topicName: '',  // 此字段不在API响应中
-              actionId: response.position.actionId || '',
-            } : undefined,
+            position: response.position
+              ? {
+                  phaseId: response.position.phaseId || '',
+                  phaseName: '', // 此字段不在API响应中
+                  topicId: response.position.topicId || '',
+                  topicName: '', // 此字段不在API响应中
+                  actionId: response.position.actionId || '',
+                }
+              : undefined,
             recovery: errorData.recovery,
             stackTrace: errorData.stackTrace,
           } as ErrorBubbleContent,
@@ -482,9 +486,9 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             type: 'variable',
             changedVariables: [], // TODO: 计算变化的变量
             allVariables: {
-              session: newVariables.session || {},
-              phase: newVariables.phase || {},
-              topic: newVariables.topic || {},
+              session: (newVariables.session || {}) as Record<string, unknown>,
+              phase: (newVariables.phase || {}) as Record<string, unknown>,
+              topic: (newVariables.topic || {}) as Record<string, unknown>,
             },
             summary: '变量更新', // 简单摘要
           } as VariableBubbleContent,
@@ -507,9 +511,9 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           actionType: response.position?.actionType,
           content: {
             type: 'llm_prompt',
-            systemPrompt: '',  // 服务端暂未返回
+            systemPrompt: '', // 服务端暂未返回
             userPrompt: debugInfo.prompt || '',
-            conversationHistory: [],  // 服务端暂未返回
+            conversationHistory: [], // 服务端暂未返回
             preview: (debugInfo.prompt || '').substring(0, 100) + '...',
           } as LLMPromptBubbleContent,
         };
@@ -530,7 +534,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             maxTokens: debugInfo.config?.maxTokens || 0,
             rawResponse: JSON.stringify(debugInfo.response, null, 2),
             processedResponse: debugInfo.response?.text || response.aiMessage || '',
-            preview: (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
+            preview:
+              (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
           } as LLMResponseBubbleContent,
         };
         addDebugBubble(responseBubble);
@@ -732,19 +737,20 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             <>
               {(() => {
                 // 合并消息和气泡，按时间顺序排列
-                const items: Array<{type: 'message' | 'bubble', data: any, timestamp: string}> = [];
-                
+                const items: Array<{ type: 'message' | 'bubble'; data: any; timestamp: string }> =
+                  [];
+
                 // 添加消息
-                messages.forEach(msg => {
+                messages.forEach((msg) => {
                   items.push({
                     type: 'message',
                     data: msg,
-                    timestamp: msg.timestamp
+                    timestamp: msg.timestamp,
                   });
                 });
-                
+
                 // 添加气泡
-                debugBubbles.forEach(bubble => {
+                debugBubbles.forEach((bubble) => {
                   // 根据过滤器过滤气泡
                   if (bubble.type === 'error' && !debugFilter.showError) return;
                   if (bubble.type === 'llm_prompt' && !debugFilter.showLLMPrompt) return;
@@ -752,17 +758,19 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                   if (bubble.type === 'variable' && !debugFilter.showVariable) return;
                   if (bubble.type === 'execution_log' && !debugFilter.showExecutionLog) return;
                   if (bubble.type === 'position' && !debugFilter.showPosition) return;
-                  
+
                   items.push({
                     type: 'bubble',
                     data: bubble,
-                    timestamp: bubble.timestamp
+                    timestamp: bubble.timestamp,
                   });
                 });
-                
+
                 // 按时间排序
-                items.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-                
+                items.sort(
+                  (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                );
+
                 // 渲染
                 return items.map((item, index) => (
                   <React.Fragment key={`${item.type}-${index}`}>
@@ -770,9 +778,16 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                       <div className={`debug-message debug-message-${item.data.role}`}>
                         <div className="debug-message-header">
                           <span className="debug-message-role">
-                            {item.data.role === 'ai' ? 'AI' : item.data.role === 'user' ? 'User' : 'System'}:
+                            {item.data.role === 'ai'
+                              ? 'AI'
+                              : item.data.role === 'user'
+                                ? 'User'
+                                : 'System'}
+                            :
                           </span>
-                          <span className="debug-message-time">{formatTimestamp(item.data.timestamp)}</span>
+                          <span className="debug-message-time">
+                            {formatTimestamp(item.data.timestamp)}
+                          </span>
                         </div>
                         <div className="debug-message-content">{item.data.content}</div>
                       </div>
