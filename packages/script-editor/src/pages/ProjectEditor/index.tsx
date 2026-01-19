@@ -91,6 +91,11 @@ const ProjectEditor: React.FC = () => {
   const [debugSessionId, setDebugSessionId] = useState<string | null>(null);
   const [debugInitialMessage, setDebugInitialMessage] = useState<string>('');
   const [debugInitialDebugInfo, setDebugInitialDebugInfo] = useState<any>(null);
+  const [debugTarget, setDebugTarget] = useState<{
+    type: 'draft' | 'version';
+    versionId?: string;
+    versionNumber?: string;
+  } | null>(null);
 
   // 版本管理面板状态
   const [versionPanelVisible, setVersionPanelVisible] = useState(false);
@@ -2351,10 +2356,11 @@ const ProjectEditor: React.FC = () => {
         visible={debugConfigVisible}
         currentProject={project}
         sessionFiles={files.filter((f) => f.fileType === 'session')}
-        onStart={(sessionId, aiMessage, debugInfo) => {
+        onStart={(sessionId, aiMessage, debugInfo, debugTargetInfo) => {
           setDebugSessionId(sessionId);
           setDebugInitialMessage(aiMessage);
           setDebugInitialDebugInfo(debugInfo);
+          setDebugTarget(debugTargetInfo || null);
           setDebugConfigVisible(false);
           setDebugPanelVisible(true);
         }}
@@ -2367,11 +2373,13 @@ const ProjectEditor: React.FC = () => {
         sessionId={debugSessionId}
         initialMessage={debugInitialMessage}
         initialDebugInfo={debugInitialDebugInfo}
+        debugTarget={debugTarget}
         onClose={() => {
           setDebugPanelVisible(false);
           setDebugSessionId(null);
           setDebugInitialMessage('');
           setDebugInitialDebugInfo(null);
+          setDebugTarget(null);
         }}
       />
 

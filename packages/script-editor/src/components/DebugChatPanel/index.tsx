@@ -1,5 +1,5 @@
 import { CloseOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons';
-import { Button, Input, Spin, Alert, Empty } from 'antd';
+import { Button, Input, Spin, Alert, Empty, Tag } from 'antd';
 import React, { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -41,6 +41,7 @@ interface DebugChatPanelProps {
   sessionId: string | null;
   initialMessage?: string;
   initialDebugInfo?: any;
+  debugTarget?: { type: 'draft' | 'version'; versionId?: string; versionNumber?: string } | null;
   onClose: () => void;
   onSessionRestart?: (newSessionId: string) => void; // 新增：重新开始调试的回调
 }
@@ -50,6 +51,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   sessionId,
   initialMessage,
   initialDebugInfo,
+  debugTarget,
   onClose,
   onSessionRestart, // 新增：接收回调
 }) => {
@@ -939,6 +941,16 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         <div className="debug-chat-header">
           <div className="debug-chat-title">
             <span>Debug Chat</span>
+            {debugTarget && (
+              <Tag
+                color={debugTarget.type === 'draft' ? 'blue' : 'green'}
+                style={{ marginLeft: '8px' }}
+              >
+                {debugTarget.type === 'draft'
+                  ? '调试草稿'
+                  : `调试版本: ${debugTarget.versionNumber}`}
+              </Tag>
+            )}
             {sessionInfo && (
               <span className="debug-chat-session-info">
                 Session: {sessionId?.substring(0, 8)}...
