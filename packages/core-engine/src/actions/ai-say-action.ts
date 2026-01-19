@@ -1,8 +1,8 @@
 /**
  * AiSayAction - AI向用户传达信息
- * 
+ *
  * 参照: legacy-python/src/actions/ai_say.py
- * 
+ *
  * 行为说明：
  * - 默认 require_acknowledgment=true，需要用户确认后才继续
  * - 当 require_acknowledgment=false 时，消息会发送给用户，但脚本立即推进到下一个 action
@@ -10,9 +10,10 @@
  * - 默认使用 LLM 生成自然语言表达，提升咨询体验
  */
 
+import { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
+
 import { BaseAction } from './base-action.js';
 import type { ActionContext, ActionResult } from './base-action.js';
-import { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
 
 export class AiSayAction extends BaseAction {
   static actionType = 'ai_say';
@@ -37,13 +38,13 @@ export class AiSayAction extends BaseAction {
       // 明确检查 require_acknowledgment 是否被设置
       // 默认为 true（需要用户确认）
       let requireAcknowledgment = true;
-      
+
       if (this.config.require_acknowledgment !== undefined) {
         requireAcknowledgment = this.config.require_acknowledgment;
       } else if (this.config.requireAcknowledgment !== undefined) {
         requireAcknowledgment = this.config.requireAcknowledgment;
       }
-      
+
       // 🔵 调试日志
       console.log(`[AiSayAction] 🔵 Executing:`, {
         actionId: this.actionId,
@@ -55,19 +56,35 @@ export class AiSayAction extends BaseAction {
         maxRounds: this.maxRounds,
       });
 
+      // 需要确认的情况 - 先检查是否是第二轮
+      if (requireAcknowledgment && this.currentRound > 0) {
+        // 第二轮：用户已确认（无论用户说什么都算确认）
+        console.log(`[AiSayAction] ✅ User acknowledged, action completed`);
+        this.currentRound = 0; // 重置
+        return {
+          success: true,
+          completed: true,
+          aiMessage: null, // 确认轮不需要返回 AI 消息
+          metadata: {
+            actionType: AiSayAction.actionType,
+            userAcknowledged: true,
+          },
+        };
+      }
+
       // 2. 变量替换
       let content = this.substituteVariables(rawContent, context);
 
       // 3. ai_say 默认使用 LLM 生成更自然的表达
       let debugInfo;
-      
+
       if (this.llmOrchestrator) {
         console.log(`[AiSayAction] 🤖 Using LLM to generate natural expression`);
-        
+
         // 构造 LLM 提示词
         const systemPrompt = `你是一位专业的心理咨询师，请将以下内容改写为更自然、更温暖的表达方式，保持原意不变。`;
         const userPrompt = `请改写：${content}`;
-        
+
         try {
           const result = await this.llmOrchestrator.generateText(
             `${systemPrompt}\n\n${userPrompt}`,
@@ -76,7 +93,7 @@ export class AiSayAction extends BaseAction {
               maxTokens: 500,
             }
           );
-          
+
           content = result.text;
           debugInfo = result.debugInfo;
           console.log(`[AiSayAction] ✅ LLM generated: ${content.substring(0, 50)}...`);
@@ -85,53 +102,39 @@ export class AiSayAction extends BaseAction {
           // 失败时使用原内容
         }
       } else {
-        console.warn(`[AiSayAction] ⚠️ LLMOrchestrator not available, using template content directly`);
-      }
-
-      // 如果不需要确认，发送消息后立即完成
-      // 消息仍会被保存并发送给客户端，只是不等待用户回复
-      if (!requireAcknowledgment) {
-        console.log(`[AiSayAction] ⚡ No acknowledgment required, message will be sent and script continues`);
-        return {
-          success: true,
-          completed: true,  // 立即完成，脚本继续执行
-          aiMessage: content,  // 消息仍会被发送给用户
-          debugInfo,  // 传递 LLM 调试信息
-          metadata: {
-            actionType: AiSayAction.actionType,
-            requireAcknowledgment: false,
-          },
-        };
+        console.warn(
+          `[AiSayAction] ⚠️ LLMOrchestrator not available, using template content directly`
+        );
       }
 
       // 需要确认的情况
-      if (this.currentRound === 0) {
+      if (requireAcknowledgment) {
         // 第一轮：发送消息并等待确认
         this.currentRound += 1;
         return {
           success: true,
           completed: false, // 等待用户确认
           aiMessage: content,
-          debugInfo,  // 传递 LLM 调试信息
+          debugInfo, // 传递 LLM 调试信息
           metadata: {
             actionType: AiSayAction.actionType,
             requireAcknowledgment: true,
             waitingFor: 'acknowledgment',
           },
         };
-      } else {
-        // 第二轮：用户已确认（无论用户说什么都算确认）
-        this.currentRound = 0; // 重置
-        return {
-          success: true,
-          completed: true,
-          aiMessage: null,
-          metadata: {
-            actionType: AiSayAction.actionType,
-            userAcknowledged: true,
-          },
-        };
       }
+
+      // 不需要确认，发送消息后立即完成
+      return {
+        success: true,
+        completed: true, // 立即完成，脚本继续执行
+        aiMessage: content, // 消息仍会被发送给用户
+        debugInfo, // 传递 LLM 调试信息
+        metadata: {
+          actionType: AiSayAction.actionType,
+          requireAcknowledgment: false,
+        },
+      };
     } catch (e: any) {
       return {
         success: false,

@@ -5,20 +5,20 @@ import type { LanguageModel } from 'ai';
  * LLM调试信息
  */
 export interface LLMDebugInfo {
-  prompt: string;           // 完整的提示词
-  response: any;            // 原始响应（JSON格式）
-  model: string;            // 使用的模型
+  prompt: string; // 完整的提示词
+  response: any; // 原始响应（JSON格式）
+  model: string; // 使用的模型
   config: Partial<LLMConfig>; // LLM配置
-  timestamp: string;        // 调用时间
-  tokensUsed?: number;      // 使用的token数
+  timestamp: string; // 调用时间
+  tokensUsed?: number; // 使用的token数
 }
 
 /**
  * LLM生成结果（包含调试信息）
  */
 export interface LLMGenerateResult {
-  text: string;             // 生成的文本
-  debugInfo: LLMDebugInfo;  // 调试信息
+  text: string; // 生成的文本
+  debugInfo: LLMDebugInfo; // 调试信息
 }
 
 /**
@@ -44,7 +44,7 @@ export interface LLMProvider {
 
 /**
  * LLM编排引擎
- * 
+ *
  * 统一管理多个LLM提供者，支持批量调用与上下文共享
  */
 export class LLMOrchestrator {
@@ -184,36 +184,54 @@ export abstract class BaseLLMProvider implements LLMProvider {
     const mergedConfig = { ...this.config, ...config };
     const timestamp = new Date().toISOString();
 
-    const result = await generateText({
-      model,
-      prompt,
-      temperature: mergedConfig.temperature,
-      maxTokens: mergedConfig.maxTokens,
-      topP: mergedConfig.topP,
-      frequencyPenalty: mergedConfig.frequencyPenalty,
-      presencePenalty: mergedConfig.presencePenalty,
-    });
+    // 创建超时控制器 (25秒超时，小于前端的30秒)
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 25000);
 
-    // 构建调试信息
-    const debugInfo: LLMDebugInfo = {
-      prompt,
-      response: {
+    try {
+      const result = await generateText({
+        model,
+        prompt,
+        temperature: mergedConfig.temperature,
+        maxTokens: mergedConfig.maxTokens,
+        topP: mergedConfig.topP,
+        frequencyPenalty: mergedConfig.frequencyPenalty,
+        presencePenalty: mergedConfig.presencePenalty,
+        abortSignal: abortController.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      // 构建调试信息
+      const debugInfo: LLMDebugInfo = {
+        prompt,
+        response: {
+          text: result.text,
+          finishReason: result.finishReason,
+          usage: result.usage,
+          // 完整的响应对象
+          raw: result,
+        },
+        model: mergedConfig.model,
+        config: mergedConfig,
+        timestamp,
+        tokensUsed: result.usage?.totalTokens,
+      };
+
+      return {
         text: result.text,
-        finishReason: result.finishReason,
-        usage: result.usage,
-        // 完整的响应对象
-        raw: result,
-      },
-      model: mergedConfig.model,
-      config: mergedConfig,
-      timestamp,
-      tokensUsed: result.usage?.totalTokens,
-    };
+        debugInfo,
+      };
+    } catch (error: any) {
+      clearTimeout(timeoutId);
 
-    return {
-      text: result.text,
-      debugInfo,
-    };
+      // 增强错误信息
+      if (error.name === 'AbortError') {
+        throw new Error(`LLM request timeout after 25 seconds. Model: ${mergedConfig.model}`);
+      }
+
+      throw error;
+    }
   }
 
   async *streamText(prompt: string, config?: Partial<LLMConfig>): AsyncIterable<string> {

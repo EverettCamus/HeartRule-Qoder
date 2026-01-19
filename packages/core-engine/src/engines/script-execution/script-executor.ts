@@ -6,12 +6,12 @@
  */
 
 import { createAction } from '../../actions/action-registry.js';
+import { AiAskAction } from '../../actions/ai-ask-action.js';
+import { AiSayAction } from '../../actions/ai-say-action.js';
 import type { BaseAction, ActionContext, ActionResult } from '../../actions/base-action.js';
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
 import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.js';
-import { AiSayAction } from '../../actions/ai-say-action.js';
-import { AiAskAction } from '../../actions/ai-ask-action.js';
 
 /**
  * 执行状态
@@ -69,10 +69,18 @@ export class ScriptExecutor {
   constructor() {
     // 初始化 LLM 编排器
     // 从环境变量读取配置（兼容 VOLCANO 和 VOLCENGINE 前缀）
-    const apiKey = process.env.VOLCENGINE_API_KEY || process.env.VOLCANO_API_KEY || process.env.ARK_API_KEY || '';
-    const endpointId = process.env.VOLCENGINE_MODEL || process.env.VOLCANO_ENDPOINT_ID || 'deepseek-v3-250324';
-    const baseUrl = process.env.VOLCENGINE_BASE_URL || process.env.VOLCANO_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3';
-    
+    const apiKey =
+      process.env.VOLCENGINE_API_KEY ||
+      process.env.VOLCANO_API_KEY ||
+      process.env.ARK_API_KEY ||
+      '';
+    const endpointId =
+      process.env.VOLCENGINE_MODEL || process.env.VOLCANO_ENDPOINT_ID || 'deepseek-v3-250324';
+    const baseUrl =
+      process.env.VOLCENGINE_BASE_URL ||
+      process.env.VOLCANO_BASE_URL ||
+      'https://ark.cn-beijing.volces.com/api/v3';
+
     // 创建火山引擎 DeepSeek Provider
     const provider = new VolcanoDeepSeekProvider(
       {
@@ -84,10 +92,10 @@ export class ScriptExecutor {
       endpointId,
       baseUrl
     );
-    
+
     // 创建 LLM Orchestrator
     this.llmOrchestrator = new LLMOrchestrator(provider, 'volcano');
-    
+
     console.log('[ScriptExecutor] 🤖 LLM Orchestrator initialized:', {
       provider: 'volcano',
       endpointId,
@@ -112,13 +120,28 @@ export class ScriptExecutor {
 
       // 如果 metadata 中有保存的 Action 状态，恢复它
       if (executionState.metadata.actionState && !executionState.currentAction) {
+        console.log('[ScriptExecutor] 🔄 Deserializing action state:', {
+          actionId: executionState.metadata.actionState.actionId,
+          actionType: executionState.metadata.actionState.actionType,
+          currentRound: executionState.metadata.actionState.currentRound,
+          currentActionIdx: executionState.currentActionIdx,
+        });
         executionState.currentAction = this.deserializeActionState(
           executionState.metadata.actionState
+        );
+      } else {
+        console.log(
+          '[ScriptExecutor] 🔵 No action state to restore, currentActionIdx:',
+          executionState.currentActionIdx
         );
       }
 
       // 如果有当前Action正在执行，继续执行
       if (executionState.currentAction) {
+        console.log('[ScriptExecutor] 🔄 Continuing current action:', {
+          actionId: executionState.currentAction.actionId,
+          actionIdx: executionState.currentActionIdx,
+        });
         const result = await this.continueAction(
           executionState.currentAction,
           executionState,
@@ -133,10 +156,15 @@ export class ScriptExecutor {
           executionState.metadata.actionState = this.serializeActionState(
             executionState.currentAction
           );
+          console.log('[ScriptExecutor] ⏸️ Action still not completed, waiting for more input');
           return executionState;
         }
 
         // Action完成，处理结果
+        console.log('[ScriptExecutor] ✅ Action completed via continue:', {
+          actionId: executionState.currentAction.actionId,
+          hasAiMessage: !!result.aiMessage,
+        });
         if (result.success) {
           // 更新变量
           if (result.extractedVariables) {
@@ -174,6 +202,11 @@ export class ScriptExecutor {
         // 清除保存的 Action 状态
         delete executionState.metadata.actionState;
 
+        console.log(
+          '[ScriptExecutor] ➡️ Action completed via continueAction, moved to next index:',
+          executionState.currentActionIdx
+        );
+
         // 预设置下一个 Action 的 ID（如果存在）
         const currentPhase = phases[executionState.currentPhaseIdx];
         if (currentPhase) {
@@ -190,6 +223,11 @@ export class ScriptExecutor {
             executionState.currentActionType = undefined;
           }
         }
+
+        // ⚠️ Action完成后继续执行后续流程
+        // 这样 ai_say 确认后可以立即执行下一个 action
+        // 注意：不要 return，让代码继续执行下面的 executePhase
+        console.log('[ScriptExecutor] ✅ Action completed, continuing to execute next actions');
       }
 
       // 执行脚本流程
@@ -313,7 +351,7 @@ export class ScriptExecutor {
     const topicId = topic.topic_id;
     const actions = topic.actions;
     console.log(
-      `[ScriptExecutor] 🔵 Executing topic: ${topicId}, actions count: ${actions.length}`
+      `[ScriptExecutor] 🔵 Executing topic: ${topicId}, actions count: ${actions.length}, currentActionIdx: ${executionState.currentActionIdx}`
     );
 
     // 执行Actions
@@ -515,7 +553,7 @@ export class ScriptExecutor {
     const actionType = actionConfig.action_type;
     const actionId = actionConfig.action_id;
     const config = actionConfig.config || {};
-  
+
     // 🔵 调试日志
     console.log(`[ScriptExecutor] 🛠️ Creating action:`, {
       actionType,
@@ -524,16 +562,16 @@ export class ScriptExecutor {
       hasConfig: !!actionConfig.config,
       configKeys: Object.keys(config),
     });
-  
+
     // 对于 ai_say 和 ai_ask Action，传递 LLMOrchestrator
     if (actionType === 'ai_say') {
       return new AiSayAction(actionId, config, this.llmOrchestrator);
     }
-    
+
     if (actionType === 'ai_ask') {
       return new AiAskAction(actionId, config, this.llmOrchestrator);
     }
-  
+
     // 其他 Action 类型使用默认创建方式
     return createAction(actionType, actionId, config);
   }
@@ -579,8 +617,19 @@ export class ScriptExecutor {
       config: actionState.config,
     });
     // 恢复内部状态
-    action['currentRound'] = actionState.currentRound || 0;
-    action['maxRounds'] = actionState.maxRounds || 3;
+    console.log('[ScriptExecutor] 🔵 Before restoring state:', {
+      actionId: action.actionId,
+      currentRound: action.currentRound,
+      maxRounds: action.maxRounds,
+    });
+    action.currentRound = actionState.currentRound || 0;
+    action.maxRounds = actionState.maxRounds || 3;
+    console.log('[ScriptExecutor] ✅ After restoring state:', {
+      actionId: action.actionId,
+      currentRound: action.currentRound,
+      maxRounds: action.maxRounds,
+      actionStateCurrentRound: actionState.currentRound,
+    });
     return action;
   }
 }

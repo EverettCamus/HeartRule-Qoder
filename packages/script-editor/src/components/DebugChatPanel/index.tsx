@@ -12,6 +12,7 @@ import type {
   VariableBubbleContent,
   LLMPromptBubbleContent,
   LLMResponseBubbleContent,
+  PositionBubbleContent,
 } from '../../types/debug';
 import type { DetailedError } from '../../types/error';
 import type {
@@ -25,6 +26,7 @@ import { loadDebugFilter, saveDebugFilter } from '../../utils/debug-filter-stora
 import ErrorBubble from '../DebugBubbles/ErrorBubble';
 import LLMPromptBubble from '../DebugBubbles/LLMPromptBubble';
 import LLMResponseBubble from '../DebugBubbles/LLMResponseBubble';
+import { PositionBubble } from '../DebugBubbles/PositionBubble';
 import VariableBubble from '../DebugBubbles/VariableBubble';
 import DebugFilterModal from '../DebugFilterModal/DebugFilterModal';
 import ErrorBanner from '../ErrorBanner/ErrorBanner';
@@ -40,6 +42,7 @@ interface DebugChatPanelProps {
   initialMessage?: string;
   initialDebugInfo?: any;
   onClose: () => void;
+  onSessionRestart?: (newSessionId: string) => void; // 新增：重新开始调试的回调
 }
 
 const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
@@ -48,6 +51,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   initialMessage,
   initialDebugInfo,
   onClose,
+  onSessionRestart, // 新增：接收回调
 }) => {
   const [messages, setMessages] = useState<DebugMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -56,6 +60,9 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 内部状态：当前活跃的会话 ID（用于重新开始后更新）
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionId);
 
   // 新增：错误和导航树状态
   const [detailedError, setDetailedError] = useState<DetailedError | null>(null);
@@ -194,19 +201,19 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     setDebugBubbles((prev) => prev.map((b) => ({ ...b, isExpanded: false })));
   };
 
-  const handleRestartFromError = async () => {
-    if (!sessionId) return;
-    try {
-      // 这里可以调用重启会话的API
-      console.log('[DebugChat] Restarting session:', sessionId);
-      // 重新加载会话数据
-      await loadSessionData();
-      // 清空气泡
-      setDebugBubbles([]);
-    } catch (err) {
-      console.error('[DebugChat] Failed to restart session:', err);
+  // 同步 props.sessionId 到 activeSessionId（仅当 props 更新且不为 null 时）
+  // 注意：不能双向同步，否则 handleRestartDebug 设置的 activeSessionId 会被覆盖
+  useEffect(() => {
+    // 仅当 props.sessionId 存在且与上次不同时，才更新 activeSessionId
+    // 这样 handleRestartDebug 设置的新 sessionId 不会被覆盖
+    if (sessionId && sessionId !== activeSessionId) {
+      console.log('[DebugChat] 🔄 Props sessionId changed, syncing to activeSessionId:', {
+        propsSessionId: sessionId,
+        previousActiveSessionId: activeSessionId,
+      });
+      setActiveSessionId(sessionId);
     }
-  };
+  }, [sessionId]); // 仅依赖 sessionId，不依赖 activeSessionId
 
   // 加载会话数据
   const loadSessionData = async () => {
@@ -259,6 +266,50 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         };
         console.log('[DebugChat] Setting initial position from session:', pos);
         setCurrentPosition(pos);
+
+        // 创建初始位置信息气泡
+        let phaseName = `Phase ${pos.phaseIndex + 1}`;
+        let topicName = `Topic ${pos.topicIndex + 1}`;
+
+        if (tree && tree.phases && tree.phases[pos.phaseIndex]) {
+          const phase = tree.phases[pos.phaseIndex];
+          phaseName = phase.phaseName || phaseName;
+
+          if (phase.topics && phase.topics[pos.topicIndex]) {
+            const topic = phase.topics[pos.topicIndex];
+            topicName = topic.topicName || topicName;
+          }
+        }
+
+        const positionBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'position',
+          timestamp: new Date().toISOString(),
+          isExpanded: false,
+          actionId: pos.actionId,
+          actionType: pos.actionType,
+          content: {
+            type: 'position',
+            phase: {
+              index: pos.phaseIndex,
+              id: pos.phaseId,
+              name: phaseName,
+            },
+            topic: {
+              index: pos.topicIndex,
+              id: pos.topicId,
+              name: topicName,
+            },
+            action: {
+              index: pos.actionIndex,
+              id: pos.actionId,
+              type: pos.actionType,
+            },
+            summary: `${phaseName} → ${topicName} → ${pos.actionId}`,
+          } as PositionBubbleContent,
+        };
+        addDebugBubble(positionBubble);
+        console.log('[DebugChat] ✅ Created initial position bubble');
       }
 
       // 获取消息历史
@@ -380,16 +431,21 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
   // 发送消息
   const handleSendMessage = async () => {
+    // 优先使用 activeSessionId，如果没有则使用 props.sessionId
+    const currentSessionId = activeSessionId || sessionId;
+
     console.log('[DebugChat] 🔵 handleSendMessage called', {
       inputValue,
-      sessionId,
+      propsSessionId: sessionId,
+      activeSessionId,
+      currentSessionId,
       timestamp: new Date().toISOString(),
     });
 
-    if (!inputValue.trim() || !sessionId) {
+    if (!inputValue.trim() || !currentSessionId) {
       console.warn('[DebugChat] ⚠️ Cannot send message:', {
         hasInput: !!inputValue.trim(),
-        hasSessionId: !!sessionId,
+        hasSessionId: !!currentSessionId,
       });
       return;
     }
@@ -414,10 +470,10 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
       // 发送消息到后端
       console.log('[DebugChat] 📡 API Call: sendDebugMessage', {
-        sessionId,
+        sessionId: currentSessionId,
         content: userMessage,
       });
-      const response = await debugApi.sendDebugMessage(sessionId, {
+      const response = await debugApi.sendDebugMessage(currentSessionId, {
         content: userMessage,
       });
 
@@ -556,18 +612,70 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         };
         console.log('[DebugChat] Updating position from response:', pos);
         setCurrentPosition(pos);
+
+        // 创建位置信息气泡
+        // 从导航树中获取 Phase/Topic/Action 的名称
+        let phaseName = `Phase ${pos.phaseIndex + 1}`;
+        let topicName = `Topic ${pos.topicIndex + 1}`;
+
+        if (navigationTree && navigationTree.phases && navigationTree.phases[pos.phaseIndex]) {
+          const phase = navigationTree.phases[pos.phaseIndex];
+          phaseName = phase.phaseName || phaseName;
+
+          if (phase.topics && phase.topics[pos.topicIndex]) {
+            const topic = phase.topics[pos.topicIndex];
+            topicName = topic.topicName || topicName;
+          }
+        }
+
+        const positionBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'position',
+          timestamp: new Date().toISOString(),
+          isExpanded: false, // 位置信息默认折叠
+          actionId: pos.actionId,
+          actionType: pos.actionType,
+          content: {
+            type: 'position',
+            phase: {
+              index: pos.phaseIndex,
+              id: pos.phaseId,
+              name: phaseName,
+            },
+            topic: {
+              index: pos.topicIndex,
+              id: pos.topicId,
+              name: topicName,
+            },
+            action: {
+              index: pos.actionIndex,
+              id: pos.actionId,
+              type: pos.actionType,
+            },
+            summary: `${phaseName} → ${topicName} → ${pos.actionId}`,
+          } as PositionBubbleContent,
+        };
+        addDebugBubble(positionBubble);
+        console.log('[DebugChat] ✅ Created position bubble');
       }
 
-      // 添加AI回复到消息列表
-      const aiMsg: DebugMessage = {
-        messageId: `ai-${Date.now()}`,
-        role: 'ai',
-        content: response.aiMessage,
-        timestamp: new Date().toISOString(),
-      };
-      console.log('[DebugChat] 💬 Adding AI response to UI:', aiMsg);
-      setMessages((prev) => [...prev, aiMsg]);
-      console.log('[DebugChat] ✅ Message sent successfully');
+      // 添加AI回复到消息列表（仅当有非空内容时）
+      if (response.aiMessage && response.aiMessage.trim() !== '') {
+        const aiMsg: DebugMessage = {
+          messageId: `ai-${Date.now()}`,
+          role: 'ai',
+          content: response.aiMessage,
+          timestamp: new Date().toISOString(),
+        };
+        console.log('[DebugChat] 💬 Adding AI response to UI:', aiMsg);
+        setMessages((prev) => [...prev, aiMsg]);
+        console.log('[DebugChat] ✅ Message sent successfully');
+      } else {
+        console.log(
+          '[DebugChat] ⚠️ Empty AI message from backend, skip adding message bubble. executionStatus:',
+          response.executionStatus
+        );
+      }
     } catch (err: any) {
       console.error('[DebugChat] ❌ Failed to send message:', {
         error: err,
@@ -623,6 +731,9 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       setError(null);
       setDetailedError(null);
 
+      console.log('[DebugChat] 🔄 Starting debug restart...');
+      console.log('[DebugChat] Current scriptId:', sessionInfo.scriptId);
+
       // 创建新会话
       const newSession = await debugApi.createDebugSession({
         userId: sessionInfo.userId || 'user-123',
@@ -630,8 +741,14 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         initialVariables: {},
       });
 
-      // 清空消息历史
+      console.log('[DebugChat] ✅ New session created:', newSession.sessionId);
+      console.log('[DebugChat] 🔍 New session debugInfo:', newSession.debugInfo);
+
+      // 清空所有状态
       setMessages([]);
+      setDebugBubbles([]);
+      setNavigationTree(null);
+      setCurrentPosition(undefined); // 使用 undefined 而不是 null
 
       // 如果有初始消息，添加它
       if (newSession.aiMessage) {
@@ -642,11 +759,153 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           timestamp: new Date().toISOString(),
         };
         setMessages([initialMsg]);
+        console.log('[DebugChat] ✅ Added initial AI message');
       }
 
-      // 更新会话信息（但不改变 sessionId prop，因为那由父组件控制）
-      console.log('[DebugChat] ✅ Debug session restarted:', newSession.sessionId);
-      alert('Debug session restarted successfully. Session ID: ' + newSession.sessionId);
+      // 通知父组件更新 sessionId
+      // 注意：这里需要父组件提供 onSessionChange 回调
+      if (onSessionRestart) {
+        console.log('[DebugChat] 🔔 Notifying parent component of session change');
+        onSessionRestart(newSession.sessionId);
+      } else {
+        // 如果父组件没有提供回调，更新内部 activeSessionId 并手动加载会话数据
+        console.log(
+          '[DebugChat] ⚠️ No onSessionRestart callback, updating internal activeSessionId'
+        );
+        setActiveSessionId(newSession.sessionId);
+
+        // 临时更新内部会话ID（仅用于重新加载数据）
+        const tempSessionId = newSession.sessionId;
+
+        // 获取会话详情
+        const sessionDetail = await debugApi.getDebugSession(tempSessionId);
+        console.log('[DebugChat] ✅ Session detail loaded:', sessionDetail);
+
+        // 构建导航树
+        const tree = buildNavigationTree(sessionDetail); // 使用正确的函数名
+        if (tree) {
+          setNavigationTree(tree);
+          console.log('[DebugChat] ✅ Navigation tree rebuilt');
+        }
+
+        // 更新执行位置
+        if (sessionDetail.position) {
+          const pos: CurrentPosition = {
+            phaseIndex: sessionDetail.position.phaseIndex || 0,
+            phaseId: sessionDetail.position.phaseId || '',
+            topicIndex: sessionDetail.position.topicIndex || 0,
+            topicId: sessionDetail.position.topicId || '',
+            actionIndex: sessionDetail.position.actionIndex || 0,
+            actionId: sessionDetail.position.actionId || '',
+            actionType: sessionDetail.position.actionType || '',
+          };
+          setCurrentPosition(pos);
+          console.log('[DebugChat] ✅ Position updated:', pos);
+
+          // 创建初始位置信息气泡
+          let phaseName = `Phase ${pos.phaseIndex + 1}`;
+          let topicName = `Topic ${pos.topicIndex + 1}`;
+
+          if (tree && tree.phases && tree.phases[pos.phaseIndex]) {
+            const phase = tree.phases[pos.phaseIndex];
+            phaseName = phase.phaseName || phaseName;
+
+            if (phase.topics && phase.topics[pos.topicIndex]) {
+              const topic = phase.topics[pos.topicIndex];
+              topicName = topic.topicName || topicName;
+            }
+          }
+
+          const positionBubble: DebugBubble = {
+            id: uuidv4(),
+            type: 'position',
+            timestamp: new Date().toISOString(),
+            isExpanded: false,
+            actionId: pos.actionId,
+            actionType: pos.actionType,
+            content: {
+              type: 'position',
+              phase: {
+                index: pos.phaseIndex,
+                id: pos.phaseId,
+                name: phaseName,
+              },
+              topic: {
+                index: pos.topicIndex,
+                id: pos.topicId,
+                name: topicName,
+              },
+              action: {
+                index: pos.actionIndex,
+                id: pos.actionId,
+                type: pos.actionType,
+              },
+              summary: `${phaseName} → ${topicName} → ${pos.actionId}`,
+            } as PositionBubbleContent,
+          };
+          addDebugBubble(positionBubble);
+          console.log('[DebugChat] ✅ Created initial position bubble');
+
+          // 处理初始的 debugInfo（来自会话创建时的第一个 action）
+          if (newSession.debugInfo) {
+            console.log(
+              '[DebugChat] 🔍 Processing initial debugInfo from restart:',
+              newSession.debugInfo
+            );
+
+            // 创建 LLM 提示词气泡
+            const promptBubble: DebugBubble = {
+              id: uuidv4(),
+              type: 'llm_prompt',
+              timestamp: newSession.debugInfo.timestamp || new Date().toISOString(),
+              isExpanded: false,
+              actionId: pos.actionId,
+              actionType: pos.actionType,
+              content: {
+                type: 'llm_prompt',
+                systemPrompt: '',
+                userPrompt: newSession.debugInfo.prompt || '',
+                conversationHistory: [],
+                preview: (newSession.debugInfo.prompt || '').substring(0, 100) + '...',
+              } as LLMPromptBubbleContent,
+            };
+            addDebugBubble(promptBubble);
+            console.log('[DebugChat] ✅ Created initial LLM prompt bubble on restart');
+
+            // 创建 LLM 响应气泡
+            if (newSession.debugInfo.response) {
+              const responseBubble: DebugBubble = {
+                id: uuidv4(),
+                type: 'llm_response',
+                timestamp: newSession.debugInfo.timestamp || new Date().toISOString(),
+                isExpanded: false,
+                actionId: pos.actionId,
+                actionType: pos.actionType,
+                content: {
+                  type: 'llm_response',
+                  model: newSession.debugInfo.model || 'unknown',
+                  tokens: newSession.debugInfo.tokensUsed || 0,
+                  maxTokens: newSession.debugInfo.config?.maxTokens || 0,
+                  rawResponse: JSON.stringify(
+                    newSession.debugInfo.response.raw || newSession.debugInfo.response
+                  ),
+                  processedResponse: newSession.debugInfo.response.text || '',
+                  preview: (newSession.debugInfo.response.text || '').substring(0, 100) + '...',
+                } as LLMResponseBubbleContent,
+              };
+              addDebugBubble(responseBubble);
+              console.log('[DebugChat] ✅ Created initial LLM response bubble on restart');
+            }
+          }
+        }
+
+        console.log('[DebugChat] ✅ Internal activeSessionId updated to:', newSession.sessionId);
+        console.log(
+          '[DebugChat] ⚠️ Warning: sessionId prop not updated. Parent component should provide onSessionRestart callback for better integration.'
+        );
+      }
+
+      console.log('[DebugChat] ✅ Debug session restarted successfully');
     } catch (err: any) {
       console.error('[DebugChat] ❌ Failed to restart debug:', err);
       setError('Failed to restart debug session: ' + (err.message || 'Unknown error'));
@@ -687,6 +946,15 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
+            <Button
+              type="default"
+              onClick={handleRestartDebug}
+              disabled={loading || initialLoading}
+              title="重新开始调试会话"
+              style={{ marginRight: '8px' }}
+            >
+              🔄 重新开始
+            </Button>
             <Button
               type="text"
               icon={<SettingOutlined />}
@@ -799,7 +1067,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                             isExpanded={item.data.isExpanded}
                             timestamp={item.data.timestamp}
                             onToggleExpand={() => toggleBubbleExpand(item.data.id)}
-                            onRestart={handleRestartFromError}
+                            onRestart={handleRestartDebug}
                           />
                         )}
                         {item.data.type === 'variable' && (
@@ -829,7 +1097,15 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                             onToggleExpand={() => toggleBubbleExpand(item.data.id)}
                           />
                         )}
-                        {/* TODO: 添加其他类型气泡 (ExecutionLog, Position) */}
+                        {item.data.type === 'position' && (
+                          <PositionBubble
+                            content={item.data.content as PositionBubbleContent}
+                            isExpanded={item.data.isExpanded}
+                            timestamp={item.data.timestamp}
+                            onToggleExpand={() => toggleBubbleExpand(item.data.id)}
+                          />
+                        )}
+                        {/* TODO: 添加其他类型气泡 (ExecutionLog) */}
                       </div>
                     )}
                   </React.Fragment>

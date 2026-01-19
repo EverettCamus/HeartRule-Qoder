@@ -162,7 +162,9 @@ export class SessionManager {
       });
 
       // 保存所有新增的 AI 消息（从 conversationHistory）
-      const aiMessages = executionState.conversationHistory.filter((msg) => msg.role === 'assistant');
+      const aiMessages = executionState.conversationHistory.filter(
+        (msg) => msg.role === 'assistant'
+      );
 
       if (aiMessages.length > 0) {
         console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s) (init):`, {
@@ -236,7 +238,7 @@ export class SessionManager {
       return result;
     } catch (error) {
       console.error('[SessionManager] ❌ Error during initialization:', error);
-      
+
       // 构建详细错误信息
       const detailedError = buildDetailedError(error, {
         scriptId: script.id,
@@ -330,7 +332,8 @@ export class SessionManager {
         status: (session.executionStatus as ExecutionStatus) || ExecutionStatus.RUNNING,
         currentPhaseIdx: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
         currentTopicIdx: ((session.position as Record<string, unknown>)?.topicIndex as number) || 0,
-        currentActionIdx: ((session.position as Record<string, unknown>)?.actionIndex as number) || 0,
+        currentActionIdx:
+          ((session.position as Record<string, unknown>)?.actionIndex as number) || 0,
         currentAction: null, // 会在执行器中重建
         variables: (session.variables as Record<string, unknown>) || {},
         conversationHistory: [],
@@ -366,7 +369,9 @@ export class SessionManager {
       });
 
       // 保存所有新增的 AI 消息（从 conversationHistory）
-      const aiMessages = executionState.conversationHistory.filter((msg) => msg.role === 'assistant');
+      const aiMessages = executionState.conversationHistory.filter(
+        (msg) => msg.role === 'assistant'
+      );
 
       if (aiMessages.length > 0) {
         console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s):`, {
@@ -436,11 +441,19 @@ export class SessionManager {
           actionType: executionState.currentActionType || 'unknown',
         },
       };
-      console.log('[SessionManager] 🏁 processUserInput completed:', result);
+      console.log('[SessionManager] 🏁 processUserInput completed:', {
+        aiMessage: result.aiMessage,
+        aiMessageLength: result.aiMessage?.length || 0,
+        hasDebugInfo: !!result.debugInfo,
+        debugInfoPrompt: result.debugInfo?.prompt?.substring(0, 50),
+        debugInfoResponse: result.debugInfo?.response?.text?.substring(0, 50),
+        executionStatus: result.executionStatus,
+        position: result.position,
+      });
       return result;
     } catch (error) {
       console.error('[SessionManager] ❌ Error during user input processing:', error);
-      
+
       // 构建详细错误信息
       const detailedError = buildDetailedError(error, {
         scriptId: script.id,
