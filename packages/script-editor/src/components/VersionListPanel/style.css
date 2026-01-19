@@ -1,0 +1,140 @@
+/* 版本列表面板容器 */
+.version-list-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: #fff;
+}
+
+/* 面板头部 */
+.version-panel-header {
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+/* 面板内容区 */
+.version-panel-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
+/* 当前版本信息区 */
+.version-info-section {
+  padding: 12px;
+  background-color: #f6ffed;
+  border: 1px solid #b7eb8f;
+  border-radius: 6px;
+}
+
+/* 草稿状态区 */
+.draft-status-section {
+  padding: 12px;
+  background-color: #fff7e6;
+  border: 1px solid #ffd591;
+  border-radius: 6px;
+}
+
+/* 版本列表标题 */
+.version-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+/* 版本历史滚动区 */
+.version-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.version-list-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.version-list-scroll::-webkit-scrollbar-thumb {
+  background-color: #d9d9d9;
+  border-radius: 3px;
+}
+
+.version-list-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #bfbfbf;
+}
+
+/* 版本项 */
+.version-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  background-color: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.version-item:hover {
+  border-color: #40a9ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 当前版本项 */
+.version-item-current {
+  background-color: #f6ffed;
+  border-color: #52c41a;
+}
+
+/* 切换中的版本项 */
+.version-item-switching {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* 版本项头部 */
+.version-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+/* 版本项信息 */
+.version-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+/* 版本说明 */
+.version-item-note {
+  margin-top: 8px;
+  padding: 8px;
+  background-color: rgba(0, 0, 0, 0.02);
+  border-radius: 4px;
+}
+
+/* 回滚信息 */
+.version-item-rollback-info {
+  margin-top: 8px;
+}
+
+/* 加载状态 */
+.version-panel-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+/* 错误状态 */
+.version-panel-error {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  padding: 40px 20px;
+}

@@ -46,6 +46,7 @@ import { ActionPropertyPanel } from '../../components/ActionPropertyPanel';
 import { PhaseTopicPropertyPanel } from '../../components/PhaseTopicPropertyPanel';
 import DebugConfigModal from '../../components/DebugConfigModal';
 import DebugChatPanel from '../../components/DebugChatPanel';
+import VersionListPanel from '../../components/VersionListPanel';
 import type { Action, SessionScript, Step } from '../../types/action';
 import { globalHistoryManager } from '../../utils/history-manager';
 import type { FocusPath } from '../../utils/history-manager';
@@ -90,6 +91,9 @@ const ProjectEditor: React.FC = () => {
   const [debugSessionId, setDebugSessionId] = useState<string | null>(null);
   const [debugInitialMessage, setDebugInitialMessage] = useState<string>('');
   const [debugInitialDebugInfo, setDebugInitialDebugInfo] = useState<any>(null);
+
+  // 版本管理面板状态
+  const [versionPanelVisible, setVersionPanelVisible] = useState(false);
 
   // 可视化编辑相关状态
   const [editMode, setEditMode] = useState<'yaml' | 'visual'>('yaml'); // 编辑模式：YAML/可视化
@@ -442,14 +446,27 @@ const ProjectEditor: React.FC = () => {
         setTreeData(tree);
         setExpandedKeys(['sessions-folder']);
 
-        // 如果URL有fileId，加载该文件；否则加载第一个文件
-        if (fileId) {
-          const file = filesRes.data.find((f) => f.id === fileId);
-          if (file) {
-            loadFile(file);
-          }
-        } else if (filesRes.data.length > 0) {
-          loadFile(filesRes.data[0]);
+        // 优先级：1. 当前选中的文件 2. URL中的fileId 3. 第一个文件
+        let targetFile = null;
+        
+        // 如果当前有选中的文件，优先重新加载该文件（版本切换场景）
+        const currentFileId = selectedFileRef.current?.id;
+        if (currentFileId) {
+          targetFile = filesRes.data.find((f) => f.id === currentFileId);
+        }
+        
+        // 如果没有选中文件，检查URL中的fileId
+        if (!targetFile && fileId) {
+          targetFile = filesRes.data.find((f) => f.id === fileId);
+        }
+        
+        // 都没有就加载第一个文件
+        if (!targetFile && filesRes.data.length > 0) {
+          targetFile = filesRes.data[0];
+        }
+        
+        if (targetFile) {
+          loadFile(targetFile);
         }
       }
     } catch (error) {
@@ -458,7 +475,8 @@ const ProjectEditor: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [projectId, fileId, buildFileTree]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, fileId]);
 
   // 监听 projectId 变化，切换工程时清空历史栈
   useEffect(() => {
@@ -592,10 +610,21 @@ const ProjectEditor: React.FC = () => {
 
     try {
       setSaving(true);
-      const currentVersion = project?.currentVersionId || '0.0.0';
-      const versionParts = currentVersion.replace(/^v/, '').split('.');
-      const newPatch = parseInt(versionParts[2] || '0') + 1;
-      const newVersion = `v${versionParts[0]}.${versionParts[1]}.${newPatch}`;
+      
+      // 获取当前最新版本号
+      let newVersion = 'v1.0.0'; // 默认首个版本
+      try {
+        const versionsRes = await versionsApi.getVersions(projectId);
+        if (versionsRes.success && versionsRes.data.length > 0) {
+          // 找到最新版本并递增
+          const latestVersion = versionsRes.data[0].versionNumber;
+          const versionParts = latestVersion.replace(/^v/, '').split('.');
+          const newPatch = parseInt(versionParts[2] || '0') + 1;
+          newVersion = `v${versionParts[0]}.${versionParts[1]}.${newPatch}`;
+        }
+      } catch (err) {
+        console.warn('Failed to get versions, using default:', err);
+      }
 
       await versionsApi.publishVersion(projectId, {
         versionNumber: newVersion,
@@ -1912,6 +1941,13 @@ const ProjectEditor: React.FC = () => {
           </Space>
           <Space>
             <Button
+              icon={<HistoryOutlined />}
+              onClick={() => setVersionPanelVisible(!versionPanelVisible)}
+              type={versionPanelVisible ? 'primary' : 'default'}
+            >
+              版本管理
+            </Button>
+            <Button
               icon={<BugOutlined />}
               onClick={() => setDebugConfigVisible(true)}
               disabled={!project || files.filter(f => f.fileType === 'session').length === 0}
@@ -2061,7 +2097,11 @@ const ProjectEditor: React.FC = () => {
 
                   <Title level={5}>Quick Actions</Title>
                   <Space direction="vertical" style={{ width: '100%' }}>
-                    <Button block icon={<HistoryOutlined />}>
+                    <Button 
+                      block 
+                      icon={<HistoryOutlined />}
+                      onClick={() => setVersionPanelVisible(true)}
+                    >
                       View Version History
                     </Button>
                     <Button block>Format YAML</Button>
@@ -2334,6 +2374,50 @@ const ProjectEditor: React.FC = () => {
           setDebugInitialDebugInfo(null);
         }}
       />
+
+      {/* 版本管理面板 */}
+      {versionPanelVisible && projectId && (
+        <div
+          style={{
+            position: 'fixed',
+            right: 0,
+            top: '64px',
+            bottom: 0,
+            width: '400px',
+            background: '#fff',
+            boxShadow: '-2px 0 8px rgba(0,0,0,0.15)',
+            zIndex: 1000,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div
+            style={{
+              padding: '16px',
+              borderBottom: '1px solid #f0f0f0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <Title level={5} style={{ margin: 0 }}>
+              <HistoryOutlined /> 版本管理
+            </Title>
+            <Button
+              type="text"
+              icon={<RightOutlined />}
+              onClick={() => setVersionPanelVisible(false)}
+            />
+          </div>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <VersionListPanel
+              projectId={projectId}
+              currentVersionId={project?.currentVersionId}
+              onVersionChange={loadProjectData}
+            />
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };

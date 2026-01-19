@@ -1,4 +1,4 @@
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, inArray } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
@@ -15,6 +15,10 @@ const publishVersionSchema = z.object({
   versionNumber: z.string(),
   releaseNote: z.string().default(''),
   publishedBy: z.string(),
+});
+
+const setCurrentVersionSchema = z.object({
+  versionId: z.string().uuid(),
 });
 
 const versionsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -276,15 +280,47 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
 
       // 恢复文件到目标版本
       const versionFiles = targetVersion.versionFiles as Record<string, any>;
+
+      // 1. 获取工作区当前所有文件
+      const currentFiles = await db
+        .select({ id: scriptFiles.id })
+        .from(scriptFiles)
+        .where(eq(scriptFiles.projectId, id));
+      const currentFileIds = currentFiles.map((f) => f.id);
+
+      // 2. 删除工作区中存在但目标版本中不存在的文件
+      const idsToDelete = currentFileIds.filter((fileId) => !versionFiles[fileId]);
+      if (idsToDelete.length > 0) {
+        await db.delete(scriptFiles).where(inArray(scriptFiles.id, idsToDelete));
+      }
+
+      // 3. 恢复/更新文件内容
       for (const [fileId, fileData] of Object.entries(versionFiles)) {
-        await db
-          .update(scriptFiles)
-          .set({
+        if (currentFileIds.includes(fileId)) {
+          // 更新已存在的文件
+          await db
+            .update(scriptFiles)
+            .set({
+              fileName: fileData.fileName,
+              fileType: fileData.fileType,
+              fileContent: fileData.fileContent,
+              yamlContent: fileData.yamlContent,
+              updatedAt: new Date(),
+            })
+            .where(eq(scriptFiles.id, fileId));
+        } else {
+          // 恢复在当前工作区已被删除的文件
+          await db.insert(scriptFiles).values({
+            id: fileId,
+            projectId: id,
+            fileName: fileData.fileName,
+            fileType: fileData.fileType,
             fileContent: fileData.fileContent,
             yamlContent: fileData.yamlContent,
+            createdAt: new Date(),
             updatedAt: new Date(),
-          })
-          .where(eq(scriptFiles.id, fileId));
+          });
+        }
       }
 
       // 创建新版本（标记为回滚）
@@ -329,6 +365,117 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(500).send({
         success: false,
         error: 'Failed to rollback version',
+      });
+    }
+  });
+
+  // 设置当前版本（版本切换）
+  fastify.put('/projects/:id/current-version', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const body = setCurrentVersionSchema.parse(request.body);
+  
+      // 检查项目是否存在
+      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+  
+      if (!project) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Project not found',
+        });
+      }
+  
+      // 检查目标版本是否存在且属于该项目
+      const [targetVersion] = await db
+        .select()
+        .from(projectVersions)
+        .where(and(eq(projectVersions.projectId, id), eq(projectVersions.id, body.versionId))!);
+  
+      if (!targetVersion) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Version not found',
+        });
+      }
+  
+      // 记录旧版本 ID
+      const previousVersionId = project.currentVersionId;
+      
+      // 将目标版本的文件快照恢复到工作区
+      const versionFiles = targetVersion.versionFiles as Record<string, any>;
+      
+      // 1. 获取工作区当前所有文件
+      const currentFiles = await db
+        .select({ id: scriptFiles.id })
+        .from(scriptFiles)
+        .where(eq(scriptFiles.projectId, id));
+      const currentFileIds = currentFiles.map((f) => f.id);
+      
+      // 2. 删除工作区中存在但目标版本中不存在的文件
+      const idsToDelete = currentFileIds.filter((fileId) => !versionFiles[fileId]);
+      if (idsToDelete.length > 0) {
+        await db.delete(scriptFiles).where(inArray(scriptFiles.id, idsToDelete));
+      }
+      
+      // 3. 恢复/更新文件内容
+      for (const [fileId, fileData] of Object.entries(versionFiles)) {
+        if (currentFileIds.includes(fileId)) {
+          // 更新已存在的文件
+          await db
+            .update(scriptFiles)
+            .set({
+              fileName: fileData.fileName,
+              fileType: fileData.fileType,
+              fileContent: fileData.fileContent,
+              yamlContent: fileData.yamlContent,
+              updatedAt: new Date(),
+            })
+            .where(eq(scriptFiles.id, fileId));
+        } else {
+          // 恢复在当前工作区已被删除的文件
+          await db.insert(scriptFiles).values({
+            id: fileId,
+            projectId: id,
+            fileName: fileData.fileName,
+            fileType: fileData.fileType,
+            fileContent: fileData.fileContent,
+            yamlContent: fileData.yamlContent,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        }
+      }
+      
+      // 更新项目的当前版本
+      await db
+        .update(projects)
+        .set({
+          currentVersionId: body.versionId,
+          updatedAt: new Date(),
+        })
+        .where(eq(projects.id, id));
+  
+      return reply.send({
+        success: true,
+        data: {
+          projectId: id,
+          previousVersionId,
+          currentVersionId: body.versionId,
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Invalid request data',
+          details: error.errors,
+        });
+      }
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to set current version',
       });
     }
   });

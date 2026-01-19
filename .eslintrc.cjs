@@ -57,5 +57,9 @@ module.exports = {
     '**/import-script.ts',
     '**/update-sample-script.ts',
     '**/test-*.ts',
+    '**/test-*.js',
+    '**/e2e/**',
+    'playwright.config.ts',
+    '**/prepare-e2e-test.js',
   ],
 };

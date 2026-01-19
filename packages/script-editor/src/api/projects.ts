@@ -228,6 +228,20 @@ export const versionsApi = {
     return response.data;
   },
 
+  // 设置当前版本（版本切换）
+  async setCurrentVersion(projectId: string, data: { versionId: string }) {
+    const response = await axios.put<{
+      success: boolean;
+      data: {
+        projectId: string;
+        previousVersionId: string | null;
+        currentVersionId: string;
+        updatedAt: string;
+      };
+    }>(`${API_BASE_URL}/projects/${projectId}/current-version`, data);
+    return response.data;
+  },
+
   // 对比版本
   async diffVersions(projectId: string, versionId: string, compareWith?: string) {
     const response = await axios.get<{

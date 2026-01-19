@@ -28,6 +28,9 @@ export const sessions = pgTable('sessions', {
   position: jsonb('position').notNull().$type<{ phaseIndex: number; topicIndex: number; actionIndex: number }>(),
   variables: jsonb('variables').notNull().default({}),
   metadata: jsonb('metadata').notNull().default({}),
+  // 版本绑定字段
+  versionId: uuid('version_id').references(() => projectVersions.id),
+  versionSnapshot: jsonb('version_snapshot').$type<Record<string, any>>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   completedAt: timestamp('completed_at'),
@@ -36,6 +39,7 @@ export const sessions = pgTable('sessions', {
     userIdIdx: index('sessions_user_id_idx').on(table.userId),
     statusIdx: index('sessions_status_idx').on(table.status),
     createdAtIdx: index('sessions_created_at_idx').on(table.createdAt),
+    versionIdIdx: index('sessions_version_id_idx').on(table.versionId),
   };
 });
 
