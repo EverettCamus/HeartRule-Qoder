@@ -175,8 +175,8 @@ export const DEFAULT_DEBUG_FILTER: DebugOutputFilter = {
   showLLMPrompt: true, // 默认显示提示词
   showLLMResponse: true, // 默认显示响应
   showVariable: true, // 默认显示变量
-  showExecutionLog: false, // 默认不显示日志
-  showPosition: false, // 默认不显示位置
+  showExecutionLog: true, // 默认显示日志
+  showPosition: true, // 默认显示位置
 };
 
 /**

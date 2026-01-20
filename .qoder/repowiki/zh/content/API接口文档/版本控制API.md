@@ -9,9 +9,8 @@
 - [responses.ts](file://packages/shared-types/src/api/responses.ts)
 - [requests.ts](file://packages/shared-types/src/api/requests.ts)
 - [error-handler.ts](file://packages/api-server/src/utils/error-handler.ts)
-- [projects.ts](file://packages/script-editor/src/api/projects.ts)
-- [README.md](file://README.md)
-- [DEV_START_GUIDE.md](file://DEV_START_GUIDE.md)
+- [test-version-management.ts](file://packages/api-server/test-version-management.ts)
+- [0002_snapshot.json](file://packages/api-server/drizzle/meta/0002_snapshot.json)
 </cite>
 
 ## 目录
@@ -30,6 +29,8 @@
 版本控制API是HeartRule AI咨询引擎的核心功能模块，负责管理脚本项目的版本生命周期。该系统提供了完整的版本创建、查询、比较、合并、回滚等核心功能，支持版本标签管理、分支管理、冲突解决等机制。
 
 系统采用基于PostgreSQL的版本控制系统，通过草稿-发布-版本化的三层架构，确保脚本内容的一致性和可追溯性。版本控制与脚本执行紧密集成，通过一致性保证机制确保版本变更不会影响正在进行的会话执行。
+
+**更新** 新增版本切换功能，支持在不创建回滚版本的情况下切换当前版本；增强回滚功能，支持创建标记为回滚的新版本；改进版本比较功能，支持指定目标版本进行对比。
 
 ## 项目结构
 
@@ -50,8 +51,9 @@ end
 subgraph "错误处理"
 G[error-handler.ts<br/>统一错误处理]
 end
-subgraph "前端集成"
-H[projects.ts<br/>脚本编辑器API]
+subgraph "测试与验证"
+H[test-version-management.ts<br/>版本管理测试]
+I[0002_snapshot.json<br/>数据库快照]
 end
 A --> B
 A --> E
@@ -59,16 +61,17 @@ A --> F
 A --> G
 D --> B
 H --> A
+I --> B
 ```
 
 **图表来源**
-- [versions.ts](file://packages/api-server/src/routes/versions.ts#L1-L407)
-- [schema.ts](file://packages/api-server/src/db/schema.ts#L1-L219)
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L1-L554)
+- [schema.ts](file://packages/api-server/src/db/schema.ts#L1-L223)
 - [app.ts](file://packages/api-server/src/app.ts#L1-L135)
 
 **章节来源**
-- [versions.ts](file://packages/api-server/src/routes/versions.ts#L1-L407)
-- [schema.ts](file://packages/api-server/src/db/schema.ts#L1-L219)
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L1-L554)
+- [schema.ts](file://packages/api-server/src/db/schema.ts#L1-L223)
 - [app.ts](file://packages/api-server/src/app.ts#L1-L135)
 
 ## 核心组件
@@ -84,6 +87,7 @@ uuid id PK
 string projectName
 string description
 string engineVersion
+string engineVersionMin
 uuid currentVersionId
 enum status
 string author
@@ -127,7 +131,9 @@ PROJECTS ||--o{ PROJECT_VERSIONS : "发布"
 ```
 
 **图表来源**
-- [schema.ts](file://packages/api-server/src/db/schema.ts#L86-L156)
+- [schema.ts](file://packages/api-server/src/db/schema.ts#L145-L160)
+
+**更新** 数据库schema已更新，新增`isRollback`和`rollbackFromVersionId`字段，用于标识回滚版本及其源版本。
 
 ### 版本控制流程
 
@@ -136,10 +142,12 @@ PROJECTS ||--o{ PROJECT_VERSIONS : "发布"
 1. **草稿阶段**：编辑器保存临时修改到`project_drafts`表
 2. **发布阶段**：将草稿内容复制到`project_versions`表创建正式版本
 3. **版本阶段**：版本内容同步到`script_files`表供执行引擎使用
+4. **版本切换**：支持在不创建回滚版本的情况下切换当前版本
+5. **回滚阶段**：创建标记为回滚的新版本，指向源版本
 
 **章节来源**
-- [schema.ts](file://packages/api-server/src/db/schema.ts#L129-L156)
-- [versions.ts](file://packages/api-server/src/routes/versions.ts#L49-L115)
+- [schema.ts](file://packages/api-server/src/db/schema.ts#L145-L160)
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L122-L203)
 
 ## 架构概览
 
@@ -166,13 +174,26 @@ API->>DB : 更新script_files
 API->>DB : 更新projects.currentVersionId
 DB-->>API : 返回新版本
 API-->>Client : 201 Created + 新版本
+Client->>API : PUT /api/projects/ : id/current-version
+API->>DB : 验证目标版本
+API->>DB : 恢复版本文件到工作区
+API->>DB : 更新projects.currentVersionId
+DB-->>API : 返回切换结果
+API-->>Client : 200 OK + 切换结果
+Client->>API : POST /api/projects/ : id/rollback
+API->>DB : 获取目标版本
+API->>DB : 恢复文件到目标版本
+API->>DB : 插入新版本标记为回滚
+API->>DB : 更新projects.currentVersionId
+DB-->>API : 返回新版本
+API-->>Client : 200 OK + 新版本
 ```
 
 **图表来源**
-- [versions.ts](file://packages/api-server/src/routes/versions.ts#L22-L199)
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L26-L370)
 
 **章节来源**
-- [versions.ts](file://packages/api-server/src/routes/versions.ts#L20-L407)
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L26-L554)
 - [app.ts](file://packages/api-server/src/app.ts#L96-L102)
 
 ## 详细组件分析
@@ -195,7 +216,7 @@ API-->>Client : 201 Created + 新版本
 - **状态码**：200成功，400请求数据无效，500服务器错误
 
 **章节来源**
-- [versions.ts](file://packages/api-server/src/routes/versions.ts#L22-L115)
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L26-L119)
 
 ### 版本发布接口
 
@@ -217,7 +238,7 @@ API-->>Client : 201 Created + 新版本
 6. 返回新版本信息
 
 **章节来源**
-- [versions.ts](file://packages/api-server/src/routes/versions.ts#L118-L199)
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L122-L203)
 
 ### 版本查询接口
 
@@ -236,7 +257,29 @@ API-->>Client : 201 Created + 新版本
 - **状态码**：200成功，404版本不存在，500服务器错误
 
 **章节来源**
-- [versions.ts](file://packages/api-server/src/routes/versions.ts#L202-L253)
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L206-L257)
+
+### 版本切换接口
+
+**新增** 版本切换功能允许在不创建回滚版本的情况下切换当前版本。
+
+#### 切换当前版本
+- **方法**：PUT `/api/projects/:id/current-version`
+- **请求体**：包含`versionId`字段
+- **功能**：将目标版本的文件快照恢复到工作区并更新项目状态
+- **响应**：返回切换结果，包含旧版本ID、新版本ID和更新时间
+- **状态码**：200成功，400请求数据无效，404目标版本不存在，500服务器错误
+
+版本切换流程的关键步骤：
+1. 验证项目存在性
+2. 验证目标版本存在且属于该项目
+3. 获取目标版本的文件快照
+4. 恢复文件到工作区（删除不存在的文件，更新现有文件，恢复删除的文件）
+5. 更新`projects.currentVersionId`
+6. 返回切换结果
+
+**章节来源**
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L373-L481)
 
 ### 版本回滚接口
 
@@ -256,7 +299,7 @@ API-->>Client : 201 Created + 新版本
 4. 更新`projects.currentVersionId`
 
 **章节来源**
-- [versions.ts](file://packages/api-server/src/routes/versions.ts#L256-L334)
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L259-L370)
 
 ### 版本比较接口
 
@@ -271,8 +314,10 @@ API-->>Client : 201 Created + 新版本
 
 默认行为：如果没有指定`compareWith`参数，则与前一个版本进行比较。
 
+**更新** 版本比较接口现已支持指定目标版本进行对比，增强了版本管理的灵活性。
+
 **章节来源**
-- [versions.ts](file://packages/api-server/src/routes/versions.ts#L336-L403)
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L483-L550)
 
 ### 与脚本执行的关系
 
@@ -281,8 +326,13 @@ API-->>Client : 201 Created + 新版本
 ```mermaid
 flowchart TD
 Start([版本变更]) --> Publish["发布版本"]
+Start --> Switch["版本切换"]
+Start --> Rollback["版本回滚"]
 Publish --> UpdateFiles["更新脚本文件"]
+Switch --> RestoreFiles["恢复文件到工作区"]
+Rollback --> RestoreFiles
 UpdateFiles --> UpdateProject["更新项目状态"]
+RestoreFiles --> UpdateProject
 UpdateProject --> CheckSessions{"有活跃会话?"}
 CheckSessions --> |否| Complete["版本变更完成"]
 CheckSessions --> |是| SyncState["同步执行状态"]
@@ -295,7 +345,7 @@ Complete --> End([一致性保证])
 - [session-manager.ts](file://packages/api-server/src/services/session-manager.ts#L124-L255)
 
 **章节来源**
-- [session-manager.ts](file://packages/api-server/src/services/session-manager.ts#L1-L466)
+- [session-manager.ts](file://packages/api-server/src/services/session-manager.ts#L1-L479)
 
 ## 依赖关系分析
 
@@ -344,11 +394,13 @@ K --> F
    - `project_versions.published_at`：按发布时间排序查询
    - `project_versions.project_id`：按项目过滤查询
    - `script_files.project_id`：按项目关联查询
+   - **新增** `project_versions.is_rollback`：按回滚标记过滤查询
 
 2. **查询优化**：
    - 使用`LIMIT`限制版本历史数量
    - 批量操作减少数据库往返
    - 合理使用事务保证数据一致性
+   - **新增** 使用`inArray`优化批量删除操作
 
 ### 缓存策略
 
@@ -402,21 +454,29 @@ Log --> Response[返回标准化响应]
 2. **检查数据库连接**：确认PostgreSQL服务正常运行
 3. **验证权限配置**：确保数据库用户具有必要权限
 4. **监控资源使用**：关注内存和CPU使用情况
+5. **使用测试脚本**：参考`test-version-management.ts`进行功能验证
 
 **章节来源**
-- [DEV_START_GUIDE.md](file://DEV_START_GUIDE.md#L67-L113)
+- [test-version-management.ts](file://packages/api-server/test-version-management.ts#L1-L156)
 
 ## 结论
 
 版本控制API为HeartRule AI咨询引擎提供了完整的脚本版本管理解决方案。通过草稿-发布-版本化的三层架构，系统实现了版本的完整生命周期管理，包括版本创建、查询、比较、合并、回滚等核心功能。
 
+**更新** 新版本功能显著增强了版本管理能力：
+- **版本切换**：支持在不创建回滚版本的情况下切换当前版本
+- **增强回滚**：创建标记为回滚的新版本，保留源版本信息
+- **改进比较**：支持指定目标版本进行对比分析
+- **数据库增强**：新增回滚标记和源版本跟踪字段
+
 系统的主要优势包括：
 
 1. **一致性保证**：版本变更与脚本执行引擎无缝集成
-2. **可追溯性**：完整的版本历史和变更记录
+2. **可追溯性**：完整的版本历史和变更记录，包括回滚版本
 3. **性能优化**：合理的数据库设计和查询优化
 4. **错误处理**：统一的错误处理和恢复机制
 5. **扩展性**：模块化的架构设计支持功能扩展
+6. **灵活性**：支持多种版本管理策略（发布、切换、回滚）
 
 未来可以考虑的功能增强包括：
 - 自动合并算法的实现
@@ -424,3 +484,9 @@ Log --> Response[返回标准化响应]
 - 版本锁定和权限控制
 - 备份和恢复策略
 - 更丰富的版本比较功能
+- 分支管理功能
+
+**章节来源**
+- [versions.ts](file://packages/api-server/src/routes/versions.ts#L1-L554)
+- [schema.ts](file://packages/api-server/src/db/schema.ts#L1-L223)
+- [test-version-management.ts](file://packages/api-server/test-version-management.ts#L1-L156)

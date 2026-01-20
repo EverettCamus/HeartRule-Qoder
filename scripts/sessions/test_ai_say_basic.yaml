@@ -1,0 +1,37 @@
+sessions:
+  - session: "ABC模型介绍测试"
+    declare:
+      - var: 教育背景
+        value: 本科
+      - var: 心理学知识
+        value: 无
+      - var: 学习风格
+        value: 视觉型，喜欢具体例子
+      - var: 用户名
+        value: 测试用户
+      - var: 咨询师名
+        value: AI助手
+    
+    phases:
+      - phase: "概念讲解"
+        steps:
+          - topic: "ABC模型核心概念"
+            actions:
+              - type: ai_say
+                content: |
+                  ABC模型是CBT的核心概念，包括三个部分：
+                  - A (Activating Event): 诱发事件
+                  - B (Belief): 信念/想法
+                  - C (Consequence): 结果/情绪
+                  它们之间的关系是：A → B → C
+                  
+                  【讲解要点】
+                  1. 先整体介绍ABC三个要素
+                  2. 用生活化例子说明A→B→C的关系
+                  3. 强调B是关键，不是A直接导致C
+                  4. 引导用户举出自己的例子
+                require_acknowledgment: false
+                max_rounds: 3
+                exit_criteria:
+                  understanding_threshold: 80
+                  has_questions: false

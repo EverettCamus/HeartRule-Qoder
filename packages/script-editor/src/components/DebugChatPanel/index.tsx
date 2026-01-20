@@ -74,7 +74,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
   // 调试气泡相关状态
   const [debugBubbles, setDebugBubbles] = useState<DebugBubble[]>([]);
-  const [debugFilter, setDebugFilter] = useState<DebugOutputFilter>(() => loadDebugFilter());
+  const [debugFilter, setDebugFilter] = useState<DebugOutputFilter>(() => {
+    const filter = loadDebugFilter();
+    console.log('[DebugChat] 🔍 Loaded debug filter:', filter);
+    return filter;
+  });
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   // 滚动到底部
@@ -235,6 +239,9 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     try {
       setInitialLoading(true);
       setError(null);
+      // 🔧 关键修复：清空旧的调试气泡，避免上次会话的气泡残留
+      setDebugBubbles([]);
+      console.log('[DebugChat] 🧹 Cleared old debug bubbles');
       console.log('[DebugChat] ⏳ Loading session data...');
 
       // 获取会话详情
@@ -1029,15 +1036,51 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                   });
                 });
 
-                // 添加气泡
+                // 添加气泡（并记录过滤统计）
+                const bubbleStats = {
+                  total: debugBubbles.length,
+                  filtered: 0,
+                  byType: {} as Record<string, { total: number; filtered: number }>,
+                };
+
                 debugBubbles.forEach((bubble) => {
+                  // 初始化类型统计
+                  if (!bubbleStats.byType[bubble.type]) {
+                    bubbleStats.byType[bubble.type] = { total: 0, filtered: 0 };
+                  }
+                  bubbleStats.byType[bubble.type].total++;
+
                   // 根据过滤器过滤气泡
-                  if (bubble.type === 'error' && !debugFilter.showError) return;
-                  if (bubble.type === 'llm_prompt' && !debugFilter.showLLMPrompt) return;
-                  if (bubble.type === 'llm_response' && !debugFilter.showLLMResponse) return;
-                  if (bubble.type === 'variable' && !debugFilter.showVariable) return;
-                  if (bubble.type === 'execution_log' && !debugFilter.showExecutionLog) return;
-                  if (bubble.type === 'position' && !debugFilter.showPosition) return;
+                  if (bubble.type === 'error' && !debugFilter.showError) {
+                    bubbleStats.filtered++;
+                    bubbleStats.byType[bubble.type].filtered++;
+                    return;
+                  }
+                  if (bubble.type === 'llm_prompt' && !debugFilter.showLLMPrompt) {
+                    bubbleStats.filtered++;
+                    bubbleStats.byType[bubble.type].filtered++;
+                    return;
+                  }
+                  if (bubble.type === 'llm_response' && !debugFilter.showLLMResponse) {
+                    bubbleStats.filtered++;
+                    bubbleStats.byType[bubble.type].filtered++;
+                    return;
+                  }
+                  if (bubble.type === 'variable' && !debugFilter.showVariable) {
+                    bubbleStats.filtered++;
+                    bubbleStats.byType[bubble.type].filtered++;
+                    return;
+                  }
+                  if (bubble.type === 'execution_log' && !debugFilter.showExecutionLog) {
+                    bubbleStats.filtered++;
+                    bubbleStats.byType[bubble.type].filtered++;
+                    return;
+                  }
+                  if (bubble.type === 'position' && !debugFilter.showPosition) {
+                    bubbleStats.filtered++;
+                    bubbleStats.byType[bubble.type].filtered++;
+                    return;
+                  }
 
                   items.push({
                     type: 'bubble',
@@ -1045,6 +1088,17 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                     timestamp: bubble.timestamp,
                   });
                 });
+
+                // 输出过滤统计
+                if (bubbleStats.filtered > 0) {
+                  console.warn(
+                    `[DebugChat] ⚠️ ${bubbleStats.filtered}/${bubbleStats.total} debug bubbles filtered out by user settings. Details:`,
+                    bubbleStats.byType
+                  );
+                  console.warn(
+                    '[DebugChat] 🔧 To show all debug info, click the settings icon and enable all options, or click "Reset Default"'
+                  );
+                }
 
                 // 按时间排序
                 items.sort(

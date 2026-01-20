@@ -245,9 +245,11 @@ const ProjectEditor: React.FC = () => {
             topic.actions?.forEach((action: any) => {
               // 规范化 Action 类型，将 config 字段映射到前端期望的字段名
               if (action.action_type === 'ai_say') {
+                const contentValue = action.config?.content_template || '';
                 actions.push({
                   type: 'ai_say',
-                  ai_say: action.config?.content_template || '',
+                  content: contentValue,  // 新字段
+                  ai_say: contentValue,   // 旧字段，保持向后兼容
                   tone: action.config?.tone,
                   condition: action.config?.condition,
                   require_acknowledgment: action.config?.require_acknowledgment,
@@ -765,11 +767,13 @@ const ProjectEditor: React.FC = () => {
                       // 使用保留的原始数据
                       const rawAction = action._raw as any;
                       if (action.type === 'ai_say') {
+                        // 修复: 优先使用 content 字段，如果没有则回退到 ai_say
+                        const contentValue = action.content || action.ai_say || '';
                         return {
                           ...rawAction,
                           config: {
                             ...rawAction.config,
-                            content_template: action.ai_say,
+                            content_template: contentValue,
                             tone: action.tone,
                             condition: action.condition,
                             require_acknowledgment: action.require_acknowledgment,

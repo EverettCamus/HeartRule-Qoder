@@ -47,10 +47,15 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
       };
 
       if (action.type === 'ai_say') {
-        formValues.ai_say = action.ai_say;
+        // 兼容旧字段和新字段
+        formValues.content = action.content || action.ai_say || '';
         formValues.tone = action.tone || '';
-        formValues.require_acknowledgment = action.require_acknowledgment ?? true; // 默认为true
-        formValues.max_rounds = action.max_rounds ?? 1; // 默认为1
+        formValues.require_acknowledgment = action.require_acknowledgment ?? true;
+        formValues.max_rounds = action.max_rounds ?? 5;
+        formValues.exit_criteria = {
+          understanding_threshold: action.exit_criteria?.understanding_threshold ?? 80,
+          has_questions: action.exit_criteria?.has_questions ?? false
+        };
       } else if (action.type === 'ai_ask') {
         formValues.ai_ask = action.ai_ask;
         formValues.tone = action.tone || '';
@@ -95,10 +100,12 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
 
       if (action.type === 'ai_say') {
         Object.assign(updatedAction, {
-          ai_say: values.ai_say,
+          content: values.content,  // 使用新字段
+          ai_say: values.content,   // 同时更新旧字段以保持向后兼容
           tone: values.tone || undefined,
           require_acknowledgment: values.require_acknowledgment,
           max_rounds: values.max_rounds,
+          exit_criteria: values.exit_criteria,  // 新增退出条件
         });
       } else if (action.type === 'ai_ask') {
         Object.assign(updatedAction, {
@@ -184,38 +191,80 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
           {action.type === 'ai_say' && (
             <>
               <Form.Item
-                label="Prompt Content"
-                name="ai_say"
-                rules={[{ required: true, message: 'Please enter the prompt content' }]}
+                label="Lecture Content"
+                name="content"
+                rules={[{ required: true, message: 'Please enter the lecture content' }]}
+                tooltip="Core content for lecture/persuasion, supports multi-line text and script variables"
               >
-                <TextArea rows={8} placeholder="Enter the prompt for AI speaking..." showCount />
+                <TextArea 
+                  rows={10} 
+                  placeholder="Enter lecture content, can use variables like {variable_name}..." 
+                  showCount 
+                />
               </Form.Item>
+
+              <Divider orientation="left">Interaction Settings</Divider>
+
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item 
+                    label="Require Acknowledgment" 
+                    name="require_acknowledgment"
+                    valuePropName="checked"
+                    tooltip="Whether user reply is required before continuing"
+                  >
+                    <Switch />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item 
+                    label="Max Rounds" 
+                    name="max_rounds"
+                    tooltip="Protection mechanism against infinite loops"
+                    rules={[{ type: 'number', min: 1, max: 20 }]}
+                  >
+                    <InputNumber min={1} max={20} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
 
               <Form.Item label="Tone Style" name="tone">
                 <Input placeholder="e.g. gentle, encouraging, serious" />
               </Form.Item>
 
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item 
-                    label="Require Acknowledgment" 
-                    name="require_acknowledgment"
-                    valuePropName="checked"
-                    tooltip="是否需要用户确认后才继续"
-                  >
-                    <Switch />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item 
-                    label="Max Rounds" 
-                    name="max_rounds"
-                    tooltip="最大交互轮数"
-                  >
-                    <InputNumber min={1} max={10} style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              </Row>
+              <Divider orientation="left">Exit Conditions</Divider>
+
+              <Collapse ghost defaultActiveKey={[]}>
+                <Panel header="Advanced Exit Condition Settings (Optional)" key="exit_criteria">
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <Form.Item 
+                        label="Understanding Threshold" 
+                        name={['exit_criteria', 'understanding_threshold']}
+                        tooltip="Allow exit when user understanding reaches this threshold (0-100)"
+                      >
+                        <InputNumber 
+                          min={0} 
+                          max={100} 
+                          style={{ width: '100%' }}
+                          formatter={value => `${value}%`}
+                          parser={value => value?.replace('%', '') as any}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item 
+                        label="Allow Exit With Questions" 
+                        name={['exit_criteria', 'has_questions']}
+                        valuePropName="checked"
+                        tooltip="Whether to allow exiting topic when user still has questions"
+                      >
+                        <Switch />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </Panel>
+              </Collapse>
             </>
           )}
 

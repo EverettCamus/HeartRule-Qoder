@@ -21,10 +21,15 @@ export interface BaseAction {
 // AI 说话 Action
 export interface AiSayAction extends BaseAction {
   type: 'ai_say';
-  ai_say: string;      // 提示词内容
+  ai_say?: string;     // 提示词内容（向后兼容）
+  content?: string;    // 讲解内容（新字段，优先使用）
   tone?: string;       // 语气风格
   require_acknowledgment?: boolean;  // 是否需要用户确认
   max_rounds?: number; // 最大轮数
+  exit_criteria?: {    // 退出条件配置（新增）
+    understanding_threshold?: number;  // 理解度阈值 (0-100)
+    has_questions?: boolean;           // 是否允许有疑问时退出
+  };
 }
 
 // AI 提问 Action

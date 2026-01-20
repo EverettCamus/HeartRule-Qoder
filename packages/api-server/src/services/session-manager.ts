@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
 
 import { db } from '../db/index.js';
-import { sessions, messages, scripts, variables, type NewVariable } from '../db/schema.js';
+import { sessions, messages, scripts, variables, scriptFiles, type NewVariable } from '../db/schema.js';
 import { buildDetailedError } from '../utils/error-handler.js';
 
 /**
@@ -65,6 +65,78 @@ export class SessionManager {
     }
 
     return rows;
+  }
+
+  /**
+   * 加载项目的全局变量
+   */
+  private async loadGlobalVariables(scriptName: string): Promise<Record<string, any>> {
+    try {
+      console.log('[SessionManager] 🔍 Loading global variables for script:', scriptName);
+
+      // 查找包含该脚本文件的项目
+      const sessionFile = await db.query.scriptFiles.findFirst({
+        where: eq(scriptFiles.fileName, scriptName),
+      });
+
+      if (!sessionFile) {
+        console.log('[SessionManager] ⚠️ Script file not found in projects, skipping global variables');
+        return {};
+      }
+
+      console.log('[SessionManager] ✅ Found script file:', {
+        fileName: sessionFile.fileName,
+        projectId: sessionFile.projectId,
+      });
+
+      // 查找该项目的 global.yaml 文件
+      const globalFile = await db.query.scriptFiles.findFirst({
+        where: (fields, { and, eq }) =>
+          and(eq(fields.projectId, sessionFile.projectId), eq(fields.fileType, 'global')),
+      });
+
+      if (!globalFile) {
+        console.log('[SessionManager] ⚠️ No global.yaml found in project');
+        return {};
+      }
+
+      console.log('[SessionManager] ✅ Found global.yaml:', {
+        fileName: globalFile.fileName,
+        hasYamlContent: !!globalFile.yamlContent,
+        hasFileContent: !!globalFile.fileContent,
+      });
+
+      // 解析全局变量
+      let globalVariables: Record<string, any> = {};
+
+      if (globalFile.yamlContent) {
+        // 从 yamlContent 解析
+        const parsed = yaml.parse(globalFile.yamlContent);
+        if (parsed && parsed.variables && Array.isArray(parsed.variables)) {
+          for (const varDef of parsed.variables) {
+            if (varDef.name && varDef.value !== undefined) {
+              globalVariables[varDef.name] = varDef.value;
+            }
+          }
+        }
+      } else if (globalFile.fileContent) {
+        // 从 fileContent 解析
+        const content = globalFile.fileContent as any;
+        if (content.variables && Array.isArray(content.variables)) {
+          for (const varDef of content.variables) {
+            if (varDef.name && varDef.value !== undefined) {
+              globalVariables[varDef.name] = varDef.value;
+            }
+          }
+        }
+      }
+
+      console.log('[SessionManager] ✅ Loaded global variables:', globalVariables);
+      return globalVariables;
+    } catch (error) {
+      console.error('[SessionManager] ❌ Error loading global variables:', error);
+      return {};
+    }
   }
 
   /**
@@ -121,9 +193,29 @@ export class SessionManager {
     });
 
     try {
-      // 创建初始执行状态
+      // 加载全局变量
+      const globalVariables = await this.loadGlobalVariables(script.scriptName);
+
+      // 获取历史消息
+      const history = await db.query.messages.findMany({
+        where: eq(messages.sessionId, sessionId),
+        orderBy: (fields, { asc }) => [asc(fields.timestamp)],
+      });
+
+      const conversationHistory = history.map((m) => ({
+        role: m.role,
+        content: m.content,
+        actionId: m.actionId || undefined,
+        metadata: (m.metadata as Record<string, any>) || {},
+      }));
+
+      // 创建初始执行状态，合并全局变量和会话变量
       let executionState: ExecutionState = ScriptExecutor.createInitialState();
-      executionState.variables = (session.variables as Record<string, unknown>) || {};
+      executionState.variables = {
+        ...globalVariables, // 先加载全局变量
+        ...((session.variables as Record<string, unknown>) || {}), // 会话变量覆盖全局变量
+      };
+      executionState.conversationHistory = conversationHistory;
       console.log('[SessionManager] 📋 Initial execution state:', {
         status: executionState.status,
         phaseIdx: executionState.currentPhaseIdx,
@@ -146,6 +238,7 @@ export class SessionManager {
 
       // 执行脚本（初始化，没有用户输入）
       console.log('[SessionManager] ⏳ Executing script (initialization)...');
+      const prevHistoryLength = executionState.conversationHistory.length;
       executionState = await this.scriptExecutor.executeSession(
         scriptJson,
         sessionId,
@@ -161,8 +254,9 @@ export class SessionManager {
         hasMessage: !!executionState.lastAiMessage,
       });
 
-      // 保存所有新增的 AI 消息（从 conversationHistory）
-      const aiMessages = executionState.conversationHistory.filter(
+      // 保存新增的 AI 消息（仅保存本次执行新产生的）
+      const newMessages = executionState.conversationHistory.slice(prevHistoryLength);
+      const aiMessages = newMessages.filter(
         (msg) => msg.role === 'assistant'
       );
 
@@ -311,23 +405,39 @@ export class SessionManager {
       scriptName: script.scriptName,
     });
 
-    // 保存用户消息
-    const userMessageId = uuidv4();
-    console.log('[SessionManager] 💾 Saving user message:', {
-      messageId: userMessageId,
-      content: userInput,
-    });
-    await db.insert(messages).values({
-      id: userMessageId,
-      sessionId,
-      role: 'user',
-      content: userInput,
-      metadata: {},
-      timestamp: new Date(),
-    });
-
     try {
-      // 恢复执行状态
+      // 加载全局变量
+      const globalVariables = await this.loadGlobalVariables(script.scriptName);
+
+      // 获取历史消息（此时不包含当前刚收到的 userInput，避免重复）
+      const history = await db.query.messages.findMany({
+        where: eq(messages.sessionId, sessionId),
+        orderBy: (fields, { asc }) => [asc(fields.timestamp)],
+      });
+
+      // 保存当前用户消息到数据库
+      const userMessageId = uuidv4();
+      console.log('[SessionManager] 💾 Saving user message:', {
+        messageId: userMessageId,
+        content: userInput,
+      });
+      await db.insert(messages).values({
+        id: userMessageId,
+        sessionId,
+        role: 'user',
+        content: userInput,
+        metadata: {},
+        timestamp: new Date(),
+      });
+
+      const conversationHistory = history.map((m) => ({
+        role: m.role,
+        content: m.content,
+        actionId: m.actionId || undefined,
+        metadata: (m.metadata as Record<string, any>) || {},
+      }));
+
+      // 恢复执行状态，合并全局变量
       let executionState: ExecutionState = {
         status: (session.executionStatus as ExecutionStatus) || ExecutionStatus.RUNNING,
         currentPhaseIdx: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
@@ -335,8 +445,11 @@ export class SessionManager {
         currentActionIdx:
           ((session.position as Record<string, unknown>)?.actionIndex as number) || 0,
         currentAction: null, // 会在执行器中重建
-        variables: (session.variables as Record<string, unknown>) || {},
-        conversationHistory: [],
+        variables: {
+          ...globalVariables, // 先加载全局变量
+          ...((session.variables as Record<string, unknown>) || {}), // 会话变量覆盖全局变量
+        },
+        conversationHistory: conversationHistory,
         metadata: (session.metadata as Record<string, unknown>) || {},
         lastAiMessage: null,
       };
@@ -353,6 +466,7 @@ export class SessionManager {
 
       // 执行脚本（传入用户输入）
       console.log('[SessionManager] ⏳ Executing script with user input...');
+      const prevHistoryLength = executionState.conversationHistory.length;
       executionState = await this.scriptExecutor.executeSession(
         scriptJson,
         sessionId,
@@ -368,8 +482,10 @@ export class SessionManager {
         hasMessage: !!executionState.lastAiMessage,
       });
 
-      // 保存所有新增的 AI 消息（从 conversationHistory）
-      const aiMessages = executionState.conversationHistory.filter(
+      // 保存新增的 AI 消息（仅保存本次执行新产生的）
+      // 注意：userInput 已经被 push 到了 conversationHistory 中（在 continueAction 或 executeAction 里）
+      const newMessages = executionState.conversationHistory.slice(prevHistoryLength);
+      const aiMessages = newMessages.filter(
         (msg) => msg.role === 'assistant'
       );
 

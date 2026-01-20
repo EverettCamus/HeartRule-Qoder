@@ -12,6 +12,7 @@ import type { BaseAction, ActionContext, ActionResult } from '../../actions/base
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
 import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.js';
+import * as path from 'path';
 
 /**
  * 执行状态
@@ -138,9 +139,26 @@ export class ScriptExecutor {
 
       // 如果有当前Action正在执行，继续执行
       if (executionState.currentAction) {
+        // 恢复位置 ID 信息
+        const resumedPhase = phases[executionState.currentPhaseIdx];
+        if (resumedPhase) {
+          executionState.currentPhaseId = resumedPhase.phase_id;
+          const resumedTopic = resumedPhase.topics[executionState.currentTopicIdx];
+          if (resumedTopic) {
+            executionState.currentTopicId = resumedTopic.topic_id;
+            const resumedActionConfig = resumedTopic.actions[executionState.currentActionIdx];
+            if (resumedActionConfig) {
+              executionState.currentActionId = resumedActionConfig.action_id;
+              executionState.currentActionType = resumedActionConfig.action_type;
+            }
+          }
+        }
+
         console.log('[ScriptExecutor] 🔄 Continuing current action:', {
           actionId: executionState.currentAction.actionId,
           actionIdx: executionState.currentActionIdx,
+          phaseId: executionState.currentPhaseId,
+          topicId: executionState.currentTopicId,
         });
         const result = await this.continueAction(
           executionState.currentAction,
@@ -152,6 +170,26 @@ export class ScriptExecutor {
         if (!result.completed) {
           // Action未完成，继续等待
           executionState.status = ExecutionStatus.WAITING_INPUT;
+
+          // Action未完成，但可能有 AI 消息（如 ai_ask 的问题或 ai_say 的下一轮对话内容）
+          if (result.aiMessage) {
+            executionState.lastAiMessage = result.aiMessage;
+            // 也添加到对话历史
+            executionState.conversationHistory.push({
+              role: 'assistant',
+              content: result.aiMessage,
+              actionId: executionState.currentAction.actionId,
+              metadata: result.metadata,
+            });
+            console.log('[ScriptExecutor] 📥 Saved intermediate AI message from continued action');
+          }
+
+          // 保存LLM调试信息（如果有）
+          if (result.debugInfo) {
+            executionState.lastLLMDebugInfo = result.debugInfo;
+            console.log('[ScriptExecutor] 💾 Saved intermediate LLM debug info from continued action');
+          }
+
           // 保存 Action 内部状态
           executionState.metadata.actionState = this.serializeActionState(
             executionState.currentAction
@@ -522,17 +560,6 @@ export class ScriptExecutor {
     sessionId: string,
     userInput?: string | null
   ): Promise<ActionResult> {
-    // 构建执行上下文
-    const context: ActionContext = {
-      sessionId,
-      phaseId: `phase_${executionState.currentPhaseIdx}`,
-      topicId: `topic_${executionState.currentTopicIdx}`,
-      actionId: action.actionId,
-      variables: { ...executionState.variables },
-      conversationHistory: [...executionState.conversationHistory],
-      metadata: { ...executionState.metadata },
-    };
-
     // 更新对话历史（用户输入）
     if (userInput) {
       executionState.conversationHistory.push({
@@ -541,6 +568,17 @@ export class ScriptExecutor {
         actionId: action.actionId,
       });
     }
+
+    // 构建执行上下文
+    const context: ActionContext = {
+      sessionId,
+      phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
+      topicId: executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`,
+      actionId: action.actionId,
+      variables: { ...executionState.variables },
+      conversationHistory: [...executionState.conversationHistory],
+      metadata: { ...executionState.metadata },
+    };
 
     // 继续执行
     return await action.execute(context, userInput);
