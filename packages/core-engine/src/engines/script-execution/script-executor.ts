@@ -12,7 +12,6 @@ import type { BaseAction, ActionContext, ActionResult } from '../../actions/base
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
 import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.js';
-import * as path from 'path';
 
 /**
  * 执行状态

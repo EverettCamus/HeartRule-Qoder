@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 config({ path: path.resolve(__dirname, '../../.env') });
 
 import { db } from './src/db/index.js';
-import { projects, scriptFiles, scripts, sessions } from './src/db/schema.js';
+import { projects, scripts, sessions } from './src/db/schema.js';
 import { SessionManager } from './src/services/session-manager.js';
 import { v4 as uuidv4 } from 'uuid';
 

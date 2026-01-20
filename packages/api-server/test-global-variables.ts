@@ -5,7 +5,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from 'dotenv';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import yaml from 'yaml';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

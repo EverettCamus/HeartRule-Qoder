@@ -140,7 +140,7 @@ describe('AiSayAction - 模板路径配置回归测试', () => {
         { cwd: 'C:\\CBT\\HeartRule-Qcoder', expected: true },
       ];
 
-      testCases.forEach(({ cwd }) => {
+      testCases.forEach(() => {
         // 注意：实际不能更改 process.cwd()，这里只是验证逻辑
         // 真实场景中，api-server 会在 packages/api-server 目录运行
         expect(() => {

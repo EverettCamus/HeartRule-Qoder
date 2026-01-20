@@ -11,7 +11,6 @@
 import { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager } from '../engines/prompt-template/index.js';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
 
 import { BaseAction } from './base-action.js';
 import type { ActionContext, ActionResult } from './base-action.js';
