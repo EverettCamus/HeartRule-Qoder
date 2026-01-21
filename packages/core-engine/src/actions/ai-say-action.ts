@@ -8,9 +8,10 @@
  * - 保持向后兼容（require_acknowledgment 机制）
  */
 
+import * as path from 'path';
+
 import { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager } from '../engines/prompt-template/index.js';
-import * as path from 'path';
 
 import { BaseAction } from './base-action.js';
 import type { ActionContext, ActionResult } from './base-action.js';
@@ -19,12 +20,12 @@ import type { ActionContext, ActionResult } from './base-action.js';
  * ai_say 配置接口
  */
 interface AiSayConfig {
-  content?: string;  // 讲解内容（必填）
-  require_acknowledgment?: boolean;  // 是否需要用户确认
-  max_rounds?: number;  // 最大轮数
+  content?: string; // 讲解内容（必填）
+  require_acknowledgment?: boolean; // 是否需要用户确认
+  max_rounds?: number; // 最大轮数
   exit_criteria?: {
-    understanding_threshold?: number;  // 理解度阈值
-    has_questions?: boolean;  // 是否允许有疑问时退出
+    understanding_threshold?: number; // 理解度阈值
+    has_questions?: boolean; // 是否允许有疑问时退出
   };
 }
 
@@ -33,7 +34,7 @@ interface AiSayConfig {
  */
 interface MainLineOutput {
   assessment: {
-    understanding_level: number;  // 0-100
+    understanding_level: number; // 0-100
     has_questions: boolean;
     expressed_understanding: boolean;
     reasoning: string;
@@ -59,19 +60,19 @@ export class AiSayAction extends BaseAction {
   private llmOrchestrator?: LLMOrchestrator;
   private templateManager: PromptTemplateManager;
   private exitCriteria: AiSayConfig['exit_criteria'];
-  private useTemplateMode: boolean = false;  // 是否使用模板模式
+  private useTemplateMode: boolean = false; // 是否使用模板模式
 
   constructor(actionId: string, config: Record<string, any>, llmOrchestrator?: LLMOrchestrator) {
     super(actionId, config);
     this.llmOrchestrator = llmOrchestrator;
-    
+
     // 设置模板根目录：优先使用环境变量，否则智能识别运行目录
     let templateBasePath = process.env.PROMPT_TEMPLATE_PATH;
-    
+
     if (!templateBasePath) {
       const cwd = process.cwd();
       console.log(`[AiSayAction] 📁 Current working directory: ${cwd}`);
-      
+
       // 检测运行目录：
       // - 如果在 packages/api-server 下，向上 2 级到 root
       // - 如果在项目根目录，直接使用 ./config/prompts
@@ -81,17 +82,17 @@ export class AiSayAction extends BaseAction {
         // 假设在项目根目录或测试环境
         templateBasePath = path.resolve(cwd, './config/prompts');
       }
-      
+
       console.log(`[AiSayAction] 📁 Template path: ${templateBasePath}`);
     }
-    
+
     this.templateManager = new PromptTemplateManager(templateBasePath);
-    
+
     // maxRounds 已在 BaseAction 中设置
     this.exitCriteria = config.exit_criteria;
-    
+
     // 判断是否使用模板模式：有 max_rounds 或 exit_criteria 配置
-    this.useTemplateMode = (config.max_rounds !== undefined || config.exit_criteria !== undefined);
+    this.useTemplateMode = config.max_rounds !== undefined || config.exit_criteria !== undefined;
   }
 
   async execute(context: ActionContext, userInput?: string | null): Promise<ActionResult> {
@@ -195,7 +196,7 @@ export class AiSayAction extends BaseAction {
       success: true,
       completed: exitDecision.should_exit,
       aiMessage: llmOutput.response.咨询师,
-      debugInfo: llmResult.debugInfo,  // ✅ 添加 debugInfo
+      debugInfo: llmResult.debugInfo, // ✅ 添加 debugInfo
       metadata: {
         actionType: AiSayAction.actionType,
         currentRound: this.currentRound,
@@ -245,8 +246,14 @@ export class AiSayAction extends BaseAction {
       };
     }
 
-    // 2. 变量替换
-    let content = this.substituteVariables(rawContent, context);
+    // 2. 变量替换 (使用统一的模板管理器进行两层替换)
+    const scriptVariables = this.extractScriptVariables(context);
+    const systemVariables = this.buildSystemVariables(context);
+    let content = this.templateManager.substituteVariables(
+      rawContent,
+      scriptVariables,
+      systemVariables
+    );
 
     // 3. ai_say 默认使用 LLM 生成更自然的表达
     let debugInfo;
@@ -258,13 +265,10 @@ export class AiSayAction extends BaseAction {
       const userPrompt = `请改写：${content}`;
 
       try {
-        const result = await this.llmOrchestrator.generateText(
-          `${systemPrompt}\n\n${userPrompt}`,
-          {
-            temperature: 0.7,
-            maxTokens: 500,
-          }
-        );
+        const result = await this.llmOrchestrator.generateText(`${systemPrompt}\n\n${userPrompt}`, {
+          temperature: 0.7,
+          maxTokens: 500,
+        });
 
         content = result.text;
         debugInfo = result.debugInfo;
@@ -322,12 +326,24 @@ export class AiSayAction extends BaseAction {
     const variables = new Map<string, any>();
 
     // 添加核心内容（支持多个字段名）
-    const rawContent = this.config.content || this.config.content_template || this.config.contentTemplate || '';
+    const rawContent =
+      this.config.content || this.config.content_template || this.config.contentTemplate || '';
     const contentWithVars = this.substituteVariables(rawContent, context);
     variables.set('topic_content', contentWithVars);
 
     // 添加用户画像变量（context.variables 是普通对象）
-    const userVars = ['教育背景', '心理学知识', '学习风格', '用户名', '咨询师名'];
+    const userVars = [
+      '教育背景',
+      '心理学知识',
+      '学习风格',
+      '用户名',
+      '咨询师名',
+      '认知特点',
+      '情感特点',
+      '词汇水平',
+      '语言风格',
+      '用户常用表达',
+    ];
     userVars.forEach((varName) => {
       const value = context.variables[varName];
       if (value !== undefined) {
@@ -347,10 +363,21 @@ export class AiSayAction extends BaseAction {
       who: context.variables['咨询师名'] || 'AI咨询师',
       user: context.variables['用户名'] || '来访者',
       chat_history: this.formatChatHistory(context.conversationHistory),
+      tone: this.config.tone || '专业、温暖、平和',
+      topic_content: this.extractTopicContent(context),
       understanding_threshold: this.exitCriteria?.understanding_threshold ?? 80,
       current_round: this.currentRound,
       max_rounds: this.maxRounds,
     };
+  }
+
+  /**
+   * 提取话题内容
+   */
+  private extractTopicContent(context: ActionContext): string {
+    const rawContent =
+      this.config.content || this.config.content_template || this.config.contentTemplate || '';
+    return this.substituteVariables(rawContent, context);
   }
 
   /**
@@ -363,9 +390,7 @@ export class AiSayAction extends BaseAction {
 
     // 获取最近 10 条消息
     const recent = history.slice(-10);
-    return recent
-      .map((msg) => `${msg.role === 'user' ? '用户' : 'AI'}: ${msg.content}`)
-      .join('\n');
+    return recent.map((msg) => `${msg.role === 'user' ? '用户' : 'AI'}: ${msg.content}`).join('\n');
   }
 
   /**
@@ -376,8 +401,7 @@ export class AiSayAction extends BaseAction {
 
     // 规则2: LLM 建议退出 + 满足退出条件
     if (llmOutput.should_exit) {
-      const { understanding_level, has_questions, expressed_understanding } =
-        llmOutput.assessment;
+      const { understanding_level, has_questions, expressed_understanding } = llmOutput.assessment;
       const threshold = this.exitCriteria?.understanding_threshold ?? 80;
 
       // 条件1：理解度达标且无疑问

@@ -1,6 +1,6 @@
 /**
  * Action 基类和类型定义
- * 
+ *
  * 参照 Python 版本: legacy-python/src/actions/base.py
  */
 
@@ -34,12 +34,12 @@ export interface ActionResult {
 
 /**
  * Action 基类
- * 
+ *
  * 所有Action类型都需要继承此基类并实现execute方法
  */
 export abstract class BaseAction {
   static actionType: string = 'base';
-  
+
   public actionId: string;
   public config: Record<string, any>;
   public currentRound: number = 0;
@@ -54,10 +54,7 @@ export abstract class BaseAction {
   /**
    * 执行Action
    */
-  abstract execute(
-    context: ActionContext,
-    userInput?: string | null
-  ): Promise<ActionResult>;
+  abstract execute(context: ActionContext, userInput?: string | null): Promise<ActionResult>;
 
   /**
    * 重置Action状态
@@ -82,15 +79,20 @@ export abstract class BaseAction {
 
   /**
    * 替换模板中的变量
-   * 
-   * 支持 ${variable_name} 格式
+   *
+   * 支持 {{variable_name}} 格式
    */
   substituteVariables(template: string, context: ActionContext): string {
     let result = template;
     for (const [varName, varValue] of Object.entries(context.variables)) {
-      const placeholder = `\${${varName}}`;
+      const placeholder = `{{${varName}}}`;
       if (result.includes(placeholder)) {
-        result = result.replace(new RegExp(`\\$\\{${varName}\\}`, 'g'), String(varValue));
+        // 使用正则进行全局替换，并转义变量名中的特殊字符
+        const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        result = result.replace(
+          new RegExp(`\\{\\{${escapedVarName}\\}\\}`, 'g'),
+          String(varValue ?? '')
+        );
       }
     }
     return result;

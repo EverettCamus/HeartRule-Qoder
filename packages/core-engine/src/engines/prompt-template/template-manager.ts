@@ -32,14 +32,14 @@ export class PromptTemplateManager {
    */
   async loadTemplate(templatePath: string): Promise<PromptTemplate> {
     const templateId = templatePath.replace(/\//g, '_').replace('.md', '');
-    
+
     // 检查缓存
     if (this.templates.has(templateId)) {
       return this.templates.get(templateId)!;
     }
 
     const fullPath = path.join(this.templateBasePath, templatePath);
-    
+
     try {
       const content = await fs.readFile(fullPath, 'utf-8');
       const variables = this.extractVariables(content);
@@ -69,7 +69,7 @@ export class PromptTemplateManager {
    * 两层变量替换
    * @param template 原始模板内容
    * @param scriptVariables 脚本层变量 {{变量名}}
-   * @param systemVariables 系统层变量 {{% 变量名 %}}
+   * @param systemVariables 系统层变量 {{变量名}}（统一格式）
    * @returns 完成替换的提示词
    */
   substituteVariables(
@@ -79,17 +79,16 @@ export class PromptTemplateManager {
   ): string {
     let result = template;
 
-    // 第一层：替换脚本变量 {{变量名}}
-    scriptVariables.forEach((value, key) => {
-      // 使用全局替换，转义特殊字符
+    // 第一层：替换系统变量 {{变量名}}
+    Object.entries(systemVariables).forEach(([key, value]) => {
       const pattern = new RegExp(`\\{\\{${this.escapeRegex(key)}\\}\\}`, 'g');
       const replacement = String(value ?? '');
       result = result.replace(pattern, replacement);
     });
 
-    // 第二层：替换系统变量 {{% 变量名 %}}
-    Object.entries(systemVariables).forEach(([key, value]) => {
-      const pattern = new RegExp(`\\{\\{% ${this.escapeRegex(key)} %\\}\\}`, 'g');
+    // 第二层：替换脚本变量 {{变量名}}
+    scriptVariables.forEach((value, key) => {
+      const pattern = new RegExp(`\\{\\{${this.escapeRegex(key)}\\}\\}`, 'g');
       const replacement = String(value ?? '');
       result = result.replace(pattern, replacement);
     });
@@ -100,7 +99,7 @@ export class PromptTemplateManager {
   /**
    * 提取模板中的变量
    * @param template 模板内容
-   * @returns 脚本变量和系统变量列表
+   * @returns 统一的变量列表（统一使用 {{变量名}} 格式）
    */
   extractVariables(template: string): {
     scriptVars: string[];
@@ -109,26 +108,43 @@ export class PromptTemplateManager {
     const scriptVars: string[] = [];
     const systemVars: string[] = [];
 
-    // 先匹配系统变量 {{% 变量名 %}} - 避免被脚本变量模式误匹配
-    const systemPattern = /\{\{%\s*([^%]+?)\s*%\}\}/g;
+    // 匹配 {{变量名}} 格式的变量
+    const unifiedPattern = /\{\{([^{}]+?)\}\}/g;
     let match;
-    while ((match = systemPattern.exec(template)) !== null) {
+    while ((match = unifiedPattern.exec(template)) !== null) {
       const varName = match[1].trim();
-      if (!systemVars.includes(varName)) {
-        systemVars.push(varName);
-      }
-    }
-
-    // 匹配脚本变量 {{变量名}} - 排除系统变量语法
-    const scriptPattern = /\{\{(?!%)([^{}%]+?)(?<!%)\}\}/g;
-    while ((match = scriptPattern.exec(template)) !== null) {
-      const varName = match[1].trim();
-      if (!scriptVars.includes(varName)) {
-        scriptVars.push(varName);
+      // 根据变量名判断是系统变量还是脚本变量
+      if (this.isSystemVariable(varName)) {
+        if (!systemVars.includes(varName)) {
+          systemVars.push(varName);
+        }
+      } else {
+        if (!scriptVars.includes(varName)) {
+          scriptVars.push(varName);
+        }
       }
     }
 
     return { scriptVars, systemVars };
+  }
+
+  /**
+   * 判断是否为系统变量
+   * 系统变量通常是固定的几个
+   */
+  private isSystemVariable(varName: string): boolean {
+    const systemVariables = [
+      'time',
+      'who',
+      'user',
+      'chat_history',
+      'tone',
+      'topic_content',
+      'understanding_threshold',
+      'current_round',
+      'max_rounds',
+    ];
+    return systemVariables.includes(varName);
   }
 
   /**
@@ -139,16 +155,10 @@ export class PromptTemplateManager {
   validateSubstitution(text: string): string[] {
     const unreplacedVars: string[] = [];
 
-    // 先检查未替换的系统变量 {{% 变量名 %}}
-    const systemPattern = /\{\{%\s*([^%]+?)\s*%\}\}/g;
+    // 检查未替换的统一变量格式 {{变量名}}
+    const unifiedPattern = /\{\{([^{}]+?)\}\}/g;
     let match;
-    while ((match = systemPattern.exec(text)) !== null) {
-      unreplacedVars.push(`{{% ${match[1].trim()} %}}`);
-    }
-
-    // 检查未替换的脚本变量 {{变量名}} - 排除系统变量语法
-    const scriptPattern = /\{\{(?!%)([^{}%]+?)(?<!%)\}\}/g;
-    while ((match = scriptPattern.exec(text)) !== null) {
+    while ((match = unifiedPattern.exec(text)) !== null) {
       unreplacedVars.push(`{{${match[1].trim()}}}`);
     }
 
