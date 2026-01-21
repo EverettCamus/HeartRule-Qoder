@@ -10,6 +10,8 @@ export interface DebugSession {
   createdAt: string;
   aiMessage: string;
   executionStatus: string;
+  variables?: Record<string, unknown>; // 所有变量（已合并）
+  globalVariables?: Record<string, unknown>; // 全局变量
   position?: ExecutionPosition;
   debugInfo?: {
     prompt: string;
@@ -54,6 +56,9 @@ export interface ExecutionPosition {
   topicId?: string;
   actionId?: string;
   actionType?: string;
+  // Action 的回合数信息
+  currentRound?: number;
+  maxRounds?: number;
 }
 
 export interface DebugSessionDetail {
@@ -64,6 +69,7 @@ export interface DebugSessionDetail {
   executionStatus: string;
   position: ExecutionPosition;
   variables: Record<string, unknown>;
+  globalVariables?: Record<string, unknown>; // 全局变量
   metadata: Record<string, unknown>;
   messages: DebugMessage[];
   createdAt: string;
@@ -75,6 +81,7 @@ export interface DebugMessageResponse {
   sessionStatus: string;
   executionStatus: string;
   variables?: Record<string, unknown>;
+  globalVariables?: Record<string, unknown>; // 全局变量
   position?: ExecutionPosition;
   debugInfo?: {
     prompt: string;

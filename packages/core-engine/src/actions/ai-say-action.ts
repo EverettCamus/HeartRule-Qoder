@@ -192,9 +192,15 @@ export class AiSayAction extends BaseAction {
     console.log(`[AiSayAction] 🎯 Exit decision:`, exitDecision);
 
     // 6. 返回结果（包含 debugInfo）
+    // 如果达到最大轮次，强制标记为已完成
+    const isLastRound = this.currentRound >= this.maxRounds;
+    if (isLastRound) {
+      console.log(`[AiSayAction] 🏁 Reached max_rounds (${this.maxRounds}), finishing action`);
+    }
+
     return {
       success: true,
-      completed: exitDecision.should_exit,
+      completed: exitDecision.should_exit || isLastRound,
       aiMessage: llmOutput.response.咨询师,
       debugInfo: llmResult.debugInfo, // ✅ 添加 debugInfo
       metadata: {
@@ -202,7 +208,13 @@ export class AiSayAction extends BaseAction {
         currentRound: this.currentRound,
         maxRounds: this.maxRounds,
         assessment: llmOutput.assessment,
-        exitDecision,
+        exitDecision: isLastRound
+          ? {
+              should_exit: true,
+              reason: `达到最大轮次限制 (${this.maxRounds})`,
+              decision_source: 'max_rounds',
+            }
+          : exitDecision,
       },
     };
   }

@@ -104,13 +104,19 @@ export interface VariableBubbleContent {
     name: string;
     oldValue?: unknown;
     newValue: unknown;
-    scope: 'session' | 'phase' | 'topic';
+    scope: 'global' | 'session' | 'phase' | 'topic';
   }>;
   allVariables: {
-    // 所有变量
+    // 所有变量（按作用域分层）
+    global: Record<string, unknown>;
     session: Record<string, unknown>;
     phase: Record<string, unknown>;
     topic: Record<string, unknown>;
+  };
+  // 与当前 action 相关的变量（用于过滤显示）
+  relevantVariables?: {
+    inputVariables: string[]; // action 使用的输入变量
+    outputVariables: string[]; // action 输出的变量
   };
   summary: string; // 摘要文本
 }
@@ -151,6 +157,8 @@ export interface PositionBubbleContent {
     index: number;
     id: string;
     type: string;
+    currentRound?: number; // 当前回合数
+    maxRounds?: number; // 最大回合数
   };
   summary: string; // 摘要文本
 }

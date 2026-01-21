@@ -123,6 +123,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           createdAt: now.toISOString(),
           aiMessage: initResult.aiMessage,
           executionStatus: initResult.executionStatus,
+          variables: initResult.variables, // 返回变量
+          globalVariables: initResult.globalVariables, // 返回全局变量
           position: initResult.position,
           debugInfo: initResult.debugInfo, // 添加 LLM 调试信息
         };
@@ -198,12 +200,22 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         response.metadata = Object.assign({}, session.metadata || {});
         response.metadata.script = script?.parsedContent || null;
 
+        // 从 metadata 中提取 globalVariables
+        const sessionMetadata = (session.metadata as any) || {};
+        if (sessionMetadata.globalVariables) {
+          response.globalVariables = sessionMetadata.globalVariables;
+        }
+
         // 构建完整的 position 信息（包含 ID 字段）
         if (script?.parsedContent && session.position) {
           const pos = session.position as any;
           const parsedScript = script.parsedContent as any;
           const sessionData = parsedScript.session || parsedScript;
           const phases = sessionData.phases || [];
+
+          // 从 metadata 中提取回合数信息
+          const metadata = (session.metadata as any) || {};
+          const roundInfo = metadata.lastActionRoundInfo || metadata.actionState || {};
 
           if (phases.length > pos.phaseIndex) {
             const phase = phases[pos.phaseIndex];
@@ -215,6 +227,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
               actionIndex: pos.actionIndex,
               actionId: '',
               actionType: '',
+              // 添加回合数信息
+              currentRound: roundInfo.currentRound,
+              maxRounds: roundInfo.maxRounds,
             };
 
             if (phase.topics && phase.topics.length > pos.topicIndex) {
@@ -358,6 +373,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
               sessionStatus: { type: 'string' },
               executionStatus: { type: 'string' },
               variables: { type: 'object', additionalProperties: true },
+              globalVariables: { type: 'object', additionalProperties: true },
               position: {
                 type: 'object',
                 properties: {
@@ -368,6 +384,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
                   actionIndex: { type: 'number' },
                   actionId: { type: 'string' },
                   actionType: { type: 'string' },
+                  currentRound: { type: 'number' },
+                  maxRounds: { type: 'number' },
                 },
               },
               debugInfo: {
@@ -467,9 +485,20 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           sessionStatus: result.sessionStatus,
           executionStatus: result.executionStatus,
           variables: result.variables,
+          globalVariables: result.globalVariables, // 返回全局变量
           position: result.position,
           debugInfo: result.debugInfo, // 添加 LLM 调试信息
         };
+
+        // 记录完整响应（特别是position字段）
+        app.log.info(
+          {
+            sessionId: id,
+            responsePosition: response.position,
+            hasCurrentRound: response.position?.currentRound !== undefined,
+          },
+          '📤 Sending response to client'
+        );
 
         // 如果有错误信息，添加到响应中
         if (result.error) {

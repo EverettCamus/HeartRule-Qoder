@@ -35,6 +35,15 @@ export const PositionBubble: React.FC<PositionBubbleProps> = ({
     navigator.clipboard.writeText(pathText);
   };
 
+  // 构建带回合数的标题
+  const buildSummaryWithRound = () => {
+    let summary = content.summary;
+    if (content.action.currentRound !== undefined && content.action.maxRounds !== undefined) {
+      summary += ` → round ${content.action.currentRound}`;
+    }
+    return summary;
+  };
+
   return (
     <div
       style={{
@@ -72,7 +81,7 @@ export const PositionBubble: React.FC<PositionBubbleProps> = ({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {content.summary}
+                {buildSummaryWithRound()}
               </div>
             )}
           </div>
@@ -237,6 +246,20 @@ export const PositionBubble: React.FC<PositionBubbleProps> = ({
                   <div style={{ fontSize: '11px', color: '#999', fontFamily: 'monospace' }}>
                     Type: {content.action.type} (index: {content.action.index})
                   </div>
+                  {/* 显示回合数信息 */}
+                  {content.action.currentRound !== undefined &&
+                    content.action.maxRounds !== undefined && (
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: '#fa8c16',
+                          fontWeight: '500',
+                          marginTop: '4px',
+                        }}
+                      >
+                        🔄 回合: {content.action.currentRound} / {content.action.maxRounds}
+                      </div>
+                    )}
                 </div>
               </div>
             </div>

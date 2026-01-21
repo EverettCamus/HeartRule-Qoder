@@ -80,19 +80,23 @@ export abstract class BaseAction {
   /**
    * 替换模板中的变量
    *
-   * 支持 {{variable_name}} 格式
+   * 支持 {{variable_name}}, {variable_name}, ${variable_name} 格式
    */
   substituteVariables(template: string, context: ActionContext): string {
     let result = template;
     for (const [varName, varValue] of Object.entries(context.variables)) {
-      const placeholder = `{{${varName}}}`;
-      if (result.includes(placeholder)) {
-        // 使用正则进行全局替换，并转义变量名中的特殊字符
-        const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        result = result.replace(
-          new RegExp(`\\{\\{${escapedVarName}\\}\\}`, 'g'),
-          String(varValue ?? '')
-        );
+      // 转义变量名中的特殊字符用于正则
+      const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      // 支持三种占位符格式: {{var}}, {var}, ${var}
+      const patterns = [
+        `\\{\\{${escapedVarName}\\}\\}`,
+        `\\{${escapedVarName}\\}`,
+        `\\$\{${escapedVarName}\\}`,
+      ];
+
+      for (const pattern of patterns) {
+        result = result.replace(new RegExp(pattern, 'g'), String(varValue ?? ''));
       }
     }
     return result;

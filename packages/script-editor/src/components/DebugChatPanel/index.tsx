@@ -23,6 +23,7 @@ import type {
   ActionNode,
 } from '../../types/navigation';
 import { loadDebugFilter, saveDebugFilter } from '../../utils/debug-filter-storage';
+import { analyzeActionVariables, categorizeVariablesByScope } from '../../utils/variableAnalyzer';
 import ErrorBubble from '../DebugBubbles/ErrorBubble';
 import LLMPromptBubble from '../DebugBubbles/LLMPromptBubble';
 import LLMResponseBubble from '../DebugBubbles/LLMResponseBubble';
@@ -313,6 +314,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               index: pos.actionIndex,
               id: pos.actionId,
               type: pos.actionType,
+              currentRound: sessionDetail.position.currentRound,
+              maxRounds: sessionDetail.position.maxRounds,
             },
             summary: `${phaseName} → ${topicName} → ${pos.actionId}`,
           } as PositionBubbleContent,
@@ -395,6 +398,63 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           addDebugBubble(responseBubble);
           console.log('[DebugChat] ✅ Created initial LLM response bubble');
         }
+      }
+
+      // 创建初始变量气泡（如果会话有变量）
+      if (sessionDetail.variables && Object.keys(sessionDetail.variables).length > 0) {
+        console.log('[DebugChat] 📊 Creating initial variable bubble:', sessionDetail.variables);
+
+        // 获取全局变量（优先从直接字段读取，否则从 metadata 读取）
+        const globalVariables =
+          sessionDetail.globalVariables ||
+          (sessionDetail.metadata?.globalVariables as Record<string, unknown>) ||
+          {};
+        console.log('[DebugChat] 🌐 Using globalVariables for categorization:', globalVariables);
+
+        // 按作用域分层变量
+        const categorizedVars = categorizeVariablesByScope(
+          sessionDetail.variables,
+          globalVariables
+        );
+
+        // 分析当前 action 的相关变量
+        let relevantVariables: { inputVariables: string[]; outputVariables: string[] } | undefined;
+        if (sessionDetail.position && tree) {
+          const analysis = analyzeActionVariables(
+            tree,
+            sessionDetail.position.phaseIndex || 0,
+            sessionDetail.position.topicIndex || 0,
+            sessionDetail.position.actionIndex || 0
+          );
+          relevantVariables = {
+            inputVariables: analysis.inputVariables,
+            outputVariables: analysis.outputVariables,
+          };
+
+          console.log('[DebugChat] 🔍 Initial variable analysis:', {
+            actionId: sessionDetail.position.actionId,
+            inputVariables: analysis.inputVariables,
+            outputVariables: analysis.outputVariables,
+          });
+        }
+
+        const variableBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'variable',
+          timestamp: new Date().toISOString(),
+          isExpanded: false,
+          actionId: sessionDetail.position?.actionId,
+          actionType: sessionDetail.position?.actionType,
+          content: {
+            type: 'variable',
+            changedVariables: [],
+            allVariables: categorizedVars,
+            relevantVariables,
+            summary: '初始变量状态',
+          } as VariableBubbleContent,
+        };
+        addDebugBubble(variableBubble);
+        console.log('[DebugChat] ✅ Created initial variable bubble');
       }
 
       // 滚动到底部
@@ -489,6 +549,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       // 🔍 详细调试日志
       console.log('[DebugChat] 🔍 Full response object:', response);
       console.log('[DebugChat] 🔍 Response keys:', Object.keys(response));
+      console.log('[DebugChat] 🔍 position field:', response.position);
+      console.log(
+        '[DebugChat] 🔍 position keys:',
+        response.position ? Object.keys(response.position) : 'N/A'
+      );
+      console.log('[DebugChat] 🔍 globalVariables field:', response.globalVariables);
       console.log('[DebugChat] 🔍 debugInfo value:', response.debugInfo);
       console.log('[DebugChat] 🔍 debugInfo type:', typeof response.debugInfo);
 
@@ -539,7 +605,41 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       // 检查变量变化并创建变量气泡
       if (response.variables) {
         const newVariables = response.variables;
-        // TODO: 这里需要比较前后变量状态，暂时创建一个简单的变量气泡
+        const globalVariables = response.globalVariables || {};
+
+        console.log('[DebugChat] 📦 Creating variable bubble with:', {
+          hasVariables: !!response.variables,
+          variablesKeys: Object.keys(newVariables),
+          hasGlobalVariables: !!response.globalVariables,
+          globalVariablesKeys: Object.keys(globalVariables),
+        });
+
+        // 按作用域分层变量
+        const categorizedVars = categorizeVariablesByScope(newVariables, globalVariables);
+        console.log('[DebugChat] 🎯 Categorized variables:', categorizedVars);
+
+        // 分析当前 action 的相关变量
+        let relevantVariables: { inputVariables: string[]; outputVariables: string[] } | undefined;
+        if (response.position) {
+          const analysis = analyzeActionVariables(
+            navigationTree,
+            response.position.phaseIndex || 0,
+            response.position.topicIndex || 0,
+            response.position.actionIndex || 0
+          );
+          relevantVariables = {
+            inputVariables: analysis.inputVariables,
+            outputVariables: analysis.outputVariables,
+          };
+
+          console.log('[DebugChat] 🔍 Variable analysis for action:', {
+            actionId: response.position.actionId,
+            inputVariables: analysis.inputVariables,
+            outputVariables: analysis.outputVariables,
+          });
+        }
+
+        // TODO: 计算变量的变化（需要保存前一状态）
         const variableBubble: DebugBubble = {
           id: uuidv4(),
           type: 'variable',
@@ -550,11 +650,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           content: {
             type: 'variable',
             changedVariables: [], // TODO: 计算变化的变量
-            allVariables: {
-              session: (newVariables.session || {}) as Record<string, unknown>,
-              phase: (newVariables.phase || {}) as Record<string, unknown>,
-              topic: (newVariables.topic || {}) as Record<string, unknown>,
-            },
+            allVariables: categorizedVars,
+            relevantVariables,
             summary: '变量更新', // 简单摘要
           } as VariableBubbleContent,
         };
@@ -620,6 +717,10 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           actionType: response.position.actionType || '',
         };
         console.log('[DebugChat] Updating position from response:', pos);
+        console.log('[DebugChat] 🔢 Round info from response:', {
+          currentRound: response.position.currentRound,
+          maxRounds: response.position.maxRounds,
+        });
         setCurrentPosition(pos);
 
         // 创建位置信息气泡
@@ -660,6 +761,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               index: pos.actionIndex,
               id: pos.actionId,
               type: pos.actionType,
+              currentRound: response.position.currentRound,
+              maxRounds: response.position.maxRounds,
             },
             summary: `${phaseName} → ${topicName} → ${pos.actionId}`,
           } as PositionBubbleContent,
@@ -810,6 +913,10 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           };
           setCurrentPosition(pos);
           console.log('[DebugChat] ✅ Position updated:', pos);
+          console.log('[DebugChat] 🔄 Position round info:', {
+            currentRound: sessionDetail.position.currentRound,
+            maxRounds: sessionDetail.position.maxRounds,
+          });
 
           // 创建初始位置信息气泡
           let phaseName = `Phase ${pos.phaseIndex + 1}`;
@@ -848,12 +955,80 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                 index: pos.actionIndex,
                 id: pos.actionId,
                 type: pos.actionType,
+                currentRound: sessionDetail.position.currentRound,
+                maxRounds: sessionDetail.position.maxRounds,
               },
               summary: `${phaseName} → ${topicName} → ${pos.actionId}`,
             } as PositionBubbleContent,
           };
           addDebugBubble(positionBubble);
           console.log('[DebugChat] ✅ Created initial position bubble');
+
+          // 创建初始变量气泡（如果会话有变量）
+          if (newSession.variables && Object.keys(newSession.variables).length > 0) {
+            console.log(
+              '[DebugChat] 📊 Creating initial variable bubble on restart:',
+              newSession.variables
+            );
+            console.log(
+              '[DebugChat] 🔍 globalVariables from newSession:',
+              newSession.globalVariables
+            );
+
+            // 获取全局变量
+            const globalVariables = newSession.globalVariables || {};
+            console.log(
+              '[DebugChat] 🌐 Using globalVariables for categorization:',
+              globalVariables
+            );
+
+            // 按作用域分层变量
+            const categorizedVars = categorizeVariablesByScope(
+              newSession.variables,
+              globalVariables
+            );
+
+            // 分析当前 action 的相关变量
+            let relevantVariables:
+              | { inputVariables: string[]; outputVariables: string[] }
+              | undefined;
+            if (tree) {
+              const analysis = analyzeActionVariables(
+                tree,
+                pos.phaseIndex,
+                pos.topicIndex,
+                pos.actionIndex
+              );
+              relevantVariables = {
+                inputVariables: analysis.inputVariables,
+                outputVariables: analysis.outputVariables,
+              };
+
+              console.log('[DebugChat] 🔍 Initial variable analysis on restart:', {
+                actionId: pos.actionId,
+                inputVariables: analysis.inputVariables,
+                outputVariables: analysis.outputVariables,
+              });
+            }
+
+            const variableBubble: DebugBubble = {
+              id: uuidv4(),
+              type: 'variable',
+              timestamp: new Date().toISOString(),
+              isExpanded: false,
+              actionId: pos.actionId,
+              actionType: pos.actionType,
+              content: {
+                type: 'variable',
+                changedVariables: [],
+                allVariables: categorizedVars,
+                relevantVariables,
+                summary: '初始变量状态',
+              } as VariableBubbleContent,
+            };
+            addDebugBubble(variableBubble);
+            console.log('[DebugChat] ✅ Created initial variable bubble on restart');
+          }
 
           // 处理初始的 debugInfo（来自会话创建时的第一个 action）
           if (newSession.debugInfo) {

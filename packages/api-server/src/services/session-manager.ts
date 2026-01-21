@@ -12,7 +12,14 @@ import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
 
 import { db } from '../db/index.js';
-import { sessions, messages, scripts, variables, scriptFiles, type NewVariable } from '../db/schema.js';
+import {
+  sessions,
+  messages,
+  scripts,
+  variables,
+  scriptFiles,
+  type NewVariable,
+} from '../db/schema.js';
 import { buildDetailedError } from '../utils/error-handler.js';
 
 /**
@@ -80,7 +87,9 @@ export class SessionManager {
       });
 
       if (!sessionFile) {
-        console.log('[SessionManager] ⚠️ Script file not found in projects, skipping global variables');
+        console.log(
+          '[SessionManager] ⚠️ Script file not found in projects, skipping global variables'
+        );
         return {};
       }
 
@@ -107,7 +116,7 @@ export class SessionManager {
       });
 
       // 解析全局变量
-      let globalVariables: Record<string, any> = {};
+      const globalVariables: Record<string, any> = {};
 
       if (globalFile.yamlContent) {
         // 从 yamlContent 解析
@@ -132,6 +141,7 @@ export class SessionManager {
       }
 
       console.log('[SessionManager] ✅ Loaded global variables:', globalVariables);
+      console.log('[SessionManager] 🔑 Global variable keys:', Object.keys(globalVariables));
       return globalVariables;
     } catch (error) {
       console.error('[SessionManager] ❌ Error loading global variables:', error);
@@ -147,6 +157,7 @@ export class SessionManager {
     sessionStatus: string;
     executionStatus: string;
     variables?: Record<string, unknown>;
+    globalVariables?: Record<string, unknown>; // 添加全局变量单独返回
     position?: {
       phaseIndex: number;
       phaseId: string;
@@ -256,9 +267,7 @@ export class SessionManager {
 
       // 保存新增的 AI 消息（仅保存本次执行新产生的）
       const newMessages = executionState.conversationHistory.slice(prevHistoryLength);
-      const aiMessages = newMessages.filter(
-        (msg) => msg.role === 'assistant'
-      );
+      const aiMessages = newMessages.filter((msg) => msg.role === 'assistant');
 
       if (aiMessages.length > 0) {
         console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s) (init):`, {
@@ -307,7 +316,10 @@ export class SessionManager {
           },
           variables: executionState.variables,
           executionStatus: executionState.status,
-          metadata: executionState.metadata,
+          metadata: {
+            ...executionState.metadata,
+            globalVariables, // 存储全局变量到 metadata
+          },
           updatedAt: new Date(),
         })
         .where(eq(sessions.id, sessionId));
@@ -317,6 +329,7 @@ export class SessionManager {
         sessionStatus: session.status,
         executionStatus: executionState.status,
         variables: executionState.variables,
+        globalVariables, // 返回全局变量
         debugInfo: executionState.lastLLMDebugInfo, // 添加LLM调试信息
         position: {
           phaseIndex: executionState.currentPhaseIdx,
@@ -326,6 +339,13 @@ export class SessionManager {
           actionIndex: executionState.currentActionIdx,
           actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
           actionType: executionState.currentActionType || 'unknown',
+          // 添加回合数信息（优先从 lastActionRoundInfo 读取，否则从 actionState 读取）
+          currentRound:
+            executionState.metadata?.lastActionRoundInfo?.currentRound ??
+            executionState.metadata?.actionState?.currentRound,
+          maxRounds:
+            executionState.metadata?.lastActionRoundInfo?.maxRounds ??
+            executionState.metadata?.actionState?.maxRounds,
         },
       };
       console.log('[SessionManager] 🏁 initializeSession completed:', result);
@@ -361,6 +381,7 @@ export class SessionManager {
     sessionStatus: string;
     executionStatus: string;
     variables?: Record<string, unknown>;
+    globalVariables?: Record<string, unknown>; // 添加全局变量单独返回
     position?: {
       phaseIndex: number;
       phaseId: string;
@@ -369,6 +390,8 @@ export class SessionManager {
       actionIndex: number;
       actionId: string;
       actionType: string;
+      currentRound?: number; // 当前回合数
+      maxRounds?: number; // 最大回合数
     };
     debugInfo?: any; // LLM调试信息
     error?: DetailedApiError;
@@ -458,6 +481,9 @@ export class SessionManager {
         phaseIdx: executionState.currentPhaseIdx,
         topicIdx: executionState.currentTopicIdx,
         actionIdx: executionState.currentActionIdx,
+        hasActionState: !!executionState.metadata.actionState,
+        hasLastActionRoundInfo: !!executionState.metadata.lastActionRoundInfo,
+        metadata: executionState.metadata,
       });
 
       // 转换 YAML 为 JSON
@@ -485,9 +511,7 @@ export class SessionManager {
       // 保存新增的 AI 消息（仅保存本次执行新产生的）
       // 注意：userInput 已经被 push 到了 conversationHistory 中（在 continueAction 或 executeAction 里）
       const newMessages = executionState.conversationHistory.slice(prevHistoryLength);
-      const aiMessages = newMessages.filter(
-        (msg) => msg.role === 'assistant'
-      );
+      const aiMessages = newMessages.filter((msg) => msg.role === 'assistant');
 
       if (aiMessages.length > 0) {
         console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s):`, {
@@ -536,7 +560,10 @@ export class SessionManager {
           },
           variables: executionState.variables,
           executionStatus: executionState.status,
-          metadata: executionState.metadata,
+          metadata: {
+            ...executionState.metadata,
+            globalVariables, // 存储全局变量到 metadata
+          },
           updatedAt: new Date(),
         })
         .where(eq(sessions.id, sessionId));
@@ -546,6 +573,7 @@ export class SessionManager {
         sessionStatus: session.status,
         executionStatus: executionState.status,
         variables: executionState.variables,
+        globalVariables, // 返回全局变量
         debugInfo: executionState.lastLLMDebugInfo, // 添加LLM调试信息
         position: {
           phaseIndex: executionState.currentPhaseIdx,
@@ -555,6 +583,13 @@ export class SessionManager {
           actionIndex: executionState.currentActionIdx,
           actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
           actionType: executionState.currentActionType || 'unknown',
+          // 添加回合数信息（优先从 lastActionRoundInfo 读取，否则从 actionState 读取）
+          currentRound:
+            executionState.metadata?.lastActionRoundInfo?.currentRound ??
+            executionState.metadata?.actionState?.currentRound,
+          maxRounds:
+            executionState.metadata?.lastActionRoundInfo?.maxRounds ??
+            executionState.metadata?.actionState?.maxRounds,
         },
       };
       console.log('[SessionManager] 🏁 processUserInput completed:', {
@@ -565,6 +600,8 @@ export class SessionManager {
         debugInfoResponse: result.debugInfo?.response?.text?.substring(0, 50),
         executionStatus: result.executionStatus,
         position: result.position,
+        hasGlobalVariables: !!result.globalVariables,
+        globalVariablesKeys: Object.keys(result.globalVariables || {}),
       });
       return result;
     } catch (error) {

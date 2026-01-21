@@ -1,6 +1,6 @@
 /**
  * AiSayAction 集成测试
- * 
+ *
  * 测试目标：
  * 1. ScriptExecutor 与 AiSayAction 的协作
  * 2. 第一轮会话初始化的完整流程
@@ -9,6 +9,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
+
 import { ScriptExecutor, ExecutionStatus } from '../script-executor.js';
 
 describe('AiSayAction 集成测试 - 会话初始化', () => {
@@ -52,17 +53,17 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
 
     // 验证执行成功
     expect(result.status).not.toBe(ExecutionStatus.ERROR);
-    
+
     // 验证 AI 消息已生成
     expect(result.lastAiMessage).toBeTruthy();
     expect(result.lastAiMessage).toBe('你好，欢迎来到心理咨询。');
-    
+
     // 验证消息已保存到对话历史
     expect(result.conversationHistory.length).toBe(1);
     expect(result.conversationHistory[0].role).toBe('assistant');
     expect(result.conversationHistory[0].content).toBe('你好，欢迎来到心理咨询。');
     expect(result.conversationHistory[0].actionId).toBe('welcome_greeting');
-    
+
     // 验证位置已更新（max_rounds:1 的 ai_say 会立即完成，不会等待输入）
     // 所以会继续执行直到没有更多 action
     expect(result.status).toBe(ExecutionStatus.COMPLETED);
@@ -110,18 +111,18 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
     // 关键验证：不应该返回错误状态
     expect(result.status).not.toBe(ExecutionStatus.ERROR);
     expect(result.metadata.error).toBeUndefined();
-    
+
     // 关键验证：应该有 AI 消息
     expect(result.lastAiMessage).toBeTruthy();
     expect(result.lastAiMessage).not.toBe('');
     expect(result.lastAiMessage).toContain('欢迎来到心理咨询');
-    
+
     // 验证对话历史
     expect(result.conversationHistory.length).toBeGreaterThan(0);
     const firstMessage = result.conversationHistory[0];
     expect(firstMessage.role).toBe('assistant');
     expect(firstMessage.actionId).toBe('welcome_greeting');
-    
+
     // 验证位置信息（max_rounds:1 会立即完成，状态变为 COMPLETED）
     expect(result.status).toBe(ExecutionStatus.COMPLETED);
   });
@@ -160,10 +161,10 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
 
     // require_acknowledgment: false 应立即完成
     expect(result.status).toBe(ExecutionStatus.COMPLETED);
-    
+
     // 应该有 AI 消息
     expect(result.lastAiMessage).toBe('今天我们来学习ABC模型。');
-    
+
     // 消息应该保存到历史
     expect(result.conversationHistory.length).toBe(1);
   });
@@ -183,7 +184,7 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
                     action_type: 'ai_say',
                     action_id: 'greeting',
                     config: {
-                      content: '你好${用户名}，我是${咨询师名}。',
+                      content: '你好{用户名}，我是{咨询师名}。',
                       require_acknowledgment: false,
                     },
                   },
@@ -255,12 +256,7 @@ describe('AiSayAction 集成测试 - 多轮对话', () => {
     expect(result1.currentActionIdx).toBe(0);
 
     // 第二轮：用户确认
-    const result2 = await executor.executeSession(
-      scriptContent,
-      'session-1',
-      result1,
-      '我知道了'
-    );
+    const result2 = await executor.executeSession(scriptContent, 'session-1', result1, '我知道了');
 
     // 应该完成第一个 action 并进入下一个
     // 第二个 action (max_rounds:1) 会立即完成
@@ -314,10 +310,10 @@ describe('AiSayAction 集成测试 - 多轮对话', () => {
     expect(result.conversationHistory[0].actionId).toBe('say1');
     expect(result.conversationHistory[1].content).toBe('第二条消息');
     expect(result.conversationHistory[1].actionId).toBe('say2');
-    
+
     // 最后的消息应该是第二条
     expect(result.lastAiMessage).toBe('第二条消息');
-    
+
     // 状态应该是完成
     expect(result.status).toBe(ExecutionStatus.COMPLETED);
   });

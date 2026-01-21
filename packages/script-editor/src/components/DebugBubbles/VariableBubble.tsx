@@ -39,6 +39,36 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
     return String(value);
   };
 
+  // 过滤变量：只显示与当前 action 相关的变量
+  const filterVariables = (
+    variables: Record<string, unknown>,
+    relevantVars: string[] | undefined
+  ): Record<string, unknown> => {
+    if (!relevantVars || relevantVars.length === 0) {
+      // 如果没有指定相关变量，显示所有变量
+      return variables;
+    }
+
+    const filtered: Record<string, unknown> = {};
+    for (const key of relevantVars) {
+      if (key in variables) {
+        filtered[key] = variables[key];
+      }
+    }
+    return filtered;
+  };
+
+  // 获取所有相关变量名称
+  const allRelevantVarNames = content.relevantVariables
+    ? [...content.relevantVariables.inputVariables, ...content.relevantVariables.outputVariables]
+    : undefined;
+
+  // 过滤各层变量
+  const filteredGlobal = filterVariables(content.allVariables.global, allRelevantVarNames);
+  const filteredSession = filterVariables(content.allVariables.session, allRelevantVarNames);
+  const filteredPhase = filterVariables(content.allVariables.phase, allRelevantVarNames);
+  const filteredTopic = filterVariables(content.allVariables.topic, allRelevantVarNames);
+
   const handleExportJSON = () => {
     const data = {
       timestamp,
@@ -57,9 +87,10 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
   };
 
   const totalVarCount =
-    Object.keys(content.allVariables.session).length +
-    Object.keys(content.allVariables.phase).length +
-    Object.keys(content.allVariables.topic).length;
+    Object.keys(filteredGlobal).length +
+    Object.keys(filteredSession).length +
+    Object.keys(filteredPhase).length +
+    Object.keys(filteredTopic).length;
 
   return (
     <div
@@ -132,9 +163,7 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
                   }}
                 >
                   <span style={{ fontWeight: 'bold' }}>{v.name}</span>
-                  <span style={{ color: '#999', margin: '0 8px' }}>
-                    [{v.scope}]
-                  </span>
+                  <span style={{ color: '#999', margin: '0 8px' }}>[{v.scope}]</span>
                   {v.oldValue !== undefined && (
                     <span style={{ textDecoration: 'line-through', color: '#999' }}>
                       {formatValue(v.oldValue)}
@@ -149,22 +178,97 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
             </div>
           )}
 
+          {/* 全局变量 */}
           <div style={{ marginBottom: '12px' }}>
             <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>
-              Session 级变量:
+              Global 级变量:
+              {content.relevantVariables && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: '#999',
+                    fontWeight: 'normal',
+                    marginLeft: '8px',
+                  }}
+                >
+                  （仅显示相关变量）
+                </span>
+              )}
             </div>
-            {Object.keys(content.allVariables.session).length === 0 ? (
+            {Object.keys(filteredGlobal).length === 0 ? (
               <div style={{ fontSize: '12px', color: '#999', marginLeft: '16px' }}>
-                （无）
+                {content.relevantVariables ? '（无相关变量）' : '（无）'}
               </div>
             ) : (
               <div style={{ fontSize: '12px', marginLeft: '16px' }}>
-                {Object.entries(content.allVariables.session).map(([key, value]) => (
-                  <div key={key} style={{ marginBottom: '2px' }}>
-                    <span style={{ fontWeight: 'bold' }}>{key}:</span>{' '}
-                    <span style={{ fontFamily: 'monospace' }}>{formatValue(value)}</span>
-                  </div>
-                ))}
+                {Object.entries(filteredGlobal).map(([key, value]) => {
+                  const isInput = content.relevantVariables?.inputVariables.includes(key);
+                  const isOutput = content.relevantVariables?.outputVariables.includes(key);
+                  return (
+                    <div key={key} style={{ marginBottom: '2px' }}>
+                      <span style={{ fontWeight: 'bold' }}>{key}</span>
+                      {isInput && (
+                        <span style={{ fontSize: '10px', color: '#1890ff', marginLeft: '4px' }}>
+                          [输入]
+                        </span>
+                      )}
+                      {isOutput && (
+                        <span style={{ fontSize: '10px', color: '#52c41a', marginLeft: '4px' }}>
+                          [输出]
+                        </span>
+                      )}
+                      <span>: </span>
+                      <span style={{ fontFamily: 'monospace' }}>{formatValue(value)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>
+              Session 级变量:
+              {content.relevantVariables && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: '#999',
+                    fontWeight: 'normal',
+                    marginLeft: '8px',
+                  }}
+                >
+                  （仅显示相关变量）
+                </span>
+              )}
+            </div>
+            {Object.keys(filteredSession).length === 0 ? (
+              <div style={{ fontSize: '12px', color: '#999', marginLeft: '16px' }}>
+                {content.relevantVariables ? '（无相关变量）' : '（无）'}
+              </div>
+            ) : (
+              <div style={{ fontSize: '12px', marginLeft: '16px' }}>
+                {Object.entries(filteredSession).map(([key, value]) => {
+                  const isInput = content.relevantVariables?.inputVariables.includes(key);
+                  const isOutput = content.relevantVariables?.outputVariables.includes(key);
+                  return (
+                    <div key={key} style={{ marginBottom: '2px' }}>
+                      <span style={{ fontWeight: 'bold' }}>{key}</span>
+                      {isInput && (
+                        <span style={{ fontSize: '10px', color: '#1890ff', marginLeft: '4px' }}>
+                          [输入]
+                        </span>
+                      )}
+                      {isOutput && (
+                        <span style={{ fontSize: '10px', color: '#52c41a', marginLeft: '4px' }}>
+                          [输出]
+                        </span>
+                      )}
+                      <span>: </span>
+                      <span style={{ fontFamily: 'monospace' }}>{formatValue(value)}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -172,19 +276,46 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
           <div style={{ marginBottom: '12px' }}>
             <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>
               Phase 级变量:
+              {content.relevantVariables && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: '#999',
+                    fontWeight: 'normal',
+                    marginLeft: '8px',
+                  }}
+                >
+                  （仅显示相关变量）
+                </span>
+              )}
             </div>
-            {Object.keys(content.allVariables.phase).length === 0 ? (
+            {Object.keys(filteredPhase).length === 0 ? (
               <div style={{ fontSize: '12px', color: '#999', marginLeft: '16px' }}>
-                （无）
+                {content.relevantVariables ? '（无相关变量）' : '（无）'}
               </div>
             ) : (
               <div style={{ fontSize: '12px', marginLeft: '16px' }}>
-                {Object.entries(content.allVariables.phase).map(([key, value]) => (
-                  <div key={key} style={{ marginBottom: '2px' }}>
-                    <span style={{ fontWeight: 'bold' }}>{key}:</span>{' '}
-                    <span style={{ fontFamily: 'monospace' }}>{formatValue(value)}</span>
-                  </div>
-                ))}
+                {Object.entries(filteredPhase).map(([key, value]) => {
+                  const isInput = content.relevantVariables?.inputVariables.includes(key);
+                  const isOutput = content.relevantVariables?.outputVariables.includes(key);
+                  return (
+                    <div key={key} style={{ marginBottom: '2px' }}>
+                      <span style={{ fontWeight: 'bold' }}>{key}</span>
+                      {isInput && (
+                        <span style={{ fontSize: '10px', color: '#1890ff', marginLeft: '4px' }}>
+                          [输入]
+                        </span>
+                      )}
+                      {isOutput && (
+                        <span style={{ fontSize: '10px', color: '#52c41a', marginLeft: '4px' }}>
+                          [输出]
+                        </span>
+                      )}
+                      <span>: </span>
+                      <span style={{ fontFamily: 'monospace' }}>{formatValue(value)}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -192,19 +323,46 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
           <div style={{ marginBottom: '12px' }}>
             <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>
               Topic 级变量:
+              {content.relevantVariables && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: '#999',
+                    fontWeight: 'normal',
+                    marginLeft: '8px',
+                  }}
+                >
+                  （仅显示相关变量）
+                </span>
+              )}
             </div>
-            {Object.keys(content.allVariables.topic).length === 0 ? (
+            {Object.keys(filteredTopic).length === 0 ? (
               <div style={{ fontSize: '12px', color: '#999', marginLeft: '16px' }}>
-                （无）
+                {content.relevantVariables ? '（无相关变量）' : '（无）'}
               </div>
             ) : (
               <div style={{ fontSize: '12px', marginLeft: '16px' }}>
-                {Object.entries(content.allVariables.topic).map(([key, value]) => (
-                  <div key={key} style={{ marginBottom: '2px' }}>
-                    <span style={{ fontWeight: 'bold' }}>{key}:</span>{' '}
-                    <span style={{ fontFamily: 'monospace' }}>{formatValue(value)}</span>
-                  </div>
-                ))}
+                {Object.entries(filteredTopic).map(([key, value]) => {
+                  const isInput = content.relevantVariables?.inputVariables.includes(key);
+                  const isOutput = content.relevantVariables?.outputVariables.includes(key);
+                  return (
+                    <div key={key} style={{ marginBottom: '2px' }}>
+                      <span style={{ fontWeight: 'bold' }}>{key}</span>
+                      {isInput && (
+                        <span style={{ fontSize: '10px', color: '#1890ff', marginLeft: '4px' }}>
+                          [输入]
+                        </span>
+                      )}
+                      {isOutput && (
+                        <span style={{ fontSize: '10px', color: '#52c41a', marginLeft: '4px' }}>
+                          [输出]
+                        </span>
+                      )}
+                      <span>: </span>
+                      <span style={{ fontFamily: 'monospace' }}>{formatValue(value)}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

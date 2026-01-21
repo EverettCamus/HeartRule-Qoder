@@ -68,8 +68,8 @@ export class PromptTemplateManager {
   /**
    * 两层变量替换
    * @param template 原始模板内容
-   * @param scriptVariables 脚本层变量 {{变量名}}
-   * @param systemVariables 系统层变量 {{变量名}}（统一格式）
+   * @param scriptVariables 脚本层变量
+   * @param systemVariables 系统层变量
    * @returns 完成替换的提示词
    */
   substituteVariables(
@@ -79,18 +79,29 @@ export class PromptTemplateManager {
   ): string {
     let result = template;
 
-    // 第一层：替换系统变量 {{变量名}}
+    // 内部辅助函数：支持三种占位符格式 {{var}}, {var}, ${var}
+    const replaceWithAllPatterns = (text: string, key: string, value: any): string => {
+      const escapedKey = this.escapeRegex(key);
+      const patterns = [
+        `\\{\\{${escapedKey}\\}\\}`,
+        `\\{${escapedKey}\\}`,
+        `\\$\{${escapedKey}\\}`,
+      ];
+      let updatedText = text;
+      patterns.forEach((patternStr) => {
+        updatedText = updatedText.replace(new RegExp(patternStr, 'g'), String(value ?? ''));
+      });
+      return updatedText;
+    };
+
+    // 第一层：替换系统变量
     Object.entries(systemVariables).forEach(([key, value]) => {
-      const pattern = new RegExp(`\\{\\{${this.escapeRegex(key)}\\}\\}`, 'g');
-      const replacement = String(value ?? '');
-      result = result.replace(pattern, replacement);
+      result = replaceWithAllPatterns(result, key, value);
     });
 
-    // 第二层：替换脚本变量 {{变量名}}
+    // 第二层：替换脚本变量
     scriptVariables.forEach((value, key) => {
-      const pattern = new RegExp(`\\{\\{${this.escapeRegex(key)}\\}\\}`, 'g');
-      const replacement = String(value ?? '');
-      result = result.replace(pattern, replacement);
+      result = replaceWithAllPatterns(result, key, value);
     });
 
     return result;

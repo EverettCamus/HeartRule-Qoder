@@ -186,7 +186,24 @@ export class ScriptExecutor {
           // 保存LLM调试信息（如果有）
           if (result.debugInfo) {
             executionState.lastLLMDebugInfo = result.debugInfo;
-            console.log('[ScriptExecutor] 💾 Saved intermediate LLM debug info from continued action');
+            console.log(
+              '[ScriptExecutor] 💾 Saved intermediate LLM debug info from continued action'
+            );
+          }
+
+          // 保存回合数信息（从 result.metadata 提取）
+          if (
+            result.metadata?.currentRound !== undefined ||
+            result.metadata?.maxRounds !== undefined
+          ) {
+            executionState.metadata.lastActionRoundInfo = {
+              currentRound: result.metadata.currentRound,
+              maxRounds: result.metadata.maxRounds,
+            };
+            console.log(
+              '[ScriptExecutor] 🔄 Saved intermediate action round info:',
+              executionState.metadata.lastActionRoundInfo
+            );
           }
 
           // 保存 Action 内部状态
@@ -489,6 +506,21 @@ export class ScriptExecutor {
             hasResponse: !!result.debugInfo.response,
             model: result.debugInfo.model,
           });
+        }
+
+        // 保存回合数信息（从 result.metadata 提取）
+        if (
+          result.metadata?.currentRound !== undefined ||
+          result.metadata?.maxRounds !== undefined
+        ) {
+          executionState.metadata.lastActionRoundInfo = {
+            currentRound: result.metadata.currentRound,
+            maxRounds: result.metadata.maxRounds,
+          };
+          console.log(
+            '[ScriptExecutor] 🔄 Saved action round info:',
+            executionState.metadata.lastActionRoundInfo
+          );
         }
       } else {
         // Action执行失败
