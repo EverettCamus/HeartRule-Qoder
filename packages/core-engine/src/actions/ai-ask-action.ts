@@ -4,21 +4,15 @@
  * 参照: legacy-python/src/actions/ai_ask.py
  */
 
-import { BaseAction } from './base-action.js';
-import type { ActionContext, ActionResult } from './base-action.js';
-import type { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
-import { PromptTemplateManager } from '../engines/prompt-template/template-manager.js';
-import { VariableScope } from '@heartrule/shared-types';
 import * as path from 'path';
 
-interface ValidationRule {
-  required?: boolean;
-  min_length?: number;
-  minLength?: number;
-  max_length?: number;
-  maxLength?: number;
-  pattern?: string;
-}
+import { VariableScope } from '@heartrule/shared-types';
+
+import type { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
+import { PromptTemplateManager } from '../engines/prompt-template/template-manager.js';
+
+import { BaseAction } from './base-action.js';
+import type { ActionContext, ActionResult } from './base-action.js';
 
 interface AskLLMOutput {
   EXIT: string;
@@ -30,8 +24,8 @@ interface AskLLMOutput {
  * 模板类型枚举
  */
 enum AskTemplateType {
-  SIMPLE = 'simple-ask',        // 单轮简单问答
-  MULTI_ROUND = 'multi-round-ask' // 多轮追问
+  SIMPLE = 'simple-ask', // 单轮简单问答
+  MULTI_ROUND = 'multi-round-ask', // 多轮追问
 }
 
 export class AiAskAction extends BaseAction {
@@ -44,7 +38,7 @@ export class AiAskAction extends BaseAction {
     super(actionId, config);
     this.maxRounds = config.max_rounds || config.maxRounds || 3;
     this.llmOrchestrator = llmOrchestrator;
-    
+
     // 计算模板路径
     let templateBasePath = process.env.PROMPT_TEMPLATE_PATH;
     if (!templateBasePath) {
@@ -58,18 +52,22 @@ export class AiAskAction extends BaseAction {
       console.log(`[AiAskAction] 📁 Template path: ${templateBasePath}`);
     }
     this.templateManager = new PromptTemplateManager(templateBasePath);
-    
+
     // 选择模板类型：有 exit 或 output 使用多轮追问模板，否则使用简单问答模板
-    this.templateType = (config.output?.length > 0 || config.exit) 
-      ? AskTemplateType.MULTI_ROUND 
-      : AskTemplateType.SIMPLE;
-    
-    console.log(`[AiAskAction] 🔧 Constructor: templateType=${this.templateType}, templatePath=${templateBasePath}, config:`, {
-      hasOutput: !!config.output?.length,
-      hasExit: !!config.exit,
-      maxRounds: this.maxRounds,
-      hasTargetVariable: !!(config.target_variable || config.targetVariable),
-    });
+    this.templateType =
+      config.output?.length > 0 || config.exit
+        ? AskTemplateType.MULTI_ROUND
+        : AskTemplateType.SIMPLE;
+
+    console.log(
+      `[AiAskAction] 🔧 Constructor: templateType=${this.templateType}, templatePath=${templateBasePath}, config:`,
+      {
+        hasOutput: !!config.output?.length,
+        hasExit: !!config.exit,
+        maxRounds: this.maxRounds,
+        hasTargetVariable: !!(config.target_variable || config.targetVariable),
+      }
+    );
   }
 
   async execute(context: ActionContext, userInput?: string | null): Promise<ActionResult> {
@@ -78,14 +76,14 @@ export class AiAskAction extends BaseAction {
       if (this.currentRound === 0 && context.scopeResolver && this.config.output) {
         console.log(`[AiAskAction] 🔧 Registering output variables to scopeResolver`);
         const outputConfig = this.config.output || [];
-        
+
         for (const varConfig of outputConfig) {
           const varName = varConfig.get;
           if (!varName) continue;
 
           // 检查是否已经在 variableStore 中定义
           const existingDef = context.scopeResolver.getVariableDefinition(varName);
-          
+
           if (!existingDef) {
             // 未定义，自动在 topic 作用域中注册
             context.scopeResolver.setVariableDefinition({
@@ -95,7 +93,9 @@ export class AiAskAction extends BaseAction {
             });
             console.log(`[AiAskAction] ✅ Auto-registered variable "${varName}" in topic scope`);
           } else {
-            console.log(`[AiAskAction] ℹ️ Variable "${varName}" already defined in ${existingDef.scope} scope`);
+            console.log(
+              `[AiAskAction] ℹ️ Variable "${varName}" already defined in ${existingDef.scope} scope`
+            );
           }
         }
       }
@@ -256,166 +256,6 @@ export class AiAskAction extends BaseAction {
   }
 
   /**
-   * 简单模式执行：基础问答+校验（待删除）
-   */
-  private async executeSimpleMode(
-    context: ActionContext,
-    userInput?: string | null
-  ): Promise<ActionResult> {
-    // 1. 选择问题模板
-    let questionTemplate = this.config.prompt_template || this.config.promptTemplate;
-    if (!questionTemplate) {
-      questionTemplate =
-        this.config.question_template ||
-        this.config.questionTemplate ||
-        this.config.question ||
-        '';
-    }
-
-    // 2. 变量提取目标
-    const extractTo =
-      this.config.target_variable ||
-      this.config.targetVariable ||
-      this.config.extract_to ||
-      this.config.extractTo ||
-      '';
-
-    // 3. 校验配置
-    const validation: ValidationRule = this.config.validation || {};
-    if (Object.keys(validation).length === 0) {
-      if ('required' in this.config) validation.required = this.config.required;
-      if ('min_length' in this.config) validation.min_length = this.config.min_length;
-      if ('minLength' in this.config) validation.minLength = this.config.minLength;
-      if ('max_length' in this.config) validation.max_length = this.config.max_length;
-      if ('maxLength' in this.config) validation.maxLength = this.config.maxLength;
-      if ('pattern' in this.config) validation.pattern = this.config.pattern;
-    }
-
-    const retryMessage =
-      this.config.retry_message || this.config.retryMessage || '请提供有效的回答。';
-    const extractionPrompt = this.config.extraction_prompt || this.config.extractionPrompt || '';
-
-    // 第一轮：发送问题
-    if (this.currentRound === 0) {
-      let question = this.substituteVariables(questionTemplate, context);
-      let debugInfo;
-
-      // 使用 LLM 改写问题
-      if (this.llmOrchestrator) {
-        console.log(`[AiAskAction] 🤖 Using LLM to generate natural question`);
-
-        const systemPrompt = `你是一位专业的心理咨询师，请将以下内容改写为更自然、更温暖的提问方式，保持原意不变。`;
-        const userPrompt = `请改写：${question}`;
-
-        try {
-          const result = await this.llmOrchestrator.generateText(
-            `${systemPrompt}\n\n${userPrompt}`,
-            {
-              temperature: 0.7,
-              maxTokens: 500,
-            }
-          );
-
-          question = result.text;
-          debugInfo = result.debugInfo;
-          console.log(`[AiAskAction] ✅ LLM generated: ${question.substring(0, 50)}...`);
-        } catch (error: any) {
-          console.error(`[AiAskAction] ❌ LLM generation failed:`, error);
-        }
-      }
-
-      this.currentRound += 1;
-
-      return {
-        success: true,
-        completed: false,
-        aiMessage: question,
-        debugInfo,
-        metadata: {
-          actionType: AiAskAction.actionType,
-          waitingFor: 'answer',
-          extractTo,
-          extractionPrompt,
-        },
-      };
-    }
-
-    // 后续轮次：处理用户回答
-    if (!userInput || userInput.trim() === '') {
-      if (validation.required !== false) {
-        this.currentRound += 1;
-
-        if (this.isCompleted()) {
-          return {
-            success: false,
-            completed: true,
-            error: `Failed to get valid answer after ${this.maxRounds} attempts`,
-          };
-        }
-
-        return {
-          success: true,
-          completed: false,
-          aiMessage: retryMessage,
-          metadata: {
-            actionType: AiAskAction.actionType,
-            validationFailed: true,
-            retryCount: this.currentRound - 1,
-          },
-        };
-      }
-    }
-
-    // 验证用户输入
-    const [isValid, errorMsg] = this.validateInput(userInput || '', validation);
-
-    if (!isValid) {
-      this.currentRound += 1;
-
-      if (this.isCompleted()) {
-        return {
-          success: false,
-          completed: true,
-          error: `Failed to get valid answer: ${errorMsg}`,
-        };
-      }
-
-      return {
-        success: true,
-        completed: false,
-        aiMessage: `${retryMessage} ${errorMsg}`,
-        metadata: {
-          actionType: AiAskAction.actionType,
-          validationFailed: true,
-          error: errorMsg,
-          retryCount: this.currentRound - 1,
-        },
-      };
-    }
-
-    // 验证成功，提取变量
-    const extractedVariables: Record<string, any> = {};
-    if (extractTo) {
-      extractedVariables[extractTo] = userInput!.trim();
-    }
-
-    this.currentRound = 0;
-
-    return {
-      success: true,
-      completed: true,
-      aiMessage: null,
-      extractedVariables,
-      metadata: {
-        actionType: AiAskAction.actionType,
-        answerReceived: true,
-        extractTo,
-        extractionPrompt,
-      },
-    };
-  }
-
-  /**
    * 使用模板生成问题
    */
   private async generateQuestionFromTemplate(
@@ -479,18 +319,24 @@ export class AiAskAction extends BaseAction {
       // 🔧 立即提取 output 中配置的变量
       const extractedVariables: Record<string, any> = {};
       const outputConfig = this.config.output || [];
-      
+
       if (outputConfig.length > 0) {
         console.log(`[AiAskAction] 🔍 Extracting variables from LLM JSON output:`, outputConfig);
-        
+
         for (const varConfig of outputConfig) {
           const varName = varConfig.get;
           if (!varName) continue;
-          
+
           // 从 JSON 中提取变量值
-          if (llmOutput[varName] !== undefined && llmOutput[varName] !== null && llmOutput[varName] !== '') {
+          if (
+            llmOutput[varName] !== undefined &&
+            llmOutput[varName] !== null &&
+            llmOutput[varName] !== ''
+          ) {
             extractedVariables[varName] = llmOutput[varName];
-            console.log(`[AiAskAction] ✅ Extracted variable from JSON: ${varName} = ${llmOutput[varName]}`);
+            console.log(
+              `[AiAskAction] ✅ Extracted variable from JSON: ${varName} = ${llmOutput[varName]}`
+            );
           } else {
             console.log(`[AiAskAction] ⚠️ Variable "${varName}" not found in JSON output`);
           }
@@ -499,7 +345,7 @@ export class AiAskAction extends BaseAction {
 
       // 判断是否退出
       const shouldExit = llmOutput.EXIT === 'true';
-      
+
       // 提取 AI 消息
       const aiRole = this.config.ai_role || '咨询师';
       const aiMessage = llmOutput[aiRole] || llmOutput.response || '';
@@ -508,7 +354,8 @@ export class AiAskAction extends BaseAction {
         success: true,
         completed: false,
         aiMessage,
-        extractedVariables: Object.keys(extractedVariables).length > 0 ? extractedVariables : undefined, // 🔧 返回提取的变量
+        extractedVariables:
+          Object.keys(extractedVariables).length > 0 ? extractedVariables : undefined, // 🔧 返回提取的变量
         debugInfo: llmResult.debugInfo,
         metadata: {
           actionType: AiAskAction.actionType,
@@ -522,69 +369,6 @@ export class AiAskAction extends BaseAction {
   }
 
   /**
-   * 生成问题（使用模板）（待删除）
-   */
-  private async generateQuestion(context: ActionContext): Promise<ActionResult> {
-    // 1. 加载模板
-    const template = await this.templateManager.loadTemplate('ai-ask/mainline-ask-template.md');
-
-    // 2. 准备变量
-    const scriptVariables = this.extractScriptVariables(context);
-    const systemVariables = this.buildSystemVariables(context);
-
-    // 3. 替换变量
-    const prompt = this.templateManager.substituteVariables(
-      template.content,
-      scriptVariables,
-      systemVariables
-    );
-
-    console.log(`[AiAskAction] 📝 Prompt prepared (${prompt.length} chars)`);
-
-    // 4. 调用 LLM
-    const llmResult = await this.llmOrchestrator!.generateText(prompt, {
-      temperature: 0.7,
-      maxTokens: 800,
-    });
-
-    // 5. 解析响应
-    let jsonText = llmResult.text.trim();
-    if (jsonText.startsWith('```json')) {
-      jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?$/g, '');
-    } else if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/```\n?/g, '').replace(/```\n?$/g, '');
-    }
-
-    let llmOutput: AskLLMOutput;
-    try {
-      llmOutput = JSON.parse(jsonText);
-    } catch (error: any) {
-      console.error(`[AiAskAction] ❌ Failed to parse LLM output:`, llmResult.text);
-      throw new Error(`Failed to parse LLM output: ${error.message}`);
-    }
-
-    // 6. 判断是否退出
-    const shouldExit = llmOutput.EXIT === 'true';
-    
-    // 7. 提取 AI 消息
-    const aiRole = this.config.ai_role || '咨询师';
-    const aiMessage = llmOutput[aiRole] || llmOutput.response || '';
-
-    return {
-      success: true,
-      completed: false,
-      aiMessage,
-      debugInfo: llmResult.debugInfo,
-      metadata: {
-        actionType: AiAskAction.actionType,
-        shouldExit,
-        brief: llmOutput.BRIEF,
-        currentRound: this.currentRound,
-      },
-    };
-  }
-
-  /**
    * 完成动作并提取变量
    */
   private async finishAction(
@@ -595,9 +379,9 @@ export class AiAskAction extends BaseAction {
 
     // 提取配置的变量
     const outputConfig = this.config.output || [];
-    
+
     console.log(`[AiAskAction] 🔍 Starting variable extraction, output config:`, outputConfig);
-    
+
     for (const varConfig of outputConfig) {
       const varName = varConfig.get;
       const varDefine = varConfig.define || '';
@@ -606,7 +390,7 @@ export class AiAskAction extends BaseAction {
 
       // 优先尝试从对话历史中查找 LLM 返回的 JSON 中是否已经包含该变量
       let extractedFromJSON = false;
-      
+
       // 查找最近的 assistant 消息中的 metadata
       for (let i = context.conversationHistory.length - 1; i >= 0; i--) {
         const msg = context.conversationHistory[i];
@@ -619,12 +403,18 @@ export class AiAskAction extends BaseAction {
             } else if (jsonText.startsWith('```')) {
               jsonText = jsonText.replace(/```\n?/g, '').replace(/```\n?$/g, '');
             }
-            
+
             const jsonData = JSON.parse(jsonText);
-            if (jsonData[varName] !== undefined && jsonData[varName] !== null && jsonData[varName] !== '') {
+            if (
+              jsonData[varName] !== undefined &&
+              jsonData[varName] !== null &&
+              jsonData[varName] !== ''
+            ) {
               extractedVariables[varName] = jsonData[varName];
               extractedFromJSON = true;
-              console.log(`[AiAskAction] ✅ Extracted variable from JSON: ${varName} = ${jsonData[varName]}`);
+              console.log(
+                `[AiAskAction] ✅ Extracted variable from JSON: ${varName} = ${jsonData[varName]}`
+              );
               break;
             }
           } catch (e) {
@@ -632,7 +422,7 @@ export class AiAskAction extends BaseAction {
           }
         }
       }
-      
+
       // 如果从 JSON 中没有提取到，尝试使用 LLM 提取
       if (!extractedFromJSON) {
         if (this.llmOrchestrator && varDefine) {
@@ -643,7 +433,9 @@ export class AiAskAction extends BaseAction {
               maxTokens: 500,
             });
             extractedVariables[varName] = result.text.trim();
-            console.log(`[AiAskAction] ✅ Extracted variable via LLM: ${varName} = ${result.text.substring(0, 50)}...`);
+            console.log(
+              `[AiAskAction] ✅ Extracted variable via LLM: ${varName} = ${result.text.substring(0, 50)}...`
+            );
           } catch (error: any) {
             console.error(`[AiAskAction] ❌ Failed to extract variable ${varName}:`, error);
             // 如果 LLM 提取失败，使用用户最后的输入作为 fallback
@@ -757,7 +549,7 @@ export class AiAskAction extends BaseAction {
    */
   private buildOutputList(): string {
     const outputConfig = this.config.output || [];
-    
+
     // 如果没有配置 output，返回空字符串
     if (outputConfig.length === 0) {
       return '';
@@ -769,13 +561,13 @@ export class AiAskAction extends BaseAction {
       const varConfig = outputConfig[i];
       const varName = varConfig.get;
       const varDefine = varConfig.define || '';
-      
+
       if (!varName) continue;
-      
+
       // 构建 JSON 字段
       const isLast = i === outputConfig.length - 1;
       const comma = isLast ? '' : ',';
-      
+
       if (varDefine) {
         // 带注释的格式
         lines.push(`  "${varName}": "提取的${varName}"${comma} // ${varDefine}`);
@@ -814,43 +606,5 @@ ${historyText}
 提取要求：${varDefine}
 
 请直接输出提取到的内容，不要添加任何解释。`;
-  }
-
-  private validateInput(userInput: string, validation: ValidationRule): [boolean, string] {
-    if (!validation || Object.keys(validation).length === 0) {
-      return [true, ''];
-    }
-
-    // 检查是否为空
-    if (validation.required !== false) {
-      if (!userInput || userInput.trim() === '') {
-        return [false, '回答不能为空。'];
-      }
-    }
-
-    // 检查长度
-    const minLength = validation.min_length || validation.minLength;
-    if (minLength !== undefined) {
-      if (userInput.length < minLength) {
-        return [false, `回答长度至少需要${minLength}个字符。`];
-      }
-    }
-
-    const maxLength = validation.max_length || validation.maxLength;
-    if (maxLength !== undefined) {
-      if (userInput.length > maxLength) {
-        return [false, `回答长度不能超过${maxLength}个字符。`];
-      }
-    }
-
-    // 检查正则表达式
-    if (validation.pattern) {
-      const regex = new RegExp(validation.pattern);
-      if (!regex.test(userInput)) {
-        return [false, '回答格式不正确。'];
-      }
-    }
-
-    return [true, ''];
   }
 }

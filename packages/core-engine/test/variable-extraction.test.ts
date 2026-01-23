@@ -1,6 +1,6 @@
 /**
  * 测试 ai_ask 的 output 变量提取和作用域存储功能
- * 
+ *
  * 测试覆盖：
  * 1. 从 LLM JSON 响应中提取变量
  * 2. 变量存储到正确的作用域（topic/phase/session/global）
@@ -8,11 +8,11 @@
  * 4. 未 declare 的变量默认存入 topic
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AiAskAction } from '../src/actions/ai-ask-action.js';
-import { VariableScopeResolver } from '../src/engines/variable-scope/variable-scope-resolver.js';
 import { VariableScope } from '@heartrule/shared-types';
 import type { VariableStore, VariableDefinition, Position } from '@heartrule/shared-types';
+import { describe, it, expect, beforeEach } from 'vitest';
+
+import { VariableScopeResolver } from '../src/engines/variable-scope/variable-scope-resolver.js';
 
 describe('变量提取与作用域存储', () => {
   let variableStore: VariableStore;
@@ -38,15 +38,13 @@ describe('变量提取与作用域存储', () => {
   describe('1. 变量提取逻辑测试', () => {
     it('应该从 JSON 中提取单个变量', () => {
       const llmOutput: Record<string, any> = {
-        '用户名': 'LEO',
-        '咨询师': '继续询问用户的年龄和职业',
-        'EXIT': 'false',
-        'BRIEF': '用户自称LEO'
+        用户名: 'LEO',
+        咨询师: '继续询问用户的年龄和职业',
+        EXIT: 'false',
+        BRIEF: '用户自称LEO',
       };
 
-      const outputConfig = [
-        { get: '用户名', define: '用户的姓名或昵称' }
-      ];
+      const outputConfig = [{ get: '用户名', define: '用户的姓名或昵称' }];
 
       const extractedVariables: Record<string, any> = {};
 
@@ -54,30 +52,34 @@ describe('变量提取与作用域存储', () => {
         const varName = varConfig.get;
         if (!varName) continue;
 
-        if ((llmOutput as any)[varName] !== undefined && (llmOutput as any)[varName] !== null && (llmOutput as any)[varName] !== '') {
+        if (
+          (llmOutput as any)[varName] !== undefined &&
+          (llmOutput as any)[varName] !== null &&
+          (llmOutput as any)[varName] !== ''
+        ) {
           extractedVariables[varName] = (llmOutput as any)[varName];
         }
       }
 
       expect(extractedVariables).toEqual({
-        '用户名': 'LEO'
+        用户名: 'LEO',
       });
     });
 
     it('应该从 JSON 中提取多个变量', () => {
       const llmOutput: Record<string, any> = {
-        '用户名': 'LEO',
-        '用户年龄': 28,
-        '用户职业': '程序员',
-        '咨询师': '继续询问',
-        'EXIT': 'false',
-        'BRIEF': '收集了用户基本信息'
+        用户名: 'LEO',
+        用户年龄: 28,
+        用户职业: '程序员',
+        咨询师: '继续询问',
+        EXIT: 'false',
+        BRIEF: '收集了用户基本信息',
       };
 
       const outputConfig = [
         { get: '用户名', define: '用户的姓名' },
         { get: '用户年龄', define: '用户的年龄' },
-        { get: '用户职业', define: '用户的职业' }
+        { get: '用户职业', define: '用户的职业' },
       ];
 
       const extractedVariables: Record<string, any> = {};
@@ -86,33 +88,37 @@ describe('变量提取与作用域存储', () => {
         const varName = varConfig.get;
         if (!varName) continue;
 
-        if ((llmOutput as any)[varName] !== undefined && (llmOutput as any)[varName] !== null && (llmOutput as any)[varName] !== '') {
+        if (
+          (llmOutput as any)[varName] !== undefined &&
+          (llmOutput as any)[varName] !== null &&
+          (llmOutput as any)[varName] !== ''
+        ) {
           extractedVariables[varName] = (llmOutput as any)[varName];
         }
       }
 
       expect(extractedVariables).toEqual({
-        '用户名': 'LEO',
-        '用户年龄': 28,
-        '用户职业': '程序员'
+        用户名: 'LEO',
+        用户年龄: 28,
+        用户职业: '程序员',
       });
     });
 
     it('应该跳过空值、null 和 undefined', () => {
       const llmOutput: Record<string, any> = {
-        '用户名': 'LEO',
-        '用户年龄': '',        // 空字符串
-        '用户职业': null,     // null
+        用户名: 'LEO',
+        用户年龄: '', // 空字符串
+        用户职业: null, // null
         // '用户地址' 未定义    // undefined
-        '咨询师': '继续询问',
-        'EXIT': 'false'
+        咨询师: '继续询问',
+        EXIT: 'false',
       };
 
       const outputConfig = [
         { get: '用户名' },
         { get: '用户年龄' },
         { get: '用户职业' },
-        { get: '用户地址' }
+        { get: '用户地址' },
       ];
 
       const extractedVariables: Record<string, any> = {};
@@ -121,30 +127,31 @@ describe('变量提取与作用域存储', () => {
         const varName = varConfig.get;
         if (!varName) continue;
 
-        if ((llmOutput as any)[varName] !== undefined && (llmOutput as any)[varName] !== null && (llmOutput as any)[varName] !== '') {
+        if (
+          (llmOutput as any)[varName] !== undefined &&
+          (llmOutput as any)[varName] !== null &&
+          (llmOutput as any)[varName] !== ''
+        ) {
           extractedVariables[varName] = (llmOutput as any)[varName];
         }
       }
 
       // 只提取了有效值
       expect(extractedVariables).toEqual({
-        '用户名': 'LEO'
+        用户名: 'LEO',
       });
       expect(Object.keys(extractedVariables).length).toBe(1);
     });
 
     it('应该保留数字 0 和布尔值 false', () => {
       const llmOutput: Record<string, any> = {
-        '抑郁评分': 0,
-        '是否需要转介': false,
-        '咨询师': '评分正常',
-        'EXIT': 'true'
+        抑郁评分: 0,
+        是否需要转介: false,
+        咨询师: '评分正常',
+        EXIT: 'true',
       };
 
-      const outputConfig = [
-        { get: '抑郁评分' },
-        { get: '是否需要转介' }
-      ];
+      const outputConfig = [{ get: '抑郁评分' }, { get: '是否需要转介' }];
 
       const extractedVariables: Record<string, any> = {};
 
@@ -153,14 +160,18 @@ describe('变量提取与作用域存储', () => {
         if (!varName) continue;
 
         // 特别注意：0 和 false 是有效值
-        if ((llmOutput as any)[varName] !== undefined && (llmOutput as any)[varName] !== null && (llmOutput as any)[varName] !== '') {
+        if (
+          (llmOutput as any)[varName] !== undefined &&
+          (llmOutput as any)[varName] !== null &&
+          (llmOutput as any)[varName] !== ''
+        ) {
           extractedVariables[varName] = (llmOutput as any)[varName];
         }
       }
 
       expect(extractedVariables).toEqual({
-        '抑郁评分': 0,
-        '是否需要转介': false
+        抑郁评分: 0,
+        是否需要转介: false,
       });
     });
   });
@@ -272,10 +283,10 @@ describe('变量提取与作用域存储', () => {
       const resolver = new VariableScopeResolver(variableStore, variableDefinitions);
 
       const extractedVariables = {
-        '用户ID': 'user_001',      // session
-        '主诉问题': '焦虑',        // phase
-        '用户名': 'LEO',           // topic (未 declare)
-        '用户年龄': 28,            // topic (未 declare)
+        用户ID: 'user_001', // session
+        主诉问题: '焦虑', // phase
+        用户名: 'LEO', // topic (未 declare)
+        用户年龄: 28, // topic (未 declare)
       };
 
       // 批量写入
@@ -312,7 +323,7 @@ describe('变量提取与作用域存储', () => {
       };
 
       variableStore.phase['phase_1'] = {
-        '用户情绪': {
+        用户情绪: {
           value: '紧张',
           type: 'string',
           source: 'phase',
@@ -320,7 +331,7 @@ describe('变量提取与作用域存储', () => {
       };
 
       variableStore.topic['topic_1_1'] = {
-        '用户情绪': {
+        用户情绪: {
           value: '焦虑',
           type: 'string',
           source: 'topic',
@@ -351,7 +362,7 @@ describe('变量提取与作用域存储', () => {
       };
 
       variableStore.phase['phase_1'] = {
-        '用户情绪': {
+        用户情绪: {
           value: '紧张',
           type: 'string',
           source: 'phase',
@@ -438,7 +449,7 @@ describe('变量提取与作用域存储', () => {
       const afterTime = new Date().toISOString();
 
       const variable = variableStore.topic['topic_1_1']['测试变量'];
-      
+
       expect(variable.source).toBe('test_action');
       expect(variable.lastUpdated).toBeDefined();
       expect(variable.lastUpdated! >= beforeTime).toBe(true);
