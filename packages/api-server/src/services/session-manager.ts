@@ -323,13 +323,14 @@ export class SessionManager {
           updatedAt: new Date(),
         })
         .where(eq(sessions.id, sessionId));
-
+      
       const result = {
         aiMessage: executionState.lastAiMessage || '',
         sessionStatus: session.status,
         executionStatus: executionState.status,
         variables: executionState.variables,
         globalVariables, // 返回全局变量
+        variableStore: executionState.variableStore, // 🔧 添加分层变量存储
         debugInfo: executionState.lastLLMDebugInfo, // 添加LLM调试信息
         position: {
           phaseIndex: executionState.currentPhaseIdx,
@@ -339,7 +340,7 @@ export class SessionManager {
           actionIndex: executionState.currentActionIdx,
           actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
           actionType: executionState.currentActionType || 'unknown',
-          // 添加回合数信息（优先从 lastActionRoundInfo 读取，否则从 actionState 读取）
+          // 添加回合数信息（优先从 lastActionRoundInfo 读取,否则从 actionState 读取）
           currentRound:
             executionState.metadata?.lastActionRoundInfo?.currentRound ??
             executionState.metadata?.actionState?.currentRound,
@@ -382,6 +383,13 @@ export class SessionManager {
     executionStatus: string;
     variables?: Record<string, unknown>;
     globalVariables?: Record<string, unknown>; // 添加全局变量单独返回
+    variableStore?: {
+      // 🔧 添加分层变量存储
+      global: Record<string, unknown>;
+      session: Record<string, unknown>;
+      phase: Record<string, unknown>;
+      topic: Record<string, unknown>;
+    };
     position?: {
       phaseIndex: number;
       phaseId: string;
@@ -574,6 +582,7 @@ export class SessionManager {
         executionStatus: executionState.status,
         variables: executionState.variables,
         globalVariables, // 返回全局变量
+        variableStore: executionState.variableStore, // 🔧 添加分层变量存储
         debugInfo: executionState.lastLLMDebugInfo, // 添加LLM调试信息
         position: {
           phaseIndex: executionState.currentPhaseIdx,
@@ -602,7 +611,11 @@ export class SessionManager {
         position: result.position,
         hasGlobalVariables: !!result.globalVariables,
         globalVariablesKeys: Object.keys(result.globalVariables || {}),
+        hasVariableStore: !!result.variableStore, // 🔧 添加 variableStore 日志
+        variableStoreKeys: result.variableStore ? Object.keys(result.variableStore) : [], // 🔧 显示 variableStore 的键
       });
+      console.log('[DebugConfig] 🔍 Result object keys:', Object.keys(result));
+      console.log('[DebugConfig] 🔍 variableStore value:', result.variableStore);
       return result;
     } catch (error) {
       console.error('[SessionManager] ❌ Error during user input processing:', error);
@@ -620,11 +633,25 @@ export class SessionManager {
       });
 
       // 返回错误信息（而不是抛出异常）
+      // 注意：globalVariables 在 try 块内定义，catch 块中无法访问，从 session.metadata 获取
+      const cachedGlobalVariables = ((session.metadata as any)?.globalVariables as Record<string, unknown>) || {};
+      const pos = session.position as Record<string, unknown> | null;
       return {
         aiMessage: '',
         sessionStatus: session.status,
         executionStatus: ExecutionStatus.ERROR,
         error: detailedError,
+        variables: (session.variables as Record<string, unknown>) || {},
+        globalVariables: cachedGlobalVariables,
+        position: {
+          phaseIndex: (pos?.phaseIndex as number) || 0,
+          phaseId: (pos?.phaseId as string) || 'phase_0',
+          topicIndex: (pos?.topicIndex as number) || 0,
+          topicId: (pos?.topicId as string) || 'topic_0',
+          actionIndex: (pos?.actionIndex as number) || 0,
+          actionId: (pos?.actionId as string) || 'action_0',
+          actionType: (pos?.actionType as string) || 'unknown',
+        },
       };
     }
   }

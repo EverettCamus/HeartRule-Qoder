@@ -46,12 +46,11 @@ async function main() {
             - action_id: action_2
               action_type: ai_ask
               config:
-                content_template: Please enter a question
-                output: []
                 question_template: 向来访者询问如何称呼
-                exit: 收到到来访者的称呼
-                target_variable: user_name
-                extraction_prompt: 来访者可以接受的称呼
+                exit: 收到来访者的称呼
+                output:
+                  - get: user_name
+                    define: 来访者可以接受的称呼
 `;
 
     // 更新数据库

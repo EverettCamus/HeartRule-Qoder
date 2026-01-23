@@ -600,6 +600,39 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           } as ErrorBubbleContent,
         };
         addDebugBubble(errorBubble);
+      } else if (response.executionStatus === 'error') {
+        // 兜底：executionStatus 是 error 但没有 error 对象
+        console.error('[DebugChat] ❌ Backend returned error status but no error object');
+        const fallbackError: DebugBubble = {
+          id: uuidv4(),
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          isExpanded: true,
+          actionId: response.position?.actionId,
+          actionType: response.position?.actionType,
+          content: {
+            type: 'error',
+            code: 'BACKEND_ERROR',
+            errorType: 'system',
+            message: 'Backend returned error status without error details',
+            details: 'This is a backend bug. Please check server logs.',
+            position: response.position
+              ? {
+                  phaseId: response.position.phaseId || '',
+                  phaseName: '',
+                  topicId: response.position.topicId || '',
+                  topicName: '',
+                  actionId: response.position.actionId || '',
+                }
+              : undefined,
+            recovery: {
+              canRetry: true,
+              retryAction: 'Restart debugging',
+              suggestions: ['Check server logs for detailed error'],
+            },
+          } as ErrorBubbleContent,
+        };
+        addDebugBubble(fallbackError);
       }
 
       // 检查变量变化并创建变量气泡

@@ -12,6 +12,8 @@ import type { BaseAction, ActionContext, ActionResult } from '../../actions/base
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
 import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.js';
+import type { VariableStore } from '@heartrule/shared-types';
+import { VariableScopeResolver } from '../variable-scope/variable-scope-resolver.js';
 
 /**
  * 执行状态
@@ -43,6 +45,8 @@ export interface ExecutionState {
   currentActionIdx: number;
   currentAction: BaseAction | null;
   variables: Record<string, any>;
+  // 新增：分层变量存储结构
+  variableStore?: VariableStore;
   conversationHistory: Array<{
     role: string;
     content: string;
@@ -113,6 +117,33 @@ export class ScriptExecutor {
     userInput?: string | null
   ): Promise<ExecutionState> {
     try {
+      // 渐进式迁移：如果没有 variableStore，从 variables 迁移数据
+      if (!executionState.variableStore && executionState.variables) {
+        console.log('[ScriptExecutor] 🔄 Migrating variables to variableStore');
+        executionState.variableStore = {
+          global: {},
+          session: {},
+          phase: {},
+          topic: {},
+        };
+
+        // 将旧数据迁移到 session 作用域
+        for (const [key, value] of Object.entries(executionState.variables)) {
+          executionState.variableStore.session[key] = {
+            value,
+            type: this.inferType(value),
+            source: 'migrated',
+            lastUpdated: new Date().toISOString(),
+          };
+        }
+
+        console.log(
+          '[ScriptExecutor] ✅ Migrated',
+          Object.keys(executionState.variables).length,
+          'variables to session scope'
+        );
+      }
+
       // 解析脚本
       const parsed = JSON.parse(scriptContent);
       const sessionData = parsed.session;
@@ -220,12 +251,61 @@ export class ScriptExecutor {
           hasAiMessage: !!result.aiMessage,
         });
         if (result.success) {
-          // 更新变量
+          // 更新变量：使用 VariableScopeResolver 写入到正确的作用域
           if (result.extractedVariables) {
+            // 向后兼容：继续更新旧的 variables
             executionState.variables = {
               ...executionState.variables,
               ...result.extractedVariables,
             };
+
+            // 新逻辑：使用 VariableScopeResolver 写入分层变量
+            if (executionState.variableStore) {
+              console.log(`[ScriptExecutor] 🔍 Processing extracted variables (continueAction):`, result.extractedVariables);
+              console.log(`[ScriptExecutor] 🔍 Current position:`, { 
+                phaseId: executionState.currentPhaseId,
+                topicId: executionState.currentTopicId,
+                actionId: executionState.currentAction.actionId 
+              });
+              
+              const scopeResolver = new VariableScopeResolver(executionState.variableStore);
+              const position = {
+                phaseId: executionState.currentPhaseId,
+                topicId: executionState.currentTopicId,
+                actionId: executionState.currentAction.actionId,
+              };
+
+              for (const [varName, varValue] of Object.entries(result.extractedVariables)) {
+                console.log(`[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`, varValue);
+                
+                // 确定目标作用域
+                const targetScope = scopeResolver.determineScope(varName);
+                console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
+                
+                // 写入变量
+                scopeResolver.setVariable(varName, varValue, targetScope, position, executionState.currentAction.actionId);
+                console.log(`[ScriptExecutor] ✅ Set variable "${varName}" to ${targetScope} scope`);
+              }
+              
+              // 验证变量是否真的写入成功
+              console.log(`[ScriptExecutor] 🔍 Verifying variableStore after writing (continueAction):`);
+              console.log(`[ScriptExecutor] - Global:`, Object.keys(executionState.variableStore.global));
+              console.log(`[ScriptExecutor] - Session:`, Object.keys(executionState.variableStore.session));
+              if (executionState.currentPhaseId) {
+                console.log(`[ScriptExecutor] - Phase[${executionState.currentPhaseId}]:`, 
+                  executionState.variableStore.phase[executionState.currentPhaseId] 
+                    ? Object.keys(executionState.variableStore.phase[executionState.currentPhaseId]) 
+                    : 'undefined');
+              }
+              if (executionState.currentTopicId) {
+                console.log(`[ScriptExecutor] - Topic[${executionState.currentTopicId}]:`, 
+                  executionState.variableStore.topic[executionState.currentTopicId] 
+                    ? Object.keys(executionState.variableStore.topic[executionState.currentTopicId]) 
+                    : 'undefined');
+              }
+            } else {
+              console.warn(`[ScriptExecutor] ⚠️ variableStore is not initialized, cannot write variables to scopes`);
+            }
           }
 
           // 添加AI消息到对话历史
@@ -479,12 +559,47 @@ export class ScriptExecutor {
       // Action完成，处理结果
       console.log(`[ScriptExecutor] ✅ Action completed successfully`);
       if (result.success) {
-        // 更新变量
+        // 更新变量：使用 VariableScopeResolver 写入到正确的作用域
         if (result.extractedVariables) {
+          // 向后兼容：继续更新旧的 variables
           executionState.variables = {
             ...executionState.variables,
             ...result.extractedVariables,
           };
+
+          // 新逻辑：使用 VariableScopeResolver 写入分层变量
+          if (executionState.variableStore) {
+            console.log(`[ScriptExecutor] 🔍 Processing extracted variables:`, result.extractedVariables);
+            console.log(`[ScriptExecutor] 🔍 Current position:`, { phaseId, topicId, actionId: action.actionId });
+            
+            const scopeResolver = new VariableScopeResolver(executionState.variableStore);
+            const position = {
+              phaseId,
+              topicId,
+              actionId: action.actionId,
+            };
+
+            for (const [varName, varValue] of Object.entries(result.extractedVariables)) {
+              console.log(`[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`, varValue);
+              
+              // 确定目标作用域
+              const targetScope = scopeResolver.determineScope(varName);
+              console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
+              
+              // 写入变量
+              scopeResolver.setVariable(varName, varValue, targetScope, position, action.actionId);
+              console.log(`[ScriptExecutor] ✅ Set variable "${varName}" to ${targetScope} scope`);
+            }
+            
+            // 验证变量是否真的写入成功
+            console.log(`[ScriptExecutor] 🔍 Verifying variableStore after writing:`);
+            console.log(`[ScriptExecutor] - Global:`, Object.keys(executionState.variableStore.global));
+            console.log(`[ScriptExecutor] - Session:`, Object.keys(executionState.variableStore.session));
+            console.log(`[ScriptExecutor] - Phase[${phaseId}]:`, executionState.variableStore.phase[phaseId] ? Object.keys(executionState.variableStore.phase[phaseId]) : 'undefined');
+            console.log(`[ScriptExecutor] - Topic[${topicId}]:`, executionState.variableStore.topic[topicId] ? Object.keys(executionState.variableStore.topic[topicId]) : 'undefined');
+          } else {
+            console.warn(`[ScriptExecutor] ⚠️ variableStore is not initialized, cannot write variables to scopes`);
+          }
         }
 
         // 添加到对话历史
@@ -567,6 +682,12 @@ export class ScriptExecutor {
     executionState: ExecutionState,
     userInput?: string | null
   ): Promise<ActionResult> {
+    // 创建作用域解析器
+    let scopeResolver: VariableScopeResolver | undefined;
+    if (executionState.variableStore) {
+      scopeResolver = new VariableScopeResolver(executionState.variableStore);
+    }
+
     // 构建执行上下文
     const context: ActionContext = {
       sessionId,
@@ -574,6 +695,8 @@ export class ScriptExecutor {
       topicId,
       actionId: action.actionId,
       variables: { ...executionState.variables },
+      variableStore: executionState.variableStore,
+      scopeResolver,
       conversationHistory: [...executionState.conversationHistory],
       metadata: { ...executionState.metadata },
     };
@@ -600,6 +723,12 @@ export class ScriptExecutor {
       });
     }
 
+    // 创建作用域解析器
+    let scopeResolver: VariableScopeResolver | undefined;
+    if (executionState.variableStore) {
+      scopeResolver = new VariableScopeResolver(executionState.variableStore);
+    }
+
     // 构建执行上下文
     const context: ActionContext = {
       sessionId,
@@ -607,6 +736,8 @@ export class ScriptExecutor {
       topicId: executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`,
       actionId: action.actionId,
       variables: { ...executionState.variables },
+      variableStore: executionState.variableStore,
+      scopeResolver,
       conversationHistory: [...executionState.conversationHistory],
       metadata: { ...executionState.metadata },
     };
@@ -656,6 +787,12 @@ export class ScriptExecutor {
       currentActionIdx: 0,
       currentAction: null,
       variables: {},
+      variableStore: { // 🔧 初始化 variableStore
+        global: {},
+        session: {},
+        phase: {},
+        topic: {},
+      },
       conversationHistory: [],
       metadata: {},
       lastAiMessage: null,
@@ -700,5 +837,15 @@ export class ScriptExecutor {
       actionStateCurrentRound: actionState.currentRound,
     });
     return action;
+  }
+
+  /**
+   * 推断值的类型
+   */
+  private inferType(value: any): string {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (Array.isArray(value)) return 'array';
+    return typeof value;
   }
 }

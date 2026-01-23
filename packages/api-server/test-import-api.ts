@@ -40,11 +40,13 @@ session:
             - action_type: "ai_ask"
               action_id: "ask_help"
               config:
-                target_variable: "user_need"
                 question_template: "请问有什么可以帮助你的吗？"
-                extraction_prompt: "提取用户的主要需求"
+                exit: "用户描述了主要需求"
                 required: true
-                max_rounds: 3`;
+                max_rounds: 3
+                output:
+                  - get: "user_need"
+                    define: "提取用户的主要需求"`;
 
 async function testImportApi() {
   try {

@@ -16,6 +16,7 @@ export * from './engines/llm-orchestration/index.js';
 export * from './engines/variable-extraction/index.js';
 export * from './engines/memory/index.js';
 export * from './engines/prompt-template/index.js';  // 新增：提示词模板管理器
+export * from './engines/variable-scope/variable-scope-resolver.js';  // 新增：变量作用域解析器
 
 // Actions (新版本，替代旧的 base.js 和 registry.js)
 export * from './actions/base-action.js';

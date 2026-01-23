@@ -25,16 +25,17 @@ session:
                 require_acknowledgment: true
                 max_rounds: 2
             
-            # 测试 ai_ask 的新配置项
+            # 测试 ai_ask 的新配置项（使用 output 数组）
             - action_type: "ai_ask"
               action_id: "ask_1"
               config:
                 question_template: "请告诉我你的名字"
-                target_variable: "user_name"
-                extraction_prompt: "从用户回答中提取姓名"
+                exit: "成功获取用户名称"
                 required: true
                 max_rounds: 3
-                exit: "成功获取用户名称"
+                output:
+                  - get: "user_name"
+                    define: "从用户回答中提取姓名"
             
             # 测试 ai_ask 的output数组配置
             - action_type: "ai_ask"

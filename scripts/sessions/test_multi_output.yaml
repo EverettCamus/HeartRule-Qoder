@@ -1,0 +1,88 @@
+metadata:
+  name: "多变量输出测试"
+  version: "1.0"
+  author: "Qcoder"
+  description: "测试 ai_ask 的 output_list 功能"
+
+session:
+  session_id: "test_multi_output"
+  session_name: "多变量输出测试会话"
+  
+  phases:
+    - phase_id: "phase_1_test"
+      phase_name: "测试阶段"
+      phase_goal: "测试多变量输出功能"
+      
+      topics:
+        - topic_id: "topic_1_1_basic"
+          topic_name: "基础信息收集"
+          topic_goal: "收集多个用户信息"
+          
+          actions:
+            # 示例1：单个变量（使用 output 数组）
+            - action_type: "ai_ask"
+              action_id: "ask_name"
+              config:
+                question_template: "你好，请问怎么称呼你？"
+                tone: "亲切、自然"
+                exit: "用户提供了姓名或昵称"
+                required: true
+                max_rounds: 3
+                output:
+                  - get: "用户名"
+                    define: "从用户回复中提取姓名或昵称"
+            
+            # 示例2：多个变量（使用 output_list）
+            - action_type: "ai_ask"
+              action_id: "ask_symptoms"
+              config:
+                question_template: "请详细描述一下你的症状，包括症状表现、持续时间和严重程度"
+                tone: "温和、专业、关切"
+                exit: "用户提供了症状描述、持续时间和严重程度的信息"
+                required: true
+                max_rounds: 5
+                output:
+                  - get: "症状描述"
+                    define: "用户描述的主要症状表现"
+                  - get: "持续时间"
+                    define: "症状持续的时间长度"
+                  - get: "严重程度"
+                    define: "症状严重程度的评估（轻度/中度/重度）"
+            
+            # 示例3：更多变量
+            - action_type: "ai_ask"
+              action_id: "ask_background"
+              config:
+                question_template: "为了更好地了解你的情况，能否分享一下你的基本信息？"
+                tone: "温和、尊重"
+                exit: "收集到年龄、职业、教育背景和家庭状况等信息"
+                required: false
+                max_rounds: 5
+                output:
+                  - get: "年龄"
+                    define: "用户的年龄"
+                  - get: "职业"
+                    define: "用户的职业或工作情况"
+                  - get: "教育背景"
+                    define: "用户的学历和教育经历"
+                  - get: "家庭状况"
+                    define: "婚姻状况、家庭成员等"
+                  - get: "生活环境"
+                    # 这个字段没有 define，测试兼容性
+            
+            # 使用提取的变量
+            - action_type: "ai_say"
+              action_id: "summary"
+              config:
+                content_template: |
+                  好的，{{用户名}}，我已经了解了你的基本情况：
+                  - 症状：{{症状描述}}
+                  - 持续时间：{{持续时间}}
+                  - 严重程度：{{严重程度}}
+                  - 年龄：{{年龄}}
+                  - 职业：{{职业}}
+                  
+                  接下来我们可以深入探讨一下你的具体情况。
+                say_goal: "总结收集到的信息，让用户感到被理解"
+                require_acknowledgment: true
+                max_rounds: 1

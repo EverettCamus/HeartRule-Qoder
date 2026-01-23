@@ -43,14 +43,13 @@ async function main() {
     console.log(`  max_rounds: ${say1.config.max_rounds} ✅`);
     console.log('');
 
-    // 测试 ai_ask 配置（基础配置）
-    console.log('--- Action 2: ai_ask (基础配置) ---');
+    // 测试 ai_ask 配置（基础配置 - 使用新的 output 数组）
+    console.log('--- Action 2: ai_ask (基础配置 - output数组) ---');
     const ask1 = actions[1];
     console.log(`  action_type: ${ask1.action_type}`);
     console.log(`  action_id: ${ask1.action_id}`);
     console.log(`  question_template: ${ask1.config.question_template} ✅`);
-    console.log(`  target_variable: ${ask1.config.target_variable} ✅`);
-    console.log(`  extraction_prompt: ${ask1.config.extraction_prompt} ✅`);
+    console.log(`  output数组: ${JSON.stringify(ask1.config.output)} ✅`);
     console.log(`  required: ${ask1.config.required} ✅`);
     console.log(`  max_rounds: ${ask1.config.max_rounds} ✅`);
     console.log(`  exit: ${ask1.config.exit} ✅`);
@@ -90,18 +89,9 @@ async function main() {
           exit: action.config?.exit,
           tolist: action.config?.tolist,
           question_template: action.config?.question_template,
-          target_variable: action.config?.target_variable,
-          extraction_prompt: action.config?.extraction_prompt,
           required: action.config?.required,
           max_rounds: action.config?.max_rounds,
-          output: action.config?.target_variable
-            ? [
-                {
-                  get: action.config.target_variable,
-                  define: action.config.extraction_prompt || '',
-                },
-              ]
-            : action.config?.output || [],
+          output: action.config?.output || [],  // 统一使用 output 数组
           condition: action.config?.condition,
           action_id: action.action_id,
         });

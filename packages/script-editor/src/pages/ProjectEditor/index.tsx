@@ -786,7 +786,6 @@ const ProjectEditor: React.FC = () => {
                           config: {
                             ...rawAction.config,
                             question_template: action.ai_ask,
-                            content_template: action.ai_ask,
                             tone: action.tone,
                             exit: action.exit,
                             tolist: action.tolist,
@@ -1338,7 +1337,7 @@ const ProjectEditor: React.FC = () => {
             action_id: baseActionId,
             action_type: 'ai_ask',
             config: {
-              content_template: 'Please enter a question',
+              question_template: 'Please enter a question',
               output: [],
             },
           },

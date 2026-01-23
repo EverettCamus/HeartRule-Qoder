@@ -46,7 +46,13 @@ async function main() {
             console.log(`          内容: "${preview}..."`);
           } else if (action.action_type === 'ai_ask') {
             console.log(`          问题: "${action.config.question_template}"`);
-            console.log(`          变量: ${action.config.target_variable}`);
+            // 优先显示 output 数组，向后兼容 target_variable
+            if (action.config.output?.length > 0) {
+              const varNames = action.config.output.map((o: any) => o.get).join(', ');
+              console.log(`          变量(output): ${varNames}`);
+            } else if (action.config.target_variable) {
+              console.log(`          变量(legacy): ${action.config.target_variable}`);
+            }
           } else if (action.action_type === 'ai_think') {
             console.log(`          目标: "${action.config.think_goal}"`);
           }

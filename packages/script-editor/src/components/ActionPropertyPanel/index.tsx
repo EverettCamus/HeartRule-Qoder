@@ -62,8 +62,6 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
         formValues.exit = action.exit || '';
         formValues.tolist = action.tolist || '';
         formValues.question_template = action.question_template || action.ai_ask;
-        formValues.target_variable = action.target_variable || action.output?.[0]?.get || '';
-        formValues.extraction_prompt = action.extraction_prompt || action.output?.[0]?.define || '';
         formValues.required = action.required ?? false;
         formValues.max_rounds = action.max_rounds ?? 3;
         formValues.output = action.output || [];
@@ -114,8 +112,6 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
           exit: values.exit || undefined,
           tolist: values.tolist || undefined,
           question_template: values.question_template || values.ai_ask,
-          target_variable: values.target_variable,
-          extraction_prompt: values.extraction_prompt,
           required: values.required,
           max_rounds: values.max_rounds,
           output: values.output || undefined,
@@ -281,16 +277,21 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
               </Form.Item>
 
               <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item 
-                    label="Target Variable" 
-                    name="target_variable"
-                    tooltip="将用户回答提取到的变量名"
-                  >
-                    <Input placeholder="e.g. user_name" />
+                <Col span={8}>
+                  <Form.Item label="Tone Style" name="tone">
+                    <Input placeholder="e.g. gentle, encouraging" />
                   </Form.Item>
                 </Col>
-                <Col span={12}>
+                <Col span={8}>
+                  <Form.Item 
+                    label="Max Rounds" 
+                    name="max_rounds"
+                    tooltip="最大交互轮数"
+                  >
+                    <InputNumber min={1} max={10} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
                   <Form.Item 
                     label="Required" 
                     name="required"
@@ -302,52 +303,33 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                 </Col>
               </Row>
 
-              <Form.Item 
-                label="Extraction Prompt" 
-                name="extraction_prompt"
-                tooltip="如何从用户回答中提取信息的提示词"
-              >
-                <TextArea rows={2} placeholder="Describe how to extract information from user response..." />
-              </Form.Item>
-
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item label="Tone Style" name="tone">
-                    <Input placeholder="e.g. gentle, encouraging" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item 
-                    label="Max Rounds" 
-                    name="max_rounds"
-                    tooltip="最大交互轮数"
-                  >
-                    <InputNumber min={1} max={10} style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item label="Append to List" name="tolist" tooltip="将结果添加到列表变量">
-                    <Input placeholder="List variable name" />
-                  </Form.Item>
-                </Col>
-              </Row>
-
               <Form.Item label="Exit Condition" name="exit" tooltip="什么情况下退出该Action">
                 <TextArea rows={2} placeholder="Describe when to exit this Action..." />
               </Form.Item>
 
-              <Divider orientation="left">Advanced Output Configuration</Divider>
+              <Form.Item label="Append to List" name="tolist" tooltip="将结果添加到列表变量">
+                <Input placeholder="List variable name" />
+              </Form.Item>
+
+              <Divider orientation="left">变量提取配置（Output）</Divider>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                配置需要从用户回答中提取的变量，支持提取单个或多个变量
+              </Text>
               <Form.List name="output">
                 {(fields, { add, remove}) => (
                   <>
-                    {fields.map((field) => (
+                    {fields.map((field, index) => (
                       <Card
                         key={field.key}
                         size="small"
                         style={{ marginBottom: 8 }}
+                        title={
+                          <Space>
+                            <Text strong>变量 #{index + 1}</Text>
+                            {fields.length === 1 && <Tag color="blue">单变量</Tag>}
+                            {fields.length > 1 && <Tag color="green">多变量</Tag>}
+                          </Space>
+                        }
                         extra={
                           <Button
                             type="text"
@@ -355,30 +337,56 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                             size="small"
                             icon={<DeleteOutlined />}
                             onClick={() => remove(field.name)}
+                            disabled={fields.length === 1}
                           />
                         }
                       >
                         <Form.Item
                           {...field}
-                          label="Variable Operation"
+                          label="变量名（get）"
                           name={[field.name, 'get']}
+                          rules={[{ required: true, message: '请输入变量名' }]}
                           style={{ marginBottom: 8 }}
+                          tooltip="需要提取的变量名称"
                         >
-                          <Input placeholder="get: variable name to extract" />
+                          <Input placeholder="例：用户姓名、症状描述" />
                         </Form.Item>
                         <Form.Item
                           {...field}
-                          label="Variable Definition"
+                          label="变量定义（define）"
                           name={[field.name, 'define']}
                           style={{ marginBottom: 0 }}
+                          tooltip="帮助 AI 理解如何提取该变量的描述"
                         >
-                          <Input placeholder="define: variable description" />
+                          <TextArea 
+                            rows={2} 
+                            placeholder="例：从用户回复中提取姓名或昵称" 
+                          />
                         </Form.Item>
                       </Card>
                     ))}
-                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-                      Add Output Variable
+                    <Button 
+                      type="dashed" 
+                      onClick={() => add()} 
+                      block 
+                      icon={<PlusOutlined />}
+                      style={{ marginTop: 8 }}
+                    >
+                      添加输出变量
                     </Button>
+                    {fields.length === 0 && (
+                      <div style={{ 
+                        padding: '20px', 
+                        textAlign: 'center', 
+                        background: '#fafafa', 
+                        borderRadius: '4px',
+                        border: '1px dashed #d9d9d9'
+                      }}>
+                        <Text type="secondary">
+                          暂无变量配置，点击上方按钮添加变量提取配置
+                        </Text>
+                      </div>
+                    )}
                   </>
                 )}
               </Form.List>

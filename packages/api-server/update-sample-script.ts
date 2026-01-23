@@ -50,11 +50,16 @@ const sampleScript = {
                 action_type: 'ai_ask',
                 action_id: 'ask_name',
                 config: {
-                  target_variable: 'user_name',
                   question_template: '可以告诉我你的名字吗？我可以怎么称呼你？',
-                  extraction_prompt: '从用户的回复中提取用户的名字或昵称',
+                  exit: '用户提供了姓名或昵称',
                   required: true,
                   max_rounds: 3,
+                  output: [
+                    {
+                      get: 'user_name',
+                      define: '从用户的回复中提取用户的名字或昵称',
+                    },
+                  ],
                 },
               },
             ],
@@ -76,12 +81,17 @@ const sampleScript = {
                 action_type: 'ai_ask',
                 action_id: 'ask_main_issue',
                 config: {
-                  target_variable: 'chief_complaint',
                   question_template: `\${user_name}，能和我说说是什么原因让你来到这里吗？
 最近有什么困扰你的事情吗？`,
-                  extraction_prompt: '提取用户描述的主要问题和困扰',
+                  exit: '用户描述了主要问题和困扰',
                   required: true,
                   max_rounds: 5,
+                  output: [
+                    {
+                      get: 'chief_complaint',
+                      define: '提取用户描述的主要问题和困扰',
+                    },
+                  ],
                 },
               },
               // Action 4: ai_think - 分析主诉

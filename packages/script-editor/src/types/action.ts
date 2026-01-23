@@ -41,7 +41,17 @@ export interface AiAskAction extends BaseAction {
   output?: OutputField[];  // 输出变量配置
   tolist?: string;     // 添加到列表变量
   question_template?: string;  // 问题模板(与ai_ask同义)
+  /**
+   * @deprecated 请使用 output 数组配置。此字段仅用于向后兼容。
+   * 旧方式: target_variable: "user_name"
+   * 新方式: output: [{ get: "user_name", define: "提取用户姓名" }]
+   */
   target_variable?: string;    // 目标变量名
+  /**
+   * @deprecated 请使用 output 数组中的 define 字段。此字段仅用于向后兼容。
+   * 旧方式: extraction_prompt: "从回复中提取姓名"
+   * 新方式: output: [{ get: "user_name", define: "从回复中提取姓名" }]
+   */
   extraction_prompt?: string;  // 提取提示词
   required?: boolean;          // 是否必填
   max_rounds?: number;         // 最大轮数

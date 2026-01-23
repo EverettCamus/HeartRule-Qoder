@@ -143,7 +143,7 @@ const ErrorBubble: React.FC<ErrorBubbleProps> = ({
             </div>
           )}
 
-          {content.recovery && content.recovery.suggestions.length > 0 && (
+          {content.recovery && content.recovery.suggestions && content.recovery.suggestions.length > 0 && (
             <div style={{ marginBottom: '12px' }}>
               <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>
                 修复建议:

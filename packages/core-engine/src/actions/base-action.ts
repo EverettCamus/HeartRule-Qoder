@@ -5,6 +5,8 @@
  */
 
 import type { LLMDebugInfo } from '../engines/llm-orchestration/orchestrator.js';
+import type { VariableStore, Position } from '@heartrule/shared-types';
+import { VariableScopeResolver } from '../engines/variable-scope/variable-scope-resolver.js';
 
 export interface ActionContext {
   sessionId: string;
@@ -12,6 +14,10 @@ export interface ActionContext {
   topicId: string;
   actionId: string;
   variables: Record<string, any>;
+  // 新增：分层变量存储
+  variableStore?: VariableStore;
+  // 新增：作用域解析器
+  scopeResolver?: VariableScopeResolver;
   conversationHistory: Array<{
     role: string;
     content: string;
@@ -81,24 +87,55 @@ export abstract class BaseAction {
    * 替换模板中的变量
    *
    * 支持 {{variable_name}}, {variable_name}, ${variable_name} 格式
+   * 优先使用 scopeResolver 按作用域查找，否则使用旧的 variables
    */
   substituteVariables(template: string, context: ActionContext): string {
+    // 提取模板中的变量名
+    const variablePattern = /\{\{([^}]+)\}\}|\{([^}]+)\}|\$\{([^}]+)\}/g;
+    const matches = template.matchAll(variablePattern);
+    const varNames = new Set<string>();
+  
+    for (const match of matches) {
+      const varName = match[1] || match[2] || match[3];
+      if (varName) {
+        varNames.add(varName.trim());
+      }
+    }
+  
+    // 替换变量
     let result = template;
-    for (const [varName, varValue] of Object.entries(context.variables)) {
+    for (const varName of varNames) {
+      let varValue: any;
+  
+      // 优先使用 scopeResolver
+      if (context.scopeResolver && context.variableStore) {
+        const position: Position = {
+          phaseId: context.phaseId,
+          topicId: context.topicId,
+          actionId: context.actionId,
+        };
+        const variableValue = context.scopeResolver.resolveVariable(varName, position);
+        varValue = variableValue?.value;
+      } else {
+        // 向后兼容：使用旧的 variables
+        varValue = context.variables[varName];
+      }
+  
       // 转义变量名中的特殊字符用于正则
       const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
+  
       // 支持三种占位符格式: {{var}}, {var}, ${var}
       const patterns = [
         `\\{\\{${escapedVarName}\\}\\}`,
         `\\{${escapedVarName}\\}`,
-        `\\$\{${escapedVarName}\\}`,
+        `\\$\\{${escapedVarName}\\}`,
       ];
-
+  
       for (const pattern of patterns) {
         result = result.replace(new RegExp(pattern, 'g'), String(varValue ?? ''));
       }
     }
+  
     return result;
   }
 }

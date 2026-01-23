@@ -197,6 +197,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
 
         // 返回会话信息，包含脚本的解析内容
         const response: any = Object.assign({}, session);
+        response.sessionId = session.id; // 显式添加 sessionId 字段
         response.metadata = Object.assign({}, session.metadata || {});
         response.metadata.script = script?.parsedContent || null;
 
@@ -486,6 +487,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           executionStatus: result.executionStatus,
           variables: result.variables,
           globalVariables: result.globalVariables, // 返回全局变量
+          variableStore: result.variableStore, // 🔧 添加分层变量存储（包含提取的变量）
           position: result.position,
           debugInfo: result.debugInfo, // 添加 LLM 调试信息
         };

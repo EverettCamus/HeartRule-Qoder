@@ -110,18 +110,18 @@ export function analyzeOutputVariables(action: ActionNode): string[] {
 
   const config = action.config;
 
-  // ai_ask: target_variable
-  if (config.target_variable) {
-    outputVars.add(String(config.target_variable));
-  }
-
-  // output 配置（数组形式）
+  // 优先处理 output 配置（数组形式，新方式）
   if (Array.isArray(config.output)) {
     for (const item of config.output) {
       if (item && typeof item === 'object' && 'get' in item) {
         outputVars.add(String(item.get));
       }
     }
+  }
+
+  // 向后兼容：ai_ask 的 target_variable（旧方式，已废弃）
+  if (config.target_variable) {
+    outputVars.add(String(config.target_variable));
   }
 
   // output_variables（ai_think）
