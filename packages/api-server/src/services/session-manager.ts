@@ -36,12 +36,15 @@ export class SessionManager {
    * 扁平化 variableStore，将嵌套的 phase/topic 结构转为当前位置的扁平结构
    */
   private flattenVariableStore(
-    variableStore: {
-      global?: Record<string, unknown>;
-      session?: Record<string, unknown>;
-      phase?: Record<string, Record<string, unknown>>;
-      topic?: Record<string, Record<string, unknown>>;
-    } | null | undefined,
+    variableStore:
+      | {
+          global?: Record<string, unknown>;
+          session?: Record<string, unknown>;
+          phase?: Record<string, Record<string, unknown>>;
+          topic?: Record<string, Record<string, unknown>>;
+        }
+      | null
+      | undefined,
     position: { phaseId?: string; topicId?: string }
   ): {
     global: Record<string, unknown>;
@@ -61,8 +64,14 @@ export class SessionManager {
     return {
       global: variableStore.global || {},
       session: variableStore.session || {},
-      phase: position.phaseId && variableStore.phase?.[position.phaseId] ? variableStore.phase[position.phaseId] : {},
-      topic: position.topicId && variableStore.topic?.[position.topicId] ? variableStore.topic[position.topicId] : {},
+      phase:
+        position.phaseId && variableStore.phase?.[position.phaseId]
+          ? variableStore.phase[position.phaseId]
+          : {},
+      topic:
+        position.topicId && variableStore.topic?.[position.topicId]
+          ? variableStore.topic[position.topicId]
+          : {},
     };
   }
 
@@ -113,19 +122,14 @@ export class SessionManager {
    */
   private async loadGlobalVariables(scriptName: string): Promise<Record<string, any>> {
     try {
-
-
       // 查找包含该脚本文件的项目
       const sessionFile = await db.query.scriptFiles.findFirst({
         where: eq(scriptFiles.fileName, scriptName),
       });
 
       if (!sessionFile) {
-
         return {};
       }
-
-
 
       // 查找该项目的 global.yaml 文件
       const globalFile = await db.query.scriptFiles.findFirst({
@@ -134,11 +138,8 @@ export class SessionManager {
       });
 
       if (!globalFile) {
-        
         return {};
       }
-
-
 
       // 解析全局变量
       const globalVariables: Record<string, any> = {};
@@ -164,7 +165,6 @@ export class SessionManager {
           }
         }
       }
-
 
       return globalVariables;
     } catch (error) {
@@ -343,11 +343,12 @@ export class SessionManager {
           metadata: {
             ...executionState.metadata,
             globalVariables, // 存储全局变量到 metadata
+            variableStore: executionState.variableStore, // 🔧 持久化分层变量存储
           },
           updatedAt: new Date(),
         })
         .where(eq(sessions.id, sessionId));
-      
+
       const result = {
         aiMessage: executionState.lastAiMessage || '',
         sessionStatus: session.status,
@@ -493,6 +494,7 @@ export class SessionManager {
       }));
 
       // 恢复执行状态，合并全局变量
+      const metadata = (session.metadata as Record<string, any>) || {};
       let executionState: ExecutionState = {
         status: (session.executionStatus as ExecutionStatus) || ExecutionStatus.RUNNING,
         currentPhaseIdx: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
@@ -504,10 +506,27 @@ export class SessionManager {
           ...globalVariables, // 先加载全局变量
           ...((session.variables as Record<string, unknown>) || {}), // 会话变量覆盖全局变量
         },
+        // 🔧 恢复分层变量存储
+        variableStore: metadata.variableStore,
         conversationHistory: conversationHistory,
-        metadata: (session.metadata as Record<string, unknown>) || {},
+        metadata: metadata,
         lastAiMessage: null,
       };
+
+      // 确保 variableStore.global 包含最新的全局变量
+      if (executionState.variableStore) {
+        if (!executionState.variableStore.global) executionState.variableStore.global = {};
+        for (const [key, value] of Object.entries(globalVariables)) {
+          if (!executionState.variableStore.global[key]) {
+            executionState.variableStore.global[key] = {
+              value,
+              type: typeof value,
+              source: 'global_sync',
+              lastUpdated: new Date().toISOString(),
+            };
+          }
+        }
+      }
       console.log('[SessionManager] 📋 Restored execution state:', {
         status: executionState.status,
         phaseIdx: executionState.currentPhaseIdx,
@@ -595,6 +614,7 @@ export class SessionManager {
           metadata: {
             ...executionState.metadata,
             globalVariables, // 存储全局变量到 metadata
+            variableStore: executionState.variableStore, // 🔧 持久化分层变量存储
           },
           updatedAt: new Date(),
         })
@@ -661,7 +681,8 @@ export class SessionManager {
 
       // 返回错误信息（而不是抛出异常）
       // 注意：globalVariables 在 try 块内定义，catch 块中无法访问，从 session.metadata 获取
-      const cachedGlobalVariables = ((session.metadata as any)?.globalVariables as Record<string, unknown>) || {};
+      const cachedGlobalVariables =
+        ((session.metadata as any)?.globalVariables as Record<string, unknown>) || {};
       const pos = session.position as Record<string, unknown> | null;
       return {
         aiMessage: '',
