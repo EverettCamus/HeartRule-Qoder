@@ -1,18 +1,17 @@
 /**
  * 回归测试：variableStore 扁平化与 API 响应
- * 
+ *
  * BUG描述：
  * 后端返回的 variableStore 使用嵌套结构（topic[topicId][varName]），
  * 但前端期望扁平结构（topic[varName]）。
- * 
+ *
  * 测试目标：
  * 1. 验证 SessionManager.flattenVariableStore() 方法能正确扁平化数据
  * 2. 验证 API 响应中包含正确的 variableStore 字段
  * 3. 验证扁平化后的数据结构符合前端预期
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import type { VariableStore } from '@heartrule/shared-types';
+import { describe, it, expect } from 'vitest';
 
 describe('variableStore 扁平化回归测试', () => {
   describe('场景1: 扁平化逻辑测试', () => {
@@ -20,7 +19,7 @@ describe('variableStore 扁平化回归测试', () => {
       // 模拟后端 variableStore 的嵌套结构
       const nestedVariableStore = {
         global: {
-          '咨询师名': {
+          咨询师名: {
             value: '华小光',
             type: 'string',
             source: 'global',
@@ -28,7 +27,7 @@ describe('variableStore 扁平化回归测试', () => {
           },
         },
         session: {
-          '会话ID': {
+          会话ID: {
             value: 'session-123',
             type: 'string',
             source: 'system',
@@ -36,8 +35,8 @@ describe('variableStore 扁平化回归测试', () => {
           },
         },
         phase: {
-          'phase_1': {
-            '阶段变量': {
+          phase_1: {
+            阶段变量: {
               value: '值1',
               type: 'string',
               source: 'action_1',
@@ -46,22 +45,22 @@ describe('variableStore 扁平化回归测试', () => {
           },
         },
         topic: {
-          'topic_1': {
-            '来访者称呼': {
+          topic_1: {
+            来访者称呼: {
               value: 'LEO',
               type: 'string',
               source: 'action_2',
               lastUpdated: '2026-01-25T08:35:37.906Z',
             },
-            '来访者年龄': {
+            来访者年龄: {
               value: '未知',
               type: 'string',
               source: 'action_2',
               lastUpdated: '2026-01-25T08:35:37.906Z',
             },
           },
-          'topic_2': {
-            '其他话题变量': {
+          topic_2: {
+            其他话题变量: {
               value: '其他值',
               type: 'string',
               source: 'action_3',
@@ -166,13 +165,13 @@ describe('variableStore 扁平化回归测试', () => {
         global: {},
         session: {},
         phase: {
-          'phase_1': {
-            '变量A': { value: '值A', type: 'string', source: 'action', lastUpdated: '' },
+          phase_1: {
+            变量A: { value: '值A', type: 'string', source: 'action', lastUpdated: '' },
           },
         },
         topic: {
-          'topic_1': {
-            '变量B': { value: '值B', type: 'string', source: 'action', lastUpdated: '' },
+          topic_1: {
+            变量B: { value: '值B', type: 'string', source: 'action', lastUpdated: '' },
           },
         },
       };
@@ -222,12 +221,12 @@ describe('variableStore 扁平化回归测试', () => {
         aiMessage: 'LEO，很高兴认识你。今天是什么让你想要进行心理咨询呢？',
         sessionStatus: 'active',
         executionStatus: 'waiting_input',
-        variables: { '咨询师名': '华小光' },
-        globalVariables: { '咨询师名': '华小光' },
+        variables: { 咨询师名: '华小光' },
+        globalVariables: { 咨询师名: '华小光' },
         variableStore: {
           global: {},
           session: {
-            '咨询师名': {
+            咨询师名: {
               value: '华小光',
               type: 'string',
               source: 'migrated',
@@ -236,7 +235,7 @@ describe('variableStore 扁平化回归测试', () => {
           },
           phase: {},
           topic: {
-            '来访者称呼': {
+            来访者称呼: {
               value: 'LEO',
               type: 'string',
               source: 'action_2',
@@ -286,7 +285,7 @@ describe('variableStore 扁平化回归测试', () => {
       const variableStore = {
         global: {},
         session: {
-          '咨询师名': {
+          咨询师名: {
             value: '华小光',
             type: 'string',
             source: 'migrated',
@@ -295,7 +294,7 @@ describe('variableStore 扁平化回归测试', () => {
         },
         phase: {},
         topic: {
-          '来访者称呼': {
+          来访者称呼: {
             value: 'LEO',
             type: 'string',
             source: 'action_2',
@@ -311,19 +310,10 @@ describe('variableStore 扁平化回归测试', () => {
     });
 
     it('variableStore.topic 应该是扁平结构而非嵌套结构', () => {
-      // 错误的嵌套结构（BUG 场景）
-      const wrongStructure = {
-        topic: {
-          'topic_1': {
-            '来访者称呼': { value: 'LEO' },
-          },
-        },
-      };
-
       // 正确的扁平结构（修复后）
       const correctStructure = {
         topic: {
-          '来访者称呼': { value: 'LEO' },
+          来访者称呼: { value: 'LEO' },
         },
       };
 
@@ -344,7 +334,7 @@ describe('variableStore 扁平化回归测试', () => {
       const nestedVariableStore = {
         global: {},
         session: {
-          '咨询师名': {
+          咨询师名: {
             value: '华小光',
             type: 'string',
             source: 'migrated',
@@ -353,14 +343,14 @@ describe('variableStore 扁平化回归测试', () => {
         },
         phase: {},
         topic: {
-          'topic_1': {
-            '来访者称呼': {
+          topic_1: {
+            来访者称呼: {
               value: 'LEO',
               type: 'string',
               source: 'action_2',
               lastUpdated: '2026-01-25T08:35:37.906Z',
             },
-            '来访者年龄': {
+            来访者年龄: {
               value: '未知',
               type: 'string',
               source: 'action_2',

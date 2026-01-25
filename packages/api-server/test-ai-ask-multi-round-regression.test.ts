@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionManager } from './src/services/session-manager.js';
-import { ScriptExecutor, ExecutionStatus } from '@heartrule/core-engine';
+import { ExecutionStatus } from '@heartrule/core-engine';
 import { db } from './src/db/index.js';
 
 // Mock 数据库
@@ -133,7 +133,7 @@ describe('ai_ask 多轮对话变量提取回归测试', () => {
     await sessionManager.processUserInput(sessionId, '我叫 LEO');
 
     // 验证持久化：db.update 应该包含 variableStore
-    const updateCall = (db.update as any).mock.calls[0];
+
     const setCall = (db.update(null as any).set as any).mock.calls[0][0];
 
     expect(setCall.metadata.variableStore).toBeDefined();
@@ -186,7 +186,7 @@ describe('ai_ask 多轮对话变量提取回归测试', () => {
     expect(resultVariableStore.session['来访者称呼']).toBeUndefined();
 
     // 验证持久化更新
-    const updateCall2 = (db.update as any).mock.calls[1];
+
     const setCall2 = (db.update(null as any).set as any).mock.calls[1][0];
     expect(setCall2.metadata.variableStore.topic['t1']['来访者称呼'].value).toBe('张三');
     expect(setCall2.metadata.variableStore.session['来访者称呼']).toBeUndefined();

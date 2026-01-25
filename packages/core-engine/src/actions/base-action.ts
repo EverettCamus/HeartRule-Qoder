@@ -4,8 +4,11 @@
  * 参照 Python 版本: legacy-python/src/actions/base.py
  */
 
-import type { LLMDebugInfo } from '../engines/llm-orchestration/orchestrator.js';
+import * as path from 'path';
+
 import type { VariableStore, Position } from '@heartrule/shared-types';
+
+import type { LLMDebugInfo } from '../engines/llm-orchestration/orchestrator.js';
 import { VariableScopeResolver } from '../engines/variable-scope/variable-scope-resolver.js';
 
 export interface ActionContext {
@@ -94,19 +97,19 @@ export abstract class BaseAction {
     const variablePattern = /\{\{([^}]+)\}\}|\{([^}]+)\}|\$\{([^}]+)\}/g;
     const matches = template.matchAll(variablePattern);
     const varNames = new Set<string>();
-  
+
     for (const match of matches) {
       const varName = match[1] || match[2] || match[3];
       if (varName) {
         varNames.add(varName.trim());
       }
     }
-  
+
     // 替换变量
     let result = template;
     for (const varName of varNames) {
       let varValue: any;
-  
+
       // 优先使用 scopeResolver
       if (context.scopeResolver && context.variableStore) {
         const position: Position = {
@@ -120,22 +123,91 @@ export abstract class BaseAction {
         // 向后兼容：使用旧的 variables
         varValue = context.variables[varName];
       }
-  
+
       // 转义变量名中的特殊字符用于正则
       const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  
+
       // 支持三种占位符格式: {{var}}, {var}, ${var}
       const patterns = [
         `\\{\\{${escapedVarName}\\}\\}`,
         `\\{${escapedVarName}\\}`,
         `\\$\\{${escapedVarName}\\}`,
       ];
-  
+
       for (const pattern of patterns) {
         result = result.replace(new RegExp(pattern, 'g'), String(varValue ?? ''));
       }
     }
-  
+
     return result;
+  }
+
+  /**
+   * 从配置中获取值，支持 camelCase 和 snake_case
+   */
+  protected getConfig(key: string, defaultValue: any = undefined): any {
+    const snakeKey = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+    const camelKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+
+    return this.config[key] ?? this.config[snakeKey] ?? this.config[camelKey] ?? defaultValue;
+  }
+
+  /**
+   * 解析模板基础路径
+   */
+  protected resolveTemplatePath(): string {
+    let templateBasePath = process.env.PROMPT_TEMPLATE_PATH;
+
+    if (!templateBasePath) {
+      const cwd = process.cwd();
+      // 检测运行目录：适配 monorepo 结构
+      if (cwd.includes('packages/api-server') || cwd.includes('packages\\api-server')) {
+        templateBasePath = path.resolve(cwd, '../../config/prompts');
+      } else {
+        templateBasePath = path.resolve(cwd, './config/prompts');
+      }
+    }
+    return templateBasePath;
+  }
+
+  /**
+   * 提取通用的用户画像变量
+   */
+  protected extractCommonProfileVariables(context: ActionContext): Map<string, any> {
+    const variables = new Map<string, any>();
+    const commonVars = [
+      '用户名',
+      '教育背景',
+      '心理学知识',
+      '学习风格',
+      '咨询师名',
+      '认知特点',
+      '情感特点',
+      '词汇水平',
+      '语言风格',
+      '用户常用表达',
+    ];
+
+    commonVars.forEach((varName) => {
+      const value = context.variables[varName];
+      if (value !== undefined) {
+        variables.set(varName, value);
+      }
+    });
+
+    return variables;
+  }
+
+  /**
+   * 清理 LLM 输出的 JSON 文本（移除 Markdown 代码块标记）
+   */
+  protected cleanJsonOutput(text: string): string {
+    let jsonText = text.trim();
+    if (jsonText.startsWith('```json')) {
+      jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?$/g, '');
+    } else if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/```\n?/g, '').replace(/```\n?$/g, '');
+    }
+    return jsonText.trim();
   }
 }

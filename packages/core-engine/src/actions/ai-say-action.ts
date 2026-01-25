@@ -8,8 +8,6 @@
  * - 保持向后兼容（require_acknowledgment 机制）
  */
 
-import * as path from 'path';
-
 import { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager } from '../engines/prompt-template/index.js';
 
@@ -66,33 +64,17 @@ export class AiSayAction extends BaseAction {
     super(actionId, config);
     this.llmOrchestrator = llmOrchestrator;
 
-    // 设置模板根目录：优先使用环境变量，否则智能识别运行目录
-    let templateBasePath = process.env.PROMPT_TEMPLATE_PATH;
-
-    if (!templateBasePath) {
-      const cwd = process.cwd();
-      console.log(`[AiSayAction] 📁 Current working directory: ${cwd}`);
-
-      // 检测运行目录：
-      // - 如果在 packages/api-server 下，向上 2 级到 root
-      // - 如果在项目根目录，直接使用 ./config/prompts
-      if (cwd.endsWith('packages\\api-server') || cwd.endsWith('packages/api-server')) {
-        templateBasePath = path.resolve(cwd, '../../config/prompts');
-      } else {
-        // 假设在项目根目录或测试环境
-        templateBasePath = path.resolve(cwd, './config/prompts');
-      }
-
-      console.log(`[AiSayAction] 📁 Template path: ${templateBasePath}`);
-    }
+    const templateBasePath = this.resolveTemplatePath();
+    console.log(`[AiSayAction] 📁 Template path: ${templateBasePath}`);
 
     this.templateManager = new PromptTemplateManager(templateBasePath);
 
     // maxRounds 已在 BaseAction 中设置
-    this.exitCriteria = config.exit_criteria;
+    this.exitCriteria = config.exit_criteria || config.exitCriteria;
 
     // 判断是否使用模板模式：有 max_rounds 或 exit_criteria 配置
-    this.useTemplateMode = config.max_rounds !== undefined || config.exit_criteria !== undefined;
+    this.useTemplateMode =
+      this.getConfig('max_rounds') !== undefined || this.getConfig('exit_criteria') !== undefined;
   }
 
   async execute(context: ActionContext, userInput?: string | null): Promise<ActionResult> {
@@ -171,12 +153,7 @@ export class AiSayAction extends BaseAction {
     });
 
     // 解析 LLM 响应（处理 markdown 代码块）
-    let jsonText = llmResult.text.trim();
-    if (jsonText.startsWith('```json')) {
-      jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?$/g, '');
-    } else if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/```\n?/g, '').replace(/```\n?$/g, '');
-    }
+    const jsonText = this.cleanJsonOutput(llmResult.text);
 
     let llmOutput: MainLineOutput;
     try {
@@ -227,21 +204,10 @@ export class AiSayAction extends BaseAction {
     _userInput?: string | null
   ): Promise<ActionResult> {
     // 1. 选择原始模板（优先级：content > content_template > prompt_template）
-    let rawContent = this.config.content || '';
-    if (!rawContent) {
-      rawContent = this.config.content_template || this.config.contentTemplate || '';
-    }
-    if (!rawContent) {
-      rawContent = this.config.prompt_template || this.config.promptTemplate || '';
-    }
+    const rawContent = this.getConfig('content') || this.getConfig('content_template') || '';
 
     // 明确检查 require_acknowledgment
-    let requireAcknowledgment = true;
-    if (this.config.require_acknowledgment !== undefined) {
-      requireAcknowledgment = this.config.require_acknowledgment;
-    } else if (this.config.requireAcknowledgment !== undefined) {
-      requireAcknowledgment = this.config.requireAcknowledgment;
-    }
+    const requireAcknowledgment = this.getConfig('require_acknowledgment', true);
 
     // 需要确认的情况 - 检查是否是第二轮
     if (requireAcknowledgment && this.currentRound > 0) {
@@ -335,33 +301,12 @@ export class AiSayAction extends BaseAction {
    * 提取脚本层变量
    */
   private extractScriptVariables(context: ActionContext): Map<string, any> {
-    const variables = new Map<string, any>();
+    const variables = this.extractCommonProfileVariables(context);
 
     // 添加核心内容（支持多个字段名）
-    const rawContent =
-      this.config.content || this.config.content_template || this.config.contentTemplate || '';
+    const rawContent = this.getConfig('content') || this.getConfig('content_template') || '';
     const contentWithVars = this.substituteVariables(rawContent, context);
     variables.set('topic_content', contentWithVars);
-
-    // 添加用户画像变量（context.variables 是普通对象）
-    const userVars = [
-      '教育背景',
-      '心理学知识',
-      '学习风格',
-      '用户名',
-      '咨询师名',
-      '认知特点',
-      '情感特点',
-      '词汇水平',
-      '语言风格',
-      '用户常用表达',
-    ];
-    userVars.forEach((varName) => {
-      const value = context.variables[varName];
-      if (value !== undefined) {
-        variables.set(varName, value);
-      }
-    });
 
     return variables;
   }
@@ -375,7 +320,7 @@ export class AiSayAction extends BaseAction {
       who: context.variables['咨询师名'] || 'AI咨询师',
       user: context.variables['用户名'] || '来访者',
       chat_history: this.formatChatHistory(context.conversationHistory),
-      tone: this.config.tone || '专业、温暖、平和',
+      tone: this.getConfig('tone', '专业、温暖、平和'),
       topic_content: this.extractTopicContent(context),
       understanding_threshold: this.exitCriteria?.understanding_threshold ?? 80,
       current_round: this.currentRound,
@@ -387,8 +332,7 @@ export class AiSayAction extends BaseAction {
    * 提取话题内容
    */
   private extractTopicContent(context: ActionContext): string {
-    const rawContent =
-      this.config.content || this.config.content_template || this.config.contentTemplate || '';
+    const rawContent = this.getConfig('content') || this.getConfig('content_template') || '';
     return this.substituteVariables(rawContent, context);
   }
 

@@ -4,8 +4,6 @@
  * 参照: legacy-python/src/actions/ai_ask.py
  */
 
-import * as path from 'path';
-
 import { VariableScope } from '@heartrule/shared-types';
 
 import type { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
@@ -36,38 +34,25 @@ export class AiAskAction extends BaseAction {
 
   constructor(actionId: string, config: Record<string, any>, llmOrchestrator?: LLMOrchestrator) {
     super(actionId, config);
-    this.maxRounds = config.max_rounds || config.maxRounds || 3;
+    this.maxRounds = this.getConfig('max_rounds', 3);
     this.llmOrchestrator = llmOrchestrator;
 
     // 计算模板路径
-    let templateBasePath = process.env.PROMPT_TEMPLATE_PATH;
-    if (!templateBasePath) {
-      const cwd = process.cwd();
-      console.log(`[AiAskAction] 📁 Current working directory: ${cwd}`);
-      if (cwd.includes('packages/api-server') || cwd.includes('packages\\api-server')) {
-        templateBasePath = path.resolve(cwd, '../../config/prompts');
-      } else {
-        templateBasePath = path.resolve(cwd, './config/prompts');
-      }
-      console.log(`[AiAskAction] 📁 Template path: ${templateBasePath}`);
-    }
+    const templateBasePath = this.resolveTemplatePath();
+    console.log(`[AiAskAction] 📁 Template path: ${templateBasePath}`);
     this.templateManager = new PromptTemplateManager(templateBasePath);
 
     // 选择模板类型：有 exit 或 output 使用多轮追问模板，否则使用简单问答模板
     this.templateType =
-      config.output?.length > 0 || config.exit
+      this.getConfig('output')?.length > 0 || this.getConfig('exit')
         ? AskTemplateType.MULTI_ROUND
         : AskTemplateType.SIMPLE;
 
-    console.log(
-      `[AiAskAction] 🔧 Constructor: templateType=${this.templateType}, templatePath=${templateBasePath}, config:`,
-      {
-        hasOutput: !!config.output?.length,
-        hasExit: !!config.exit,
-        maxRounds: this.maxRounds,
-        hasTargetVariable: !!(config.target_variable || config.targetVariable),
-      }
-    );
+    console.log(`[AiAskAction] 🔧 Constructor: templateType=${this.templateType}, config:`, {
+      hasOutput: !!this.getConfig('output')?.length,
+      hasExit: !!this.getConfig('exit'),
+      maxRounds: this.maxRounds,
+    });
   }
 
   async execute(context: ActionContext, userInput?: string | null): Promise<ActionResult> {
@@ -301,12 +286,7 @@ export class AiAskAction extends BaseAction {
       };
     } else {
       // 多轮模式：解析 JSON 响应
-      let jsonText = llmResult.text.trim();
-      if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?$/g, '');
-      } else if (jsonText.startsWith('```')) {
-        jsonText = jsonText.replace(/```\n?/g, '').replace(/```\n?$/g, '');
-      }
+      const jsonText = this.cleanJsonOutput(llmResult.text);
 
       let llmOutput: AskLLMOutput;
       try {
@@ -317,37 +297,13 @@ export class AiAskAction extends BaseAction {
       }
 
       // 🔧 立即提取 output 中配置的变量
-      const extractedVariables: Record<string, any> = {};
-      const outputConfig = this.config.output || [];
-
-      if (outputConfig.length > 0) {
-        console.log(`[AiAskAction] 🔍 Extracting variables from LLM JSON output:`, outputConfig);
-
-        for (const varConfig of outputConfig) {
-          const varName = varConfig.get;
-          if (!varName) continue;
-
-          // 从 JSON 中提取变量值
-          if (
-            llmOutput[varName] !== undefined &&
-            llmOutput[varName] !== null &&
-            llmOutput[varName] !== ''
-          ) {
-            extractedVariables[varName] = llmOutput[varName];
-            console.log(
-              `[AiAskAction] ✅ Extracted variable from JSON: ${varName} = ${llmOutput[varName]}`
-            );
-          } else {
-            console.log(`[AiAskAction] ⚠️ Variable "${varName}" not found in JSON output`);
-          }
-        }
-      }
+      const extractedVariables = this.extractVariablesFromJson(llmOutput);
 
       // 判断是否退出
       const shouldExit = llmOutput.EXIT === 'true';
 
       // 提取 AI 消息
-      const aiRole = this.config.ai_role || '咨询师';
+      const aiRole = this.getConfig('ai_role', '咨询师');
       const aiMessage = llmOutput[aiRole] || llmOutput.response || '';
 
       return {
@@ -355,17 +311,42 @@ export class AiAskAction extends BaseAction {
         completed: false,
         aiMessage,
         extractedVariables:
-          Object.keys(extractedVariables).length > 0 ? extractedVariables : undefined, // 🔧 返回提取的变量
+          Object.keys(extractedVariables).length > 0 ? extractedVariables : undefined,
         debugInfo: llmResult.debugInfo,
         metadata: {
           actionType: AiAskAction.actionType,
           shouldExit,
           brief: llmOutput.BRIEF,
           currentRound: this.currentRound,
-          llmRawOutput: jsonText, // 🔧 保存原始 JSON 以便 finishAction 时使用
+          llmRawOutput: jsonText,
         },
       };
     }
+  }
+
+  /**
+   * 从 JSON 中提取变量
+   */
+  private extractVariablesFromJson(llmOutput: AskLLMOutput): Record<string, any> {
+    const extractedVariables: Record<string, any> = {};
+    const outputConfig = this.getConfig('output', []);
+
+    if (outputConfig.length > 0) {
+      for (const varConfig of outputConfig) {
+        const varName = varConfig.get;
+        if (!varName) continue;
+
+        if (
+          llmOutput[varName] !== undefined &&
+          llmOutput[varName] !== null &&
+          llmOutput[varName] !== ''
+        ) {
+          extractedVariables[varName] = llmOutput[varName];
+          console.log(`[AiAskAction] ✅ Extracted variable from JSON: ${varName}`);
+        }
+      }
+    }
+    return extractedVariables;
   }
 
   /**
@@ -376,92 +357,39 @@ export class AiAskAction extends BaseAction {
     userInput?: string | null
   ): Promise<ActionResult> {
     const extractedVariables: Record<string, any> = {};
-
-    // 提取配置的变量
-    const outputConfig = this.config.output || [];
-
-    console.log(`[AiAskAction] 🔍 Starting variable extraction, output config:`, outputConfig);
+    const outputConfig = this.getConfig('output', []);
 
     for (const varConfig of outputConfig) {
       const varName = varConfig.get;
       const varDefine = varConfig.define || '';
-
       if (!varName) continue;
 
-      // 优先尝试从对话历史中查找 LLM 返回的 JSON 中是否已经包含该变量
-      let extractedFromJSON = false;
+      // 策略1: 从历史 JSON 提取
+      let value = this.findVariableInHistory(context, varName);
 
-      // 查找最近的 assistant 消息中的 metadata
-      for (let i = context.conversationHistory.length - 1; i >= 0; i--) {
-        const msg = context.conversationHistory[i];
-        if (msg.role === 'assistant' && msg.metadata?.llmRawOutput) {
-          try {
-            // 尝试解析 LLM 原始输出中的 JSON
-            let jsonText = msg.metadata.llmRawOutput;
-            if (jsonText.startsWith('```json')) {
-              jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?$/g, '');
-            } else if (jsonText.startsWith('```')) {
-              jsonText = jsonText.replace(/```\n?/g, '').replace(/```\n?$/g, '');
-            }
-
-            const jsonData = JSON.parse(jsonText);
-            if (
-              jsonData[varName] !== undefined &&
-              jsonData[varName] !== null &&
-              jsonData[varName] !== ''
-            ) {
-              extractedVariables[varName] = jsonData[varName];
-              extractedFromJSON = true;
-              console.log(
-                `[AiAskAction] ✅ Extracted variable from JSON: ${varName} = ${jsonData[varName]}`
-              );
-              break;
-            }
-          } catch (e) {
-            // JSON 解析失败，继续尝试其他方式
-          }
-        }
+      // 策略2: LLM 提取
+      if (value === undefined && this.llmOrchestrator && varDefine) {
+        value = await this.extractVariableByLlm(context, varName, varDefine);
       }
 
-      // 如果从 JSON 中没有提取到，尝试使用 LLM 提取
-      if (!extractedFromJSON) {
-        if (this.llmOrchestrator && varDefine) {
-          try {
-            const extractPrompt = this.buildExtractionPrompt(context, varName, varDefine);
-            const result = await this.llmOrchestrator.generateText(extractPrompt, {
-              temperature: 0.3,
-              maxTokens: 500,
-            });
-            extractedVariables[varName] = result.text.trim();
-            console.log(
-              `[AiAskAction] ✅ Extracted variable via LLM: ${varName} = ${result.text.substring(0, 50)}...`
-            );
-          } catch (error: any) {
-            console.error(`[AiAskAction] ❌ Failed to extract variable ${varName}:`, error);
-            // 如果 LLM 提取失败，使用用户最后的输入作为 fallback
-            if (userInput) {
-              extractedVariables[varName] = userInput.trim();
-              console.log(`[AiAskAction] ⚠️ Fallback to user input for ${varName}`);
-            }
-          }
-        } else if (userInput) {
-          // 简单提取：使用最后一次用户输入
-          extractedVariables[varName] = userInput.trim();
-          console.log(`[AiAskAction] ✅ Extracted variable from user input: ${varName}`);
-        }
+      // 策略3: 兜底最后一次输入
+      if (value === undefined && userInput) {
+        value = userInput.trim();
+        console.log(`[AiAskAction] ⚠️ Fallback to user input for ${varName}`);
+      }
+
+      if (value !== undefined) {
+        extractedVariables[varName] = value;
       }
     }
 
-    // 向后兼容：简单模式的 target_variable
-    const targetVariable = this.config.target_variable || this.config.targetVariable;
+    // 向后兼容
+    const targetVariable = this.getConfig('target_variable');
     if (targetVariable && !extractedVariables[targetVariable] && userInput) {
       extractedVariables[targetVariable] = userInput.trim();
-      console.log(`[AiAskAction] ✅ Extracted legacy target_variable: ${targetVariable}`);
     }
 
     this.currentRound = 0;
-
-    console.log(`[AiAskAction] 🎯 Final extracted variables:`, extractedVariables);
 
     return {
       success: true,
@@ -476,33 +404,65 @@ export class AiAskAction extends BaseAction {
   }
 
   /**
+   * 从对话历史的 JSON 中寻找变量
+   */
+  private findVariableInHistory(context: ActionContext, varName: string): any {
+    for (let i = context.conversationHistory.length - 1; i >= 0; i--) {
+      const msg = context.conversationHistory[i];
+      if (msg.role === 'assistant' && msg.metadata?.llmRawOutput) {
+        try {
+          const jsonData = JSON.parse(this.cleanJsonOutput(msg.metadata.llmRawOutput));
+          if (
+            jsonData[varName] !== undefined &&
+            jsonData[varName] !== null &&
+            jsonData[varName] !== ''
+          ) {
+            return jsonData[varName];
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * 通过 LLM 提取变量
+   */
+  private async extractVariableByLlm(
+    context: ActionContext,
+    varName: string,
+    varDefine: string
+  ): Promise<any> {
+    try {
+      const extractPrompt = this.buildExtractionPrompt(context, varName, varDefine);
+      const result = await this.llmOrchestrator!.generateText(extractPrompt, {
+        temperature: 0.3,
+        maxTokens: 500,
+      });
+      return result.text.trim();
+    } catch (error: any) {
+      console.error(`[AiAskAction] ❌ LLM extraction failed for ${varName}:`, error);
+      return undefined;
+    }
+  }
+
+  /**
    * 提取脚本层变量
    */
   private extractScriptVariables(context: ActionContext): Map<string, any> {
-    const variables = new Map<string, any>();
+    const variables = this.extractCommonProfileVariables(context);
 
     // 提问任务
     const taskTemplate =
-      this.config.question_template ||
-      this.config.questionTemplate ||
-      this.config.prompt_template ||
-      this.config.promptTemplate ||
-      '';
+      this.getConfig('question_template') || this.getConfig('prompt_template') || '';
     const task = this.substituteVariables(taskTemplate, context);
     variables.set('task', task);
 
     // 退出条件
-    const exitCondition = this.config.exit || '用户提供了足够的信息';
+    const exitCondition = this.getConfig('exit', '用户提供了足够的信息');
     variables.set('exit', exitCondition);
-
-    // 添加用户画像变量
-    const userVars = ['用户名', '教育背景', '心理学知识'];
-    userVars.forEach((varName) => {
-      const value = context.variables[varName];
-      if (value !== undefined) {
-        variables.set(varName, value);
-      }
-    });
 
     return variables;
   }
@@ -516,13 +476,13 @@ export class AiAskAction extends BaseAction {
 
     // AI 角色
     const who = '心理咨询师';
-    const aiRole = this.config.ai_role || '咨询师';
+    const aiRole = this.getConfig('ai_role', '咨询师');
 
     // 用户信息
     const user = context.variables['用户名'] || '来访者';
 
     // 语气风格
-    const tone = this.config.tone || '温和、同理心、专业';
+    const tone = this.getConfig('tone', '温和、同理心、专业');
 
     // 对话历史（取最近5条）
     const recentHistory = context.conversationHistory.slice(-5);
@@ -548,7 +508,7 @@ export class AiAskAction extends BaseAction {
    * 构建多变量输出格式字符串
    */
   private buildOutputList(): string {
-    const outputConfig = this.config.output || [];
+    const outputConfig = this.getConfig('output', []);
 
     // 如果没有配置 output，返回空字符串
     if (outputConfig.length === 0) {

@@ -22,6 +22,50 @@ import {
 } from '../db/schema.js';
 import { buildDetailedError } from '../utils/error-handler.js';
 
+// 类型定义
+interface SessionData {
+  id: string;
+  scriptId: string;
+  status: string;
+  executionStatus: string;
+  variables: Record<string, unknown> | null;
+  position: Record<string, unknown> | null;
+  metadata: Record<string, any> | null;
+}
+
+interface ScriptData {
+  id: string;
+  scriptName: string;
+  scriptContent: string;
+}
+
+interface SessionResponse {
+  aiMessage: string;
+  sessionStatus: string;
+  executionStatus: string;
+  variables?: Record<string, unknown>;
+  globalVariables?: Record<string, unknown>;
+  variableStore?: {
+    global: Record<string, unknown>;
+    session: Record<string, unknown>;
+    phase: Record<string, unknown>;
+    topic: Record<string, unknown>;
+  };
+  position?: {
+    phaseIndex: number;
+    phaseId: string;
+    topicIndex: number;
+    topicId: string;
+    actionIndex: number;
+    actionId: string;
+    actionType: string;
+    currentRound?: number;
+    maxRounds?: number;
+  };
+  debugInfo?: any;
+  error?: DetailedApiError;
+}
+
 /**
  * 会话管理器
  */
@@ -118,6 +162,381 @@ export class SessionManager {
   }
 
   /**
+   * 从数据库加载会话数据
+   */
+  private async loadSessionById(sessionId: string): Promise<SessionData> {
+    const session = await db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+    });
+
+    if (!session) {
+      console.error('[SessionManager] ❌ Session not found:', sessionId);
+      throw new Error('Session not found');
+    }
+
+    console.log('[SessionManager] ✅ Session found:', {
+      id: session.id,
+      scriptId: session.scriptId,
+      status: session.status,
+      executionStatus: session.executionStatus,
+    });
+
+    return session as SessionData;
+  }
+
+  /**
+   * 从数据库加载脚本数据
+   */
+  private async loadScriptById(scriptId: string): Promise<ScriptData> {
+    const script = await db.query.scripts.findFirst({
+      where: eq(scripts.id, scriptId),
+    });
+
+    if (!script) {
+      console.error('[SessionManager] ❌ Script not found:', scriptId);
+      throw new Error('Script not found');
+    }
+
+    console.log('[SessionManager] ✅ Script found:', {
+      id: script.id,
+      scriptName: script.scriptName,
+      contentLength: script.scriptContent.length,
+    });
+
+    return script as ScriptData;
+  }
+
+  /**
+   * 加载对话历史消息
+   */
+  private async loadConversationHistory(sessionId: string): Promise<any[]> {
+    const history = await db.query.messages.findMany({
+      where: eq(messages.sessionId, sessionId),
+      orderBy: (fields, { asc }) => [asc(fields.timestamp)],
+    });
+
+    return history.map((m) => ({
+      role: m.role,
+      content: m.content,
+      actionId: m.actionId || undefined,
+      metadata: (m.metadata as Record<string, any>) || {},
+    }));
+  }
+
+  /**
+   * 创建初始执行状态
+   */
+  private createInitialExecutionState(
+    globalVariables: Record<string, any>,
+    sessionVariables: Record<string, unknown> | null,
+    conversationHistory: any[]
+  ): ExecutionState {
+    const executionState: ExecutionState = ScriptExecutor.createInitialState();
+    executionState.variables = {
+      ...globalVariables,
+      ...((sessionVariables as Record<string, unknown>) || {}),
+    };
+    executionState.conversationHistory = conversationHistory;
+
+    console.log('[SessionManager] 📋 Initial execution state:', {
+      status: executionState.status,
+      phaseIdx: executionState.currentPhaseIdx,
+      topicIdx: executionState.currentTopicIdx,
+      actionIdx: executionState.currentActionIdx,
+      variables: executionState.variables,
+    });
+
+    return executionState;
+  }
+
+  /**
+   * 恢复执行状态（用于处理用户输入）
+   */
+  private restoreExecutionState(
+    session: SessionData,
+    globalVariables: Record<string, any>,
+    conversationHistory: any[]
+  ): ExecutionState {
+    const metadata = (session.metadata as Record<string, any>) || {};
+    const executionState: ExecutionState = {
+      status: (session.executionStatus as ExecutionStatus) || ExecutionStatus.RUNNING,
+      currentPhaseIdx: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
+      currentTopicIdx: ((session.position as Record<string, unknown>)?.topicIndex as number) || 0,
+      currentActionIdx: ((session.position as Record<string, unknown>)?.actionIndex as number) || 0,
+      currentAction: null,
+      variables: {
+        ...globalVariables,
+        ...((session.variables as Record<string, unknown>) || {}),
+      },
+      variableStore: metadata.variableStore,
+      conversationHistory: conversationHistory,
+      metadata: metadata,
+      lastAiMessage: null,
+    };
+
+    // 确保 variableStore.global 包含最新的全局变量
+    if (executionState.variableStore) {
+      if (!executionState.variableStore.global) executionState.variableStore.global = {};
+      for (const [key, value] of Object.entries(globalVariables)) {
+        if (!executionState.variableStore.global[key]) {
+          executionState.variableStore.global[key] = {
+            value,
+            type: typeof value,
+            source: 'global_sync',
+            lastUpdated: new Date().toISOString(),
+          };
+        }
+      }
+    }
+
+    console.log('[SessionManager] 📋 Restored execution state:', {
+      status: executionState.status,
+      phaseIdx: executionState.currentPhaseIdx,
+      topicIdx: executionState.currentTopicIdx,
+      actionIdx: executionState.currentActionIdx,
+      hasActionState: !!executionState.metadata.actionState,
+      hasLastActionRoundInfo: !!executionState.metadata.lastActionRoundInfo,
+      metadata: executionState.metadata,
+    });
+
+    return executionState;
+  }
+
+  /**
+   * 执行脚本并返回更新后的执行状态
+   */
+  private async executeScript(
+    script: ScriptData,
+    sessionId: string,
+    executionState: ExecutionState,
+    userInput: string | null
+  ): Promise<ExecutionState> {
+    const scriptContent = yaml.parse(script.scriptContent) || {};
+    const scriptJson = JSON.stringify(scriptContent);
+
+    console.log('[SessionManager] 📄 Parsed YAML script:', {
+      sessionId: scriptContent.session?.session_id,
+      sessionName: scriptContent.session?.session_name,
+      phasesCount: scriptContent.session?.phases?.length || 0,
+      firstPhase: scriptContent.session?.phases?.[0]?.phase_name,
+      firstTopic: scriptContent.session?.phases?.[0]?.topics?.[0]?.topic_name,
+      actionsCount: scriptContent.session?.phases?.[0]?.topics?.[0]?.actions?.length || 0,
+    });
+
+    const logPrefix = userInput === null ? 'initialization' : 'with user input';
+    console.log(`[SessionManager] ⏳ Executing script (${logPrefix})...`);
+
+    const updatedState = await this.scriptExecutor.executeSession(
+      scriptJson,
+      sessionId,
+      executionState,
+      userInput
+    );
+
+    console.log('[SessionManager] ✅ Script execution completed:', {
+      status: updatedState.status,
+      phaseIdx: updatedState.currentPhaseIdx,
+      topicIdx: updatedState.currentTopicIdx,
+      actionIdx: updatedState.currentActionIdx,
+      lastAiMessage: updatedState.lastAiMessage,
+      hasMessage: !!updatedState.lastAiMessage,
+    });
+
+    return updatedState;
+  }
+
+  /**
+   * 保存新增的 AI 消息
+   */
+  private async saveNewAIMessages(
+    sessionId: string,
+    executionState: ExecutionState,
+    prevHistoryLength: number
+  ): Promise<void> {
+    const newMessages = executionState.conversationHistory.slice(prevHistoryLength);
+    const aiMessages = newMessages.filter((msg) => msg.role === 'assistant');
+
+    if (aiMessages.length > 0) {
+      console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s):`, {
+        messages: aiMessages.map((m) => ({
+          actionId: m.actionId,
+          content: m.content.substring(0, 50),
+        })),
+      });
+
+      for (const msg of aiMessages) {
+        const aiMessageId = uuidv4();
+        await db.insert(messages).values({
+          id: aiMessageId,
+          sessionId,
+          role: 'assistant',
+          content: msg.content,
+          actionId: msg.actionId,
+          metadata: msg.metadata || {},
+          timestamp: new Date(),
+        });
+      }
+    } else {
+      console.log('[SessionManager] ⚠️ No AI messages to save');
+    }
+  }
+
+  /**
+   * 保存用户消息
+   */
+  private async saveUserMessage(sessionId: string, userInput: string): Promise<void> {
+    const userMessageId = uuidv4();
+    console.log('[SessionManager] 💾 Saving user message:', {
+      messageId: userMessageId,
+      content: userInput,
+    });
+
+    await db.insert(messages).values({
+      id: userMessageId,
+      sessionId,
+      role: 'user',
+      content: userInput,
+      metadata: {},
+      timestamp: new Date(),
+    });
+  }
+
+  /**
+   * 保存变量快照
+   */
+  private async saveVariableSnapshots(
+    sessionId: string,
+    previousVars: Record<string, unknown> | null,
+    newVars: Record<string, unknown>
+  ): Promise<void> {
+    const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
+    if (snapshots.length > 0) {
+      console.log('[SessionManager] 💾 Saving variable snapshots:', snapshots.length);
+      await db.insert(variables).values(snapshots);
+    }
+  }
+
+  /**
+   * 更新会话状态到数据库
+   */
+  private async updateSessionState(
+    sessionId: string,
+    executionState: ExecutionState,
+    globalVariables: Record<string, any>
+  ): Promise<void> {
+    console.log('[SessionManager] 💾 Updating session state in DB');
+
+    await db
+      .update(sessions)
+      .set({
+        position: {
+          phaseIndex: executionState.currentPhaseIdx,
+          topicIndex: executionState.currentTopicIdx,
+          actionIndex: executionState.currentActionIdx,
+        },
+        variables: executionState.variables,
+        executionStatus: executionState.status,
+        metadata: {
+          ...executionState.metadata,
+          globalVariables,
+          variableStore: executionState.variableStore,
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, sessionId));
+  }
+
+  /**
+   * 构建会话响应结果
+   */
+  private buildSessionResponse(
+    executionState: ExecutionState,
+    session: SessionData,
+    globalVariables: Record<string, any>,
+    includeVariableStore: boolean = false
+  ): SessionResponse {
+    const result: SessionResponse = {
+      aiMessage: executionState.lastAiMessage || '',
+      sessionStatus: session.status,
+      executionStatus: executionState.status,
+      variables: executionState.variables,
+      globalVariables,
+      debugInfo: executionState.lastLLMDebugInfo,
+      position: {
+        phaseIndex: executionState.currentPhaseIdx,
+        phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
+        topicIndex: executionState.currentTopicIdx,
+        topicId: executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`,
+        actionIndex: executionState.currentActionIdx,
+        actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
+        actionType: executionState.currentActionType || 'unknown',
+        currentRound:
+          executionState.metadata?.lastActionRoundInfo?.currentRound ??
+          executionState.metadata?.actionState?.currentRound,
+        maxRounds:
+          executionState.metadata?.lastActionRoundInfo?.maxRounds ??
+          executionState.metadata?.actionState?.maxRounds,
+      },
+    };
+
+    // 仅在 processUserInput 中包含扁平化的 variableStore
+    if (includeVariableStore) {
+      result.variableStore = this.flattenVariableStore(executionState.variableStore, {
+        phaseId: executionState.currentPhaseId,
+        topicId: executionState.currentTopicId,
+      });
+    } else {
+      // initializeSession 返回原始的 variableStore
+      result.variableStore = executionState.variableStore as any;
+    }
+
+    return result;
+  }
+
+  /**
+   * 构建错误响应
+   */
+  private buildErrorResponse(
+    error: unknown,
+    session: SessionData,
+    script: ScriptData,
+    sessionId: string
+  ): SessionResponse {
+    const detailedError = buildDetailedError(error, {
+      scriptId: script.id,
+      scriptName: script.scriptName,
+      sessionId: sessionId,
+      position: {
+        phaseIndex: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
+        topicIndex: ((session.position as Record<string, unknown>)?.topicIndex as number) || 0,
+        actionIndex: ((session.position as Record<string, unknown>)?.actionIndex as number) || 0,
+      },
+    });
+
+    const cachedGlobalVariables =
+      ((session.metadata as any)?.globalVariables as Record<string, unknown>) || {};
+    const pos = session.position as Record<string, unknown> | null;
+
+    return {
+      aiMessage: '',
+      sessionStatus: session.status,
+      executionStatus: ExecutionStatus.ERROR,
+      error: detailedError,
+      variables: (session.variables as Record<string, unknown>) || {},
+      globalVariables: cachedGlobalVariables,
+      position: {
+        phaseIndex: (pos?.phaseIndex as number) || 0,
+        phaseId: (pos?.phaseId as string) || 'phase_0',
+        topicIndex: (pos?.topicIndex as number) || 0,
+        topicId: (pos?.topicId as string) || 'topic_0',
+        actionIndex: (pos?.actionIndex as number) || 0,
+        actionId: (pos?.actionId as string) || 'action_0',
+        actionType: (pos?.actionType as string) || 'unknown',
+      },
+    };
+  }
+
+  /**
    * 加载项目的全局变量
    */
   private async loadGlobalVariables(scriptName: string): Promise<Record<string, any>> {
@@ -176,478 +595,80 @@ export class SessionManager {
   /**
    * 初始化会话 - 获取初始 AI 消息
    */
-  async initializeSession(sessionId: string): Promise<{
-    aiMessage: string;
-    sessionStatus: string;
-    executionStatus: string;
-    variables?: Record<string, unknown>;
-    globalVariables?: Record<string, unknown>; // 添加全局变量单独返回
-    position?: {
-      phaseIndex: number;
-      phaseId: string;
-      topicIndex: number;
-      topicId: string;
-      actionIndex: number;
-      actionId: string;
-      actionType: string;
-    };
-    debugInfo?: any; // LLM调试信息
-    error?: DetailedApiError;
-  }> {
+  async initializeSession(sessionId: string): Promise<SessionResponse> {
     console.log('[SessionManager] 🔵 initializeSession called', { sessionId });
 
-    // 获取会话
-    const session = await db.query.sessions.findFirst({
-      where: eq(sessions.id, sessionId),
-    });
-
-    if (!session) {
-      console.error('[SessionManager] ❌ Session not found:', sessionId);
-      throw new Error('Session not found');
-    }
-    console.log('[SessionManager] ✅ Session found:', {
-      id: session.id,
-      scriptId: session.scriptId,
-      status: session.status,
-      executionStatus: session.executionStatus,
-    });
-
-    // 获取脚本
-    const script = await db.query.scripts.findFirst({
-      where: eq(scripts.id, session.scriptId),
-    });
-
-    if (!script) {
-      console.error('[SessionManager] ❌ Script not found:', session.scriptId);
-      throw new Error('Script not found');
-    }
-    console.log('[SessionManager] ✅ Script found:', {
-      id: script.id,
-      scriptName: script.scriptName,
-      contentLength: script.scriptContent.length,
-    });
+    // 1. 加载会话和脚本数据
+    const session = await this.loadSessionById(sessionId);
+    const script = await this.loadScriptById(session.scriptId);
 
     try {
-      // 加载全局变量
+      // 2. 加载全局变量和对话历史
       const globalVariables = await this.loadGlobalVariables(script.scriptName);
+      const conversationHistory = await this.loadConversationHistory(sessionId);
 
-      // 获取历史消息
-      const history = await db.query.messages.findMany({
-        where: eq(messages.sessionId, sessionId),
-        orderBy: (fields, { asc }) => [asc(fields.timestamp)],
-      });
-
-      const conversationHistory = history.map((m) => ({
-        role: m.role,
-        content: m.content,
-        actionId: m.actionId || undefined,
-        metadata: (m.metadata as Record<string, any>) || {},
-      }));
-
-      // 创建初始执行状态，合并全局变量和会话变量
-      let executionState: ExecutionState = ScriptExecutor.createInitialState();
-      executionState.variables = {
-        ...globalVariables, // 先加载全局变量
-        ...((session.variables as Record<string, unknown>) || {}), // 会话变量覆盖全局变量
-      };
-      executionState.conversationHistory = conversationHistory;
-      console.log('[SessionManager] 📋 Initial execution state:', {
-        status: executionState.status,
-        phaseIdx: executionState.currentPhaseIdx,
-        topicIdx: executionState.currentTopicIdx,
-        actionIdx: executionState.currentActionIdx,
-        variables: executionState.variables,
-      });
-
-      // 转换 YAML 为 JSON
-      const scriptContent = yaml.parse(script.scriptContent);
-      const scriptJson = JSON.stringify(scriptContent);
-      console.log('[SessionManager] 📄 Parsed YAML script:', {
-        sessionId: scriptContent.session?.session_id,
-        sessionName: scriptContent.session?.session_name,
-        phasesCount: scriptContent.session?.phases?.length || 0,
-        firstPhase: scriptContent.session?.phases?.[0]?.phase_name,
-        firstTopic: scriptContent.session?.phases?.[0]?.topics?.[0]?.topic_name,
-        actionsCount: scriptContent.session?.phases?.[0]?.topics?.[0]?.actions?.length || 0,
-      });
-
-      // 执行脚本（初始化，没有用户输入）
-      console.log('[SessionManager] ⏳ Executing script (initialization)...');
-      const prevHistoryLength = executionState.conversationHistory.length;
-      executionState = await this.scriptExecutor.executeSession(
-        scriptJson,
-        sessionId,
-        executionState,
-        null
+      // 3. 创建初始执行状态
+      let executionState = this.createInitialExecutionState(
+        globalVariables,
+        session.variables,
+        conversationHistory
       );
-      console.log('[SessionManager] ✅ Script execution completed:', {
-        status: executionState.status,
-        phaseIdx: executionState.currentPhaseIdx,
-        topicIdx: executionState.currentTopicIdx,
-        actionIdx: executionState.currentActionIdx,
-        lastAiMessage: executionState.lastAiMessage,
-        hasMessage: !!executionState.lastAiMessage,
-      });
 
-      // 保存新增的 AI 消息（仅保存本次执行新产生的）
-      const newMessages = executionState.conversationHistory.slice(prevHistoryLength);
-      const aiMessages = newMessages.filter((msg) => msg.role === 'assistant');
+      // 4. 执行脚本
+      const prevHistoryLength = executionState.conversationHistory.length;
+      executionState = await this.executeScript(script, sessionId, executionState, null);
 
-      if (aiMessages.length > 0) {
-        console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s) (init):`, {
-          messages: aiMessages.map((m) => ({
-            actionId: m.actionId,
-            content: m.content.substring(0, 50),
-          })),
-        });
+      // 5. 保存执行结果
+      await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
+      await this.saveVariableSnapshots(sessionId, session.variables, executionState.variables);
+      await this.updateSessionState(sessionId, executionState, globalVariables);
 
-        // 批量保存所有 AI 消息
-        for (const msg of aiMessages) {
-          const aiMessageId = uuidv4();
-          await db.insert(messages).values({
-            id: aiMessageId,
-            sessionId,
-            role: 'assistant',
-            content: msg.content,
-            actionId: msg.actionId,
-            metadata: msg.metadata || {},
-            timestamp: new Date(),
-          });
-        }
-      } else {
-        console.log('[SessionManager] ⚠️ No AI messages to save (init)');
-      }
-
-      // 在更新 sessions 之前，记录变量变化快照
-      const previousVars = (session.variables as Record<string, unknown> | null) || null;
-      const newVars = (executionState.variables || {}) as Record<string, unknown>;
-
-      const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
-      if (snapshots.length > 0) {
-        console.log('[SessionManager] 💾 Saving variable snapshots (init):', snapshots.length);
-        await db.insert(variables).values(snapshots);
-      }
-
-      // 更新会话状态
-      console.log('[SessionManager] 💾 Updating session state in DB (init)');
-      await db
-        .update(sessions)
-        .set({
-          position: {
-            phaseIndex: executionState.currentPhaseIdx,
-            topicIndex: executionState.currentTopicIdx,
-            actionIndex: executionState.currentActionIdx,
-          },
-          variables: executionState.variables,
-          executionStatus: executionState.status,
-          metadata: {
-            ...executionState.metadata,
-            globalVariables, // 存储全局变量到 metadata
-            variableStore: executionState.variableStore, // 🔧 持久化分层变量存储
-          },
-          updatedAt: new Date(),
-        })
-        .where(eq(sessions.id, sessionId));
-
-      const result = {
-        aiMessage: executionState.lastAiMessage || '',
-        sessionStatus: session.status,
-        executionStatus: executionState.status,
-        variables: executionState.variables,
-        globalVariables, // 返回全局变量
-        variableStore: executionState.variableStore, // 🔧 添加分层变量存储
-        debugInfo: executionState.lastLLMDebugInfo, // 添加LLM调试信息
-        position: {
-          phaseIndex: executionState.currentPhaseIdx,
-          phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
-          topicIndex: executionState.currentTopicIdx,
-          topicId: executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`,
-          actionIndex: executionState.currentActionIdx,
-          actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
-          actionType: executionState.currentActionType || 'unknown',
-          // 添加回合数信息（优先从 lastActionRoundInfo 读取,否则从 actionState 读取）
-          currentRound:
-            executionState.metadata?.lastActionRoundInfo?.currentRound ??
-            executionState.metadata?.actionState?.currentRound,
-          maxRounds:
-            executionState.metadata?.lastActionRoundInfo?.maxRounds ??
-            executionState.metadata?.actionState?.maxRounds,
-        },
-      };
+      // 6. 构建并返回响应
+      const result = this.buildSessionResponse(executionState, session, globalVariables, false);
       console.log('[SessionManager] 🏁 initializeSession completed:', result);
       return result;
     } catch (error) {
       console.error('[SessionManager] ❌ Error during initialization:', error);
-
-      // 构建详细错误信息
-      const detailedError = buildDetailedError(error, {
-        scriptId: script.id,
-        scriptName: script.scriptName,
-        sessionId: sessionId,
-      });
-
-      // 返回错误信息（而不是抛出异常）
-      return {
-        aiMessage: '',
-        sessionStatus: session.status,
-        executionStatus: ExecutionStatus.ERROR,
-        error: detailedError,
-      };
+      return this.buildErrorResponse(error, session, script, sessionId);
     }
   }
 
   /**
    * 处理用户输入
    */
-  async processUserInput(
-    sessionId: string,
-    userInput: string
-  ): Promise<{
-    aiMessage: string;
-    sessionStatus: string;
-    executionStatus: string;
-    variables?: Record<string, unknown>;
-    globalVariables?: Record<string, unknown>; // 添加全局变量单独返回
-    variableStore?: {
-      // 🔧 添加分层变量存储
-      global: Record<string, unknown>;
-      session: Record<string, unknown>;
-      phase: Record<string, unknown>;
-      topic: Record<string, unknown>;
-    };
-    position?: {
-      phaseIndex: number;
-      phaseId: string;
-      topicIndex: number;
-      topicId: string;
-      actionIndex: number;
-      actionId: string;
-      actionType: string;
-      currentRound?: number; // 当前回合数
-      maxRounds?: number; // 最大回合数
-    };
-    debugInfo?: any; // LLM调试信息
-    error?: DetailedApiError;
-  }> {
+  async processUserInput(sessionId: string, userInput: string): Promise<SessionResponse> {
     console.log('[SessionManager] 🔵 processUserInput called', { sessionId, userInput });
 
-    // 获取会话
-    const session = await db.query.sessions.findFirst({
-      where: eq(sessions.id, sessionId),
-    });
-
-    if (!session) {
-      console.error('[SessionManager] ❌ Session not found:', sessionId);
-      throw new Error('Session not found');
-    }
-    console.log('[SessionManager] ✅ Session found:', {
-      id: session.id,
-      status: session.status,
-      executionStatus: session.executionStatus,
-      position: session.position,
-    });
-
-    // 获取脚本
-    const script = await db.query.scripts.findFirst({
-      where: eq(scripts.id, session.scriptId),
-    });
-
-    if (!script) {
-      console.error('[SessionManager] ❌ Script not found:', session.scriptId);
-      throw new Error('Script not found');
-    }
-    console.log('[SessionManager] ✅ Script found:', {
-      id: script.id,
-      scriptName: script.scriptName,
-    });
+    // 1. 加载会话和脚本数据
+    const session = await this.loadSessionById(sessionId);
+    const script = await this.loadScriptById(session.scriptId);
 
     try {
-      // 加载全局变量
+      // 2. 加载全局变量和对话历史
       const globalVariables = await this.loadGlobalVariables(script.scriptName);
+      const conversationHistory = await this.loadConversationHistory(sessionId);
 
-      // 获取历史消息（此时不包含当前刚收到的 userInput，避免重复）
-      const history = await db.query.messages.findMany({
-        where: eq(messages.sessionId, sessionId),
-        orderBy: (fields, { asc }) => [asc(fields.timestamp)],
-      });
+      // 3. 保存用户消息
+      await this.saveUserMessage(sessionId, userInput);
 
-      // 保存当前用户消息到数据库
-      const userMessageId = uuidv4();
-      console.log('[SessionManager] 💾 Saving user message:', {
-        messageId: userMessageId,
-        content: userInput,
-      });
-      await db.insert(messages).values({
-        id: userMessageId,
-        sessionId,
-        role: 'user',
-        content: userInput,
-        metadata: {},
-        timestamp: new Date(),
-      });
-
-      const conversationHistory = history.map((m) => ({
-        role: m.role,
-        content: m.content,
-        actionId: m.actionId || undefined,
-        metadata: (m.metadata as Record<string, any>) || {},
-      }));
-
-      // 恢复执行状态，合并全局变量
-      const metadata = (session.metadata as Record<string, any>) || {};
-      let executionState: ExecutionState = {
-        status: (session.executionStatus as ExecutionStatus) || ExecutionStatus.RUNNING,
-        currentPhaseIdx: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
-        currentTopicIdx: ((session.position as Record<string, unknown>)?.topicIndex as number) || 0,
-        currentActionIdx:
-          ((session.position as Record<string, unknown>)?.actionIndex as number) || 0,
-        currentAction: null, // 会在执行器中重建
-        variables: {
-          ...globalVariables, // 先加载全局变量
-          ...((session.variables as Record<string, unknown>) || {}), // 会话变量覆盖全局变量
-        },
-        // 🔧 恢复分层变量存储
-        variableStore: metadata.variableStore,
-        conversationHistory: conversationHistory,
-        metadata: metadata,
-        lastAiMessage: null,
-      };
-
-      // 确保 variableStore.global 包含最新的全局变量
-      if (executionState.variableStore) {
-        if (!executionState.variableStore.global) executionState.variableStore.global = {};
-        for (const [key, value] of Object.entries(globalVariables)) {
-          if (!executionState.variableStore.global[key]) {
-            executionState.variableStore.global[key] = {
-              value,
-              type: typeof value,
-              source: 'global_sync',
-              lastUpdated: new Date().toISOString(),
-            };
-          }
-        }
-      }
-      console.log('[SessionManager] 📋 Restored execution state:', {
-        status: executionState.status,
-        phaseIdx: executionState.currentPhaseIdx,
-        topicIdx: executionState.currentTopicIdx,
-        actionIdx: executionState.currentActionIdx,
-        hasActionState: !!executionState.metadata.actionState,
-        hasLastActionRoundInfo: !!executionState.metadata.lastActionRoundInfo,
-        metadata: executionState.metadata,
-      });
-
-      // 转换 YAML 为 JSON
-      const scriptContent = yaml.parse(script.scriptContent);
-      const scriptJson = JSON.stringify(scriptContent);
-
-      // 执行脚本（传入用户输入）
-      console.log('[SessionManager] ⏳ Executing script with user input...');
-      const prevHistoryLength = executionState.conversationHistory.length;
-      executionState = await this.scriptExecutor.executeSession(
-        scriptJson,
-        sessionId,
-        executionState,
-        userInput
+      // 4. 恢复执行状态
+      let executionState = this.restoreExecutionState(
+        session,
+        globalVariables,
+        conversationHistory
       );
-      console.log('[SessionManager] ✅ Script execution completed:', {
-        status: executionState.status,
-        phaseIdx: executionState.currentPhaseIdx,
-        topicIdx: executionState.currentTopicIdx,
-        actionIdx: executionState.currentActionIdx,
-        lastAiMessage: executionState.lastAiMessage,
-        hasMessage: !!executionState.lastAiMessage,
-      });
 
-      // 保存新增的 AI 消息（仅保存本次执行新产生的）
-      // 注意：userInput 已经被 push 到了 conversationHistory 中（在 continueAction 或 executeAction 里）
-      const newMessages = executionState.conversationHistory.slice(prevHistoryLength);
-      const aiMessages = newMessages.filter((msg) => msg.role === 'assistant');
+      // 5. 执行脚本
+      const prevHistoryLength = executionState.conversationHistory.length;
+      executionState = await this.executeScript(script, sessionId, executionState, userInput);
 
-      if (aiMessages.length > 0) {
-        console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s):`, {
-          messages: aiMessages.map((m) => ({
-            actionId: m.actionId,
-            content: m.content.substring(0, 50),
-          })),
-        });
+      // 6. 保存执行结果
+      await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
+      await this.saveVariableSnapshots(sessionId, session.variables, executionState.variables);
+      await this.updateSessionState(sessionId, executionState, globalVariables);
 
-        // 批量保存所有 AI 消息
-        for (const msg of aiMessages) {
-          const aiMessageId = uuidv4();
-          await db.insert(messages).values({
-            id: aiMessageId,
-            sessionId,
-            role: 'assistant',
-            content: msg.content,
-            actionId: msg.actionId,
-            metadata: msg.metadata || {},
-            timestamp: new Date(),
-          });
-        }
-      } else {
-        console.log('[SessionManager] ⚠️ No AI messages to save');
-      }
-
-      // 在更新 sessions 之前，记录变量变化快照
-      const previousVars = (session.variables as Record<string, unknown> | null) || null;
-      const newVars = (executionState.variables || {}) as Record<string, unknown>;
-
-      const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
-      if (snapshots.length > 0) {
-        console.log('[SessionManager] 💾 Saving variable snapshots:', snapshots.length);
-        await db.insert(variables).values(snapshots);
-      }
-
-      // 更新会话状态
-      console.log('[SessionManager] 💾 Updating session state in DB');
-      await db
-        .update(sessions)
-        .set({
-          position: {
-            phaseIndex: executionState.currentPhaseIdx,
-            topicIndex: executionState.currentTopicIdx,
-            actionIndex: executionState.currentActionIdx,
-          },
-          variables: executionState.variables,
-          executionStatus: executionState.status,
-          metadata: {
-            ...executionState.metadata,
-            globalVariables, // 存储全局变量到 metadata
-            variableStore: executionState.variableStore, // 🔧 持久化分层变量存储
-          },
-          updatedAt: new Date(),
-        })
-        .where(eq(sessions.id, sessionId));
-
-      const result = {
-        aiMessage: executionState.lastAiMessage || '',
-        sessionStatus: session.status,
-        executionStatus: executionState.status,
-        variables: executionState.variables,
-        globalVariables, // 返回全局变量
-        variableStore: this.flattenVariableStore(executionState.variableStore, {
-          phaseId: executionState.currentPhaseId,
-          topicId: executionState.currentTopicId,
-        }), // 🔧 添加分层变量存储（扁平化处理）
-        debugInfo: executionState.lastLLMDebugInfo, // 添加LLM调试信息
-        position: {
-          phaseIndex: executionState.currentPhaseIdx,
-          phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
-          topicIndex: executionState.currentTopicIdx,
-          topicId: executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`,
-          actionIndex: executionState.currentActionIdx,
-          actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
-          actionType: executionState.currentActionType || 'unknown',
-          // 添加回合数信息（优先从 lastActionRoundInfo 读取，否则从 actionState 读取）
-          currentRound:
-            executionState.metadata?.lastActionRoundInfo?.currentRound ??
-            executionState.metadata?.actionState?.currentRound,
-          maxRounds:
-            executionState.metadata?.lastActionRoundInfo?.maxRounds ??
-            executionState.metadata?.actionState?.maxRounds,
-        },
-      };
+      // 7. 构建并返回响应
+      const result = this.buildSessionResponse(executionState, session, globalVariables, true);
       console.log('[SessionManager] 🏁 processUserInput completed:', {
         aiMessage: result.aiMessage,
         aiMessageLength: result.aiMessage?.length || 0,
@@ -658,49 +679,15 @@ export class SessionManager {
         position: result.position,
         hasGlobalVariables: !!result.globalVariables,
         globalVariablesKeys: Object.keys(result.globalVariables || {}),
-        hasVariableStore: !!result.variableStore, // 🔧 添加 variableStore 日志
-        variableStoreKeys: result.variableStore ? Object.keys(result.variableStore) : [], // 🔧 显示 variableStore 的键
+        hasVariableStore: !!result.variableStore,
+        variableStoreKeys: result.variableStore ? Object.keys(result.variableStore) : [],
       });
       console.log('[DebugConfig] 🔍 Result object keys:', Object.keys(result));
       console.log('[DebugConfig] 🔍 variableStore value:', result.variableStore);
       return result;
     } catch (error) {
       console.error('[SessionManager] ❌ Error during user input processing:', error);
-
-      // 构建详细错误信息
-      const detailedError = buildDetailedError(error, {
-        scriptId: script.id,
-        scriptName: script.scriptName,
-        sessionId: sessionId,
-        position: {
-          phaseIndex: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
-          topicIndex: ((session.position as Record<string, unknown>)?.topicIndex as number) || 0,
-          actionIndex: ((session.position as Record<string, unknown>)?.actionIndex as number) || 0,
-        },
-      });
-
-      // 返回错误信息（而不是抛出异常）
-      // 注意：globalVariables 在 try 块内定义，catch 块中无法访问，从 session.metadata 获取
-      const cachedGlobalVariables =
-        ((session.metadata as any)?.globalVariables as Record<string, unknown>) || {};
-      const pos = session.position as Record<string, unknown> | null;
-      return {
-        aiMessage: '',
-        sessionStatus: session.status,
-        executionStatus: ExecutionStatus.ERROR,
-        error: detailedError,
-        variables: (session.variables as Record<string, unknown>) || {},
-        globalVariables: cachedGlobalVariables,
-        position: {
-          phaseIndex: (pos?.phaseIndex as number) || 0,
-          phaseId: (pos?.phaseId as string) || 'phase_0',
-          topicIndex: (pos?.topicIndex as number) || 0,
-          topicId: (pos?.topicId as string) || 'topic_0',
-          actionIndex: (pos?.actionIndex as number) || 0,
-          actionId: (pos?.actionId as string) || 'action_0',
-          actionType: (pos?.actionType as string) || 'unknown',
-        },
-      };
+      return this.buildErrorResponse(error, session, script, sessionId);
     }
   }
 }

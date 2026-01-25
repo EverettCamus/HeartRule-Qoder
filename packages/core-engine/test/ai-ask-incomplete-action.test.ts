@@ -1,27 +1,28 @@
 /**
  * 回归测试：ai_ask 多轮对话中的变量提取问题
- * 
+ *
  * BUG描述：
  * 在 ai_ask 动作的多轮对话过程中（action.completed = false），
  * 提取的变量未能存储到 variableStore 的 topic 级别，
  * 导致前端变量气泡无法显示这些变量。
- * 
+ *
  * 根本原因：
  * script-executor.ts 的 continueAction 分支中，
  * 当 result.completed = false 时直接返回，
  * 跳过了变量写入逻辑（第253-309行）。
- * 
+ *
  * 修复方案：
  * 在 result.completed = false 分支内，
  * 添加变量提取和写入 variableStore 的逻辑。
- * 
+ *
  * 测试目标：
  * 确保 ai_ask 在未完成状态下提取的变量能正确存储到 variableStore
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
 import { VariableScope } from '@heartrule/shared-types';
 import type { VariableStore, Position } from '@heartrule/shared-types';
+import { describe, it, expect, beforeEach } from 'vitest';
+
 import { VariableScopeResolver } from '../src/engines/variable-scope/variable-scope-resolver.js';
 
 describe('ai_ask 多轮对话变量提取回归测试', () => {
@@ -47,11 +48,9 @@ describe('ai_ask 多轮对话变量提取回归测试', () => {
     it('应该在 action 未完成时也能提取并存储变量到 topic 作用域', () => {
       // 模拟 ai_ask 第一轮返回的提取变量（action 未完成）
       const extractedVariables = {
-        '来访者称呼': 'LEO',
-        '来访者年龄': '未知',
+        来访者称呼: 'LEO',
+        来访者年龄: '未知',
       };
-
-      const actionCompleted = false; // 关键：action 未完成
 
       // 模拟 script-executor 中的变量写入逻辑
       if (extractedVariables && variableStore) {
@@ -81,7 +80,7 @@ describe('ai_ask 多轮对话变量提取回归测试', () => {
 
       // 第一轮：提取称呼
       const round1Variables = {
-        '来访者称呼': 'LEO',
+        来访者称呼: 'LEO',
       };
 
       for (const [varName, varValue] of Object.entries(round1Variables)) {
@@ -93,7 +92,7 @@ describe('ai_ask 多轮对话变量提取回归测试', () => {
 
       // 第二轮：提取年龄（称呼已存在）
       const round2Variables = {
-        '来访者年龄': '28',
+        来访者年龄: '28',
       };
 
       for (const [varName, varValue] of Object.entries(round2Variables)) {
@@ -111,23 +110,37 @@ describe('ai_ask 多轮对话变量提取回归测试', () => {
       const scopeResolver = new VariableScopeResolver(variableStore);
 
       // 第一轮：初始值
-      scopeResolver.setVariable('来访者称呼', 'Leo', VariableScope.TOPIC, position, position.actionId);
+      scopeResolver.setVariable(
+        '来访者称呼',
+        'Leo',
+        VariableScope.TOPIC,
+        position,
+        position.actionId
+      );
       const firstTimestamp = variableStore.topic['topic_1']['来访者称呼'].lastUpdated;
 
       // 等待一小段时间
-      const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-      
+      const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
       // 第二轮：更新值
       return delay(10).then(() => {
-        scopeResolver.setVariable('来访者称呼', 'LEO', VariableScope.TOPIC, position, position.actionId);
+        scopeResolver.setVariable(
+          '来访者称呼',
+          'LEO',
+          VariableScope.TOPIC,
+          position,
+          position.actionId
+        );
         const secondTimestamp = variableStore.topic['topic_1']['来访者称呼'].lastUpdated;
 
         // 验证值已更新
         expect(variableStore.topic['topic_1']['来访者称呼'].value).toBe('LEO');
-        
+
         // 验证时间戳已更新
         expect(secondTimestamp).not.toBe(firstTimestamp);
-        expect(new Date(secondTimestamp!).getTime()).toBeGreaterThan(new Date(firstTimestamp!).getTime());
+        expect(new Date(secondTimestamp!).getTime()).toBeGreaterThan(
+          new Date(firstTimestamp!).getTime()
+        );
       });
     });
   });
@@ -183,7 +196,7 @@ describe('ai_ask 多轮对话变量提取回归测试', () => {
 
       // 不预定义变量，直接判断作用域
       const scope = scopeResolver.determineScope('未定义变量');
-      
+
       expect(scope).toBe(VariableScope.TOPIC);
 
       // 写入变量
@@ -198,15 +211,11 @@ describe('ai_ask 多轮对话变量提取回归测试', () => {
       const scopeResolver = new VariableScopeResolver(variableStore);
 
       // 模拟 output 配置中的变量（如 cbt_depression_assessment.yaml 中的配置）
-      const outputVariables = [
-        { get: '来访者称呼', define: '来访者认可的咨询师对他/她的称呼' },
-        { get: '来访者年龄', define: '来访者的年龄' },
-      ];
 
       // 提取的值
       const extractedValues = {
-        '来访者称呼': 'LEO',
-        '来访者年龄': '28岁',
+        来访者称呼: 'LEO',
+        来访者年龄: '28岁',
       };
 
       // 写入变量
@@ -218,7 +227,7 @@ describe('ai_ask 多轮对话变量提取回归测试', () => {
       // 验证都存入 topic
       expect(variableStore.topic['topic_1']['来访者称呼'].value).toBe('LEO');
       expect(variableStore.topic['topic_1']['来访者年龄'].value).toBe('28岁');
-      
+
       // 验证其他作用域为空
       expect(Object.keys(variableStore.global).length).toBe(0);
       expect(Object.keys(variableStore.session).length).toBe(0);
@@ -246,12 +255,7 @@ describe('ai_ask 多轮对话变量提取回归测试', () => {
     it('应该处理特殊字符的变量名', () => {
       const scopeResolver = new VariableScopeResolver(variableStore);
 
-      const specialNames = [
-        '来访者-称呼',
-        '来访者_年龄',
-        '来访者.职业',
-        '来访者（性别）',
-      ];
+      const specialNames = ['来访者-称呼', '来访者_年龄', '来访者.职业', '来访者（性别）'];
 
       specialNames.forEach((varName, index) => {
         const scope = scopeResolver.determineScope(varName);
@@ -269,7 +273,7 @@ describe('ai_ask 多轮对话变量提取回归测试', () => {
 
       // undefined 值应该被跳过（根据 ai-ask-action 的逻辑）
       const extractedVariables: Record<string, any> = {
-        '有效变量': 'LEO',
+        有效变量: 'LEO',
         // '空变量': undefined,  // 在提取阶段就被过滤了
       };
 
