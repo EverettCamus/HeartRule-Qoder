@@ -36,6 +36,15 @@ export async function registerChatRoutes(app: FastifyInstance) {
               sessionStatus: { type: 'string' },
               executionStatus: { type: 'string' },
               extractedVariables: { type: 'object', additionalProperties: true },
+              variableStore: {
+                type: 'object',
+                properties: {
+                  global: { type: 'object', additionalProperties: true },
+                  session: { type: 'object', additionalProperties: true },
+                  phase: { type: 'object', additionalProperties: true },
+                  topic: { type: 'object', additionalProperties: true },
+                },
+              },
             },
           },
         },

@@ -201,6 +201,33 @@ export class ScriptExecutor {
           // Action未完成，继续等待
           executionState.status = ExecutionStatus.WAITING_INPUT;
 
+          // ⚠️ 关键修复：即使Action未完成，也要处理已提取的变量
+          if (result.extractedVariables) {
+            // 向后兼容：继续更新旧的 variables
+            executionState.variables = {
+              ...executionState.variables,
+              ...result.extractedVariables,
+            };
+          
+            // 新逻辑：使用 VariableScopeResolver 写入分层变量
+            if (executionState.variableStore) {
+              const scopeResolver = new VariableScopeResolver(executionState.variableStore);
+              const position = {
+                phaseId: executionState.currentPhaseId,
+                topicId: executionState.currentTopicId,
+                actionId: executionState.currentAction.actionId,
+              };
+          
+              for (const [varName, varValue] of Object.entries(result.extractedVariables)) {
+                // 确定目标作用域
+                const targetScope = scopeResolver.determineScope(varName);
+                          
+                // 写入变量
+                scopeResolver.setVariable(varName, varValue, targetScope, position, executionState.currentAction.actionId);
+              }
+            }
+          }
+
           // Action未完成，但可能有 AI 消息（如 ai_ask 的问题或 ai_say 的下一轮对话内容）
           if (result.aiMessage) {
             executionState.lastAiMessage = result.aiMessage;

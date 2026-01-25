@@ -375,6 +375,15 @@ export async function registerSessionRoutes(app: FastifyInstance) {
               executionStatus: { type: 'string' },
               variables: { type: 'object', additionalProperties: true },
               globalVariables: { type: 'object', additionalProperties: true },
+              variableStore: {
+                type: 'object',
+                properties: {
+                  global: { type: 'object', additionalProperties: true },
+                  session: { type: 'object', additionalProperties: true },
+                  phase: { type: 'object', additionalProperties: true },
+                  topic: { type: 'object', additionalProperties: true },
+                },
+              },
               position: {
                 type: 'object',
                 properties: {

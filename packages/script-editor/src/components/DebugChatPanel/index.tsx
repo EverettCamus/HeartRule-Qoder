@@ -645,11 +645,13 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           variablesKeys: Object.keys(newVariables),
           hasGlobalVariables: !!response.globalVariables,
           globalVariablesKeys: Object.keys(globalVariables),
+          hasVariableStore: !!response.variableStore,
         });
 
-        // 按作用域分层变量
-        const categorizedVars = categorizeVariablesByScope(newVariables, globalVariables);
-        console.log('[DebugChat] 🎯 Categorized variables:', categorizedVars);
+        // 优先使用 variableStore，否则退回到旧的分层逻辑
+        const categorizedVars = response.variableStore
+          ? response.variableStore
+          : categorizeVariablesByScope(newVariables, globalVariables);
 
         // 分析当前 action 的相关变量
         let relevantVariables: { inputVariables: string[]; outputVariables: string[] } | undefined;

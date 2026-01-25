@@ -33,6 +33,40 @@ export class SessionManager {
   }
 
   /**
+   * 扁平化 variableStore，将嵌套的 phase/topic 结构转为当前位置的扁平结构
+   */
+  private flattenVariableStore(
+    variableStore: {
+      global?: Record<string, unknown>;
+      session?: Record<string, unknown>;
+      phase?: Record<string, Record<string, unknown>>;
+      topic?: Record<string, Record<string, unknown>>;
+    } | null | undefined,
+    position: { phaseId?: string; topicId?: string }
+  ): {
+    global: Record<string, unknown>;
+    session: Record<string, unknown>;
+    phase: Record<string, unknown>;
+    topic: Record<string, unknown>;
+  } {
+    if (!variableStore) {
+      return {
+        global: {},
+        session: {},
+        phase: {},
+        topic: {},
+      };
+    }
+
+    return {
+      global: variableStore.global || {},
+      session: variableStore.session || {},
+      phase: position.phaseId && variableStore.phase?.[position.phaseId] ? variableStore.phase[position.phaseId] : {},
+      topic: position.topicId && variableStore.topic?.[position.topicId] ? variableStore.topic[position.topicId] : {},
+    };
+  }
+
+  /**
    * 推断变量的类型字符串，用于写入 value_type
    */
   private inferValueType(value: unknown): string {
@@ -79,7 +113,7 @@ export class SessionManager {
    */
   private async loadGlobalVariables(scriptName: string): Promise<Record<string, any>> {
     try {
-      console.log('[SessionManager] 🔍 Loading global variables for script:', scriptName);
+
 
       // 查找包含该脚本文件的项目
       const sessionFile = await db.query.scriptFiles.findFirst({
@@ -87,16 +121,11 @@ export class SessionManager {
       });
 
       if (!sessionFile) {
-        console.log(
-          '[SessionManager] ⚠️ Script file not found in projects, skipping global variables'
-        );
+
         return {};
       }
 
-      console.log('[SessionManager] ✅ Found script file:', {
-        fileName: sessionFile.fileName,
-        projectId: sessionFile.projectId,
-      });
+
 
       // 查找该项目的 global.yaml 文件
       const globalFile = await db.query.scriptFiles.findFirst({
@@ -105,15 +134,11 @@ export class SessionManager {
       });
 
       if (!globalFile) {
-        console.log('[SessionManager] ⚠️ No global.yaml found in project');
+        
         return {};
       }
 
-      console.log('[SessionManager] ✅ Found global.yaml:', {
-        fileName: globalFile.fileName,
-        hasYamlContent: !!globalFile.yamlContent,
-        hasFileContent: !!globalFile.fileContent,
-      });
+
 
       // 解析全局变量
       const globalVariables: Record<string, any> = {};
@@ -140,8 +165,7 @@ export class SessionManager {
         }
       }
 
-      console.log('[SessionManager] ✅ Loaded global variables:', globalVariables);
-      console.log('[SessionManager] 🔑 Global variable keys:', Object.keys(globalVariables));
+
       return globalVariables;
     } catch (error) {
       console.error('[SessionManager] ❌ Error loading global variables:', error);
@@ -582,7 +606,10 @@ export class SessionManager {
         executionStatus: executionState.status,
         variables: executionState.variables,
         globalVariables, // 返回全局变量
-        variableStore: executionState.variableStore, // 🔧 添加分层变量存储
+        variableStore: this.flattenVariableStore(executionState.variableStore, {
+          phaseId: executionState.currentPhaseId,
+          topicId: executionState.currentTopicId,
+        }), // 🔧 添加分层变量存储（扁平化处理）
         debugInfo: executionState.lastLLMDebugInfo, // 添加LLM调试信息
         position: {
           phaseIndex: executionState.currentPhaseIdx,

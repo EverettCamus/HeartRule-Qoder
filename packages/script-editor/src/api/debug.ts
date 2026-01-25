@@ -82,6 +82,13 @@ export interface DebugMessageResponse {
   executionStatus: string;
   variables?: Record<string, unknown>;
   globalVariables?: Record<string, unknown>; // 全局变量
+  variableStore?: {
+    // 分层变量存储
+    global: Record<string, unknown>;
+    session: Record<string, unknown>;
+    phase: Record<string, unknown>;
+    topic: Record<string, unknown>;
+  };
   position?: ExecutionPosition;
   debugInfo?: {
     prompt: string;
