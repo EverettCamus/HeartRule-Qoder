@@ -14,7 +14,32 @@ export interface VariableValue {
   lastUpdated?: string;
   /** 来源：action_id 或 'global'/'initial' */
   source?: string;
+  /** 所属作用域 */
+  scope?: VariableScope;
+  /** 变量历史记录（可选） */
+  history?: VariableHistoryEntry[];
 }
+
+/**
+ * 变量历史记录项
+ */
+export interface VariableHistoryEntry {
+  /** 变更前的值 */
+  previousValue: any;
+  /** 变更时间 */
+  timestamp: string;
+  /** 变更来源 */
+  source: string;
+}
+
+/**
+ * 变量历史记录项 Schema
+ */
+export const VariableHistoryEntrySchema = z.object({
+  previousValue: z.any(),
+  timestamp: z.string(),
+  source: z.string(),
+});
 
 /**
  * 变量值 Schema
@@ -24,6 +49,8 @@ export const VariableValueSchema = z.object({
   type: z.string().optional(),
   lastUpdated: z.string().optional(),
   source: z.string().optional(),
+  scope: VariableScopeSchema.optional(),
+  history: z.array(VariableHistoryEntrySchema).optional(),
 });
 
 /**

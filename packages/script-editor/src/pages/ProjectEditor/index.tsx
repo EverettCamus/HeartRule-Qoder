@@ -1346,14 +1346,14 @@ const ProjectEditor: React.FC = () => {
       case 'ai_think':
         return {
           type: 'ai_think',
-          think: 'Please enter the thinking goal',
+          think: 'Please enter the thinking topic',
           output: [],
           action_id: baseActionId,
           _raw: {
             action_id: baseActionId,
             action_type: 'ai_think',
             config: {
-              think_target: 'Please enter the thinking goal',
+              think_target: 'Please enter the thinking topic',
               output: [],
             },
           },

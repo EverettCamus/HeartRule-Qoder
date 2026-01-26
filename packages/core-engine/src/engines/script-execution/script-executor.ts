@@ -272,12 +272,31 @@ export class ScriptExecutor {
             result.metadata?.maxRounds !== undefined
           ) {
             executionState.metadata.lastActionRoundInfo = {
+              actionId: executionState.currentAction.actionId,
               currentRound: result.metadata.currentRound,
               maxRounds: result.metadata.maxRounds,
+              exitDecision: result.metadata.exitDecision,
             };
             console.log(
               '[ScriptExecutor] 🔄 Saved intermediate action round info:',
               executionState.metadata.lastActionRoundInfo
+            );
+          }
+
+          // 记录退出决策到历史（如果有）
+          if (result.metadata?.exitDecision) {
+            if (!executionState.metadata.exitHistory) {
+              executionState.metadata.exitHistory = [];
+            }
+            executionState.metadata.exitHistory.push({
+              actionId: executionState.currentAction.actionId,
+              round: result.metadata.currentRound || executionState.currentAction.currentRound || 0,
+              decision: result.metadata.exitDecision,
+              timestamp: new Date().toISOString(),
+            });
+            console.log(
+              '[ScriptExecutor] 📊 Recorded exit decision to history:',
+              result.metadata.exitDecision
             );
           }
 

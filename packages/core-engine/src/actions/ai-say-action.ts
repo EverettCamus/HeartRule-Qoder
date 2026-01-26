@@ -19,6 +19,7 @@
 
 import { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager } from '../engines/prompt-template/index.js';
+import type { ExitCriteria } from '@heartrule/shared-types';
 
 import { BaseAction } from './base-action.js';
 import type { ActionContext, ActionResult } from './base-action.js';
@@ -30,10 +31,7 @@ interface AiSayConfig {
   content?: string; // 讲解内容（必填）
   require_acknowledgment?: boolean; // 是否需要用户确认
   max_rounds?: number; // 最大轮数
-  exit_criteria?: {
-    understanding_threshold?: number; // 理解度阈值
-    has_questions?: boolean; // 是否允许有疑问时退出
-  };
+  exit_criteria?: ExitCriteria; // 退出条件
 }
 
 /**
@@ -55,6 +53,7 @@ interface MainLineOutput {
 
 /**
  * 退出决策结果
+ * @deprecated 使用 @heartrule/shared-types 中的 ExitDecision
  */
 interface ExitDecision {
   should_exit: boolean;
@@ -66,7 +65,6 @@ export class AiSayAction extends BaseAction {
   static actionType = 'ai_say';
   private llmOrchestrator?: LLMOrchestrator;
   private templateManager: PromptTemplateManager;
-  private exitCriteria: AiSayConfig['exit_criteria'];
   private useTemplateMode: boolean = false; // 是否使用模板模式
 
   constructor(actionId: string, config: Record<string, any>, llmOrchestrator?: LLMOrchestrator) {
@@ -78,12 +76,16 @@ export class AiSayAction extends BaseAction {
 
     this.templateManager = new PromptTemplateManager(templateBasePath);
 
-    // maxRounds 已在 BaseAction 中设置
-    this.exitCriteria = config.exit_criteria || config.exitCriteria;
-
+    // maxRounds 和 exitCriteria 已在 BaseAction 中设置
     // 判断是否使用模板模式：有 max_rounds 或 exit_criteria 配置
     this.useTemplateMode =
       this.getConfig('max_rounds') !== undefined || this.getConfig('exit_criteria') !== undefined;
+
+    // 设置退出策略：ai_say 支持多轮退出
+    this.exitPolicy = {
+      supportsExit: true,
+      enabledSources: ['max_rounds', 'exit_criteria', 'llm_suggestion'],
+    };
   }
 
   async execute(context: ActionContext, userInput?: string | null): Promise<ActionResult> {
@@ -172,8 +174,8 @@ export class AiSayAction extends BaseAction {
       throw new Error(`Failed to parse LLM output: ${error.message}`);
     }
 
-    // 5. 退出决策
-    const exitDecision = this.decideExit(llmOutput);
+    // 5. 退出决策（使用统一的 evaluateExitCondition 方法）
+    const exitDecision = this.evaluateExitCondition(context, llmOutput);
 
     console.log(`[AiSayAction] 🎯 Exit decision:`, exitDecision);
 
@@ -356,43 +358,5 @@ export class AiSayAction extends BaseAction {
     // 获取最近 10 条消息
     const recent = history.slice(-10);
     return recent.map((msg) => `${msg.role === 'user' ? '用户' : 'AI'}: ${msg.content}`).join('\n');
-  }
-
-  /**
-   * 退出决策逻辑
-   */
-  private decideExit(llmOutput: MainLineOutput): ExitDecision {
-    // 规则1: 达到最大轮次（已在外层检查）
-
-    // 规则2: LLM 建议退出 + 满足退出条件
-    if (llmOutput.should_exit) {
-      const { understanding_level, has_questions, expressed_understanding } = llmOutput.assessment;
-      const threshold = this.exitCriteria?.understanding_threshold ?? 80;
-
-      // 条件1：理解度达标且无疑问
-      if (understanding_level >= threshold && !has_questions) {
-        return {
-          should_exit: true,
-          reason: `理解度${understanding_level}达到${threshold}且无疑问`,
-          decision_source: 'exit_criteria',
-        };
-      }
-
-      // 条件2：理解度70+且明确表达理解
-      if (understanding_level >= 70 && expressed_understanding) {
-        return {
-          should_exit: true,
-          reason: `理解度${understanding_level}达到70+且用户明确表达理解`,
-          decision_source: 'exit_criteria',
-        };
-      }
-    }
-
-    // 规则3: 继续
-    return {
-      should_exit: false,
-      reason: llmOutput.exit_reason || '继续讲解',
-      decision_source: 'llm_suggestion',
-    };
   }
 }

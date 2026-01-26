@@ -127,7 +127,7 @@ export interface Step {
   scene?: string;      // 场景
   ai?: string;         // AI 角色
   human?: string;      // 人类角色
-  goal?: string;       // 目标（Topic）
+  topic?: string;       // 目标（Topic）
   actions?: Action[];  // 动作列表
 }
 

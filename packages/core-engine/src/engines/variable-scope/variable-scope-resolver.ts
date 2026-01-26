@@ -31,10 +31,19 @@ import { VariableScope } from '@heartrule/shared-types';
 export class VariableScopeResolver {
   private variableDefinitions: Map<string, VariableDefinition>;
   private variableStore: VariableStore;
+  private variableOperations: Array<{
+    actionId: string;
+    operation: 'extract' | 'update' | 'delete';
+    variableName: string;
+    scope: VariableScope;
+    value: unknown;
+    timestamp: string;
+  }>;
 
   constructor(variableStore: VariableStore, variableDefinitions?: Map<string, VariableDefinition>) {
     this.variableStore = variableStore;
     this.variableDefinitions = variableDefinitions || new Map();
+    this.variableOperations = [];
   }
 
   /**
@@ -86,6 +95,67 @@ export class VariableScopeResolver {
     // 默认策略：未定义变量写入 topic 作用域（最小生命周期）
     console.log(`[VariableScopeResolver] ⚠️ Variable "${varName}" not defined, defaulting to topic scope`);
     return VariableScope.TOPIC;
+  }
+
+  /**
+   * 验证 VariableStore 结构完整性
+   * 
+   * @returns 验证结果
+   */
+  public validateStoreStructure(): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // 检查必需的顶层作用域
+    const requiredScopes = ['global', 'session', 'phase', 'topic'];
+    for (const scope of requiredScopes) {
+      if (!(scope in this.variableStore)) {
+        errors.push(`Missing required scope: ${scope}`);
+      } else if (typeof this.variableStore[scope as keyof VariableStore] !== 'object') {
+        errors.push(`Scope ${scope} must be an object`);
+      }
+    }
+
+    // 检查 phase 和 topic 是否为嵌套结构
+    if (this.variableStore.phase && typeof this.variableStore.phase === 'object') {
+      for (const [phaseId, phaseVars] of Object.entries(this.variableStore.phase)) {
+        if (typeof phaseVars !== 'object') {
+          errors.push(`Phase scope '${phaseId}' must contain an object`);
+        }
+      }
+    }
+
+    if (this.variableStore.topic && typeof this.variableStore.topic === 'object') {
+      for (const [topicId, topicVars] of Object.entries(this.variableStore.topic)) {
+        if (typeof topicVars !== 'object') {
+          errors.push(`Topic scope '${topicId}' must contain an object`);
+        }
+      }
+    }
+
+    const valid = errors.length === 0;
+    if (valid) {
+      console.log('[VariableScopeResolver] ✅ VariableStore structure is valid');
+    } else {
+      console.error('[VariableScopeResolver] ❌ VariableStore structure validation failed:', errors);
+    }
+
+    return { valid, errors };
+  }
+
+  /**
+   * 获取变量操作历史记录
+   * 
+   * @returns 变量操作数组
+   */
+  public getVariableOperations() {
+    return [...this.variableOperations];
+  }
+
+  /**
+   * 清除变量操作历史记录
+   */
+  public clearVariableOperations(): void {
+    this.variableOperations = [];
   }
 
   /**
@@ -175,11 +245,23 @@ export class VariableScopeResolver {
     position: Position,
     source?: string
   ): void {
+    // 记录变量操作
+    const timestamp = new Date().toISOString();
+    this.variableOperations.push({
+      actionId: position.actionId || 'unknown',
+      operation: 'extract',
+      variableName: varName,
+      scope,
+      value,
+      timestamp,
+    });
+
     const variableValue: VariableValue = {
       value,
       type: this.inferType(value),
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: timestamp,
       source: source || position.actionId || 'unknown',
+      scope, // 添加作用域字段
     };
 
     switch (scope) {

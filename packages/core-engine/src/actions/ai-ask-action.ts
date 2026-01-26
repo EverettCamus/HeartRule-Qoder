@@ -63,10 +63,17 @@ export class AiAskAction extends BaseAction {
         ? AskTemplateType.MULTI_ROUND
         : AskTemplateType.SIMPLE;
 
+    // 设置退出策略：ai_ask 支持多轮退出（仅对多轮追问模式）
+    this.exitPolicy = {
+      supportsExit: this.templateType === AskTemplateType.MULTI_ROUND,
+      enabledSources: ['max_rounds', 'exit_flag', 'llm_suggestion'],
+    };
+
     console.log(`[AiAskAction] 🔧 Constructor: templateType=${this.templateType}, config:`, {
       hasOutput: !!this.getConfig('output')?.length,
       hasExit: !!this.getConfig('exit'),
       maxRounds: this.maxRounds,
+      supportsExit: this.exitPolicy.supportsExit,
     });
   }
 
@@ -133,12 +140,6 @@ export class AiAskAction extends BaseAction {
   ): Promise<ActionResult> {
     console.log(`[AiAskAction] 📝 Using template mode (round: ${this.currentRound})`);
 
-    // 达到最大轮次，强制退出
-    if (this.currentRound >= this.maxRounds) {
-      console.log(`[AiAskAction] 🏁 Reached max_rounds (${this.maxRounds}), force exit`);
-      return this.finishAction(context, userInput);
-    }
-
     // 第一轮：生成初始问题
     if (this.currentRound === 0) {
       this.currentRound += 1;
@@ -167,24 +168,35 @@ export class AiAskAction extends BaseAction {
       };
     }
 
-    // 调用 LLM 判断是否退出
-    const llmOutput = await this.generateQuestionFromTemplate(context, AskTemplateType.MULTI_ROUND);
-    const shouldExit = llmOutput.metadata?.shouldExit || false;
+    // 调用 LLM 生成下一轮问题或决定退出
+    const llmResult = await this.generateQuestionFromTemplate(context, AskTemplateType.MULTI_ROUND);
+    
+    // 提取 LLM 输出的原始数据
+    const llmOutput = llmResult.metadata?.llmRawOutput ? 
+      JSON.parse(this.cleanJsonOutput(llmResult.metadata.llmRawOutput)) : 
+      {};
 
-    if (shouldExit) {
-      console.log(`[AiAskAction] ✅ LLM decided to exit`);
+    // 使用统一的退出决策方法
+    const exitDecision = this.evaluateExitCondition(context, llmOutput);
+    
+    console.log(`[AiAskAction] 🎯 Exit decision:`, exitDecision);
+
+    if (exitDecision.should_exit) {
+      console.log(`[AiAskAction] ✅ Decided to exit: ${exitDecision.reason}`);
       return this.finishAction(context, userInput);
     }
 
     // 继续追问
     this.currentRound += 1;
     return {
-      ...llmOutput,
+      ...llmResult,
       completed: false,
       metadata: {
-        ...llmOutput.metadata,
+        ...llmResult.metadata,
         waitingFor: 'answer',
         continueAsking: true,
+        currentRound: this.currentRound,
+        exitDecision,
       },
     };
   }

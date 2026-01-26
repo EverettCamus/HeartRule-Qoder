@@ -73,7 +73,7 @@ graph TB
 | Global | global | global.yaml 定义 | 跨会谈持久化 | 最低（1） |
 | Session | session | Session.variables | 单次会谈 | 较低（2） |
 | Phase | stage | Phase 内有效 | 当前 Phase | 较高（3） |
-| Topic | goal | Topic 内有效 | 当前 Topic | 最高（4） |
+| Topic | topic | Topic 内有效 | 当前 Topic | 最高（4） |
 
 **覆盖规则**：`Topic > Phase > Session > Global`
 
@@ -1164,7 +1164,7 @@ graph LR
 
 ```
 ┌─ HeartRule 构思文档格式 ─┐
-│ session / stage / goal   │
+│ session / stage / topic   │
 └──────────────────────────┘
            ↓
     【格式适配层】
@@ -1525,7 +1525,7 @@ sequenceDiagram
 |---------------|---------|------|
 | session | Session | 一次会谈 |
 | stage | Phase | 会谈阶段 |
-| goal | Topic | 话题/目标 |
+| topic | Topic | 话题/目标 |
 | action | Action | 动作（ai_say/ai_ask等） |
 | global.yaml | global.yaml | 全局变量定义 |
 | declare | declare | 变量声明 |

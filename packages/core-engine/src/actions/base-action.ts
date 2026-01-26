@@ -20,7 +20,7 @@
 
 import * as path from 'path';
 
-import type { VariableStore, Position } from '@heartrule/shared-types';
+import type { VariableStore, Position, ExitDecision, ExitCriteria, ExitPolicy, ExitDecisionSource } from '@heartrule/shared-types';
 
 import type { LLMDebugInfo } from '../engines/llm-orchestration/orchestrator.js';
 import { VariableScopeResolver } from '../engines/variable-scope/variable-scope-resolver.js';
@@ -87,10 +87,12 @@ export interface ActionResult {
  * - substituteVariables(): 变量模板替换，支持作用域查找
  * - getConfig(): 配置读取，兼容 camelCase 和 snake_case
  * - reset(): 重置 Action 状态（轮次计数）
+ * - evaluateExitCondition(): 辅助方法，用于交互型 Action 的退出决策
  * 
  * 状态管理：
  * - currentRound: 当前执行轮次（多轮对话场景）
  * - maxRounds: 最大轮次限制
+ * - exitPolicy: 退出策略配置，声明是否支持多轮退出机制
  */
 export abstract class BaseAction {
   static actionType: string = 'base';
@@ -99,11 +101,19 @@ export abstract class BaseAction {
   public config: Record<string, any>;
   public currentRound: number = 0;
   public maxRounds: number;
+  public exitPolicy: ExitPolicy;
+  public exitCriteria?: ExitCriteria;
 
   constructor(actionId: string, config: Record<string, any>) {
     this.actionId = actionId;
     this.config = config;
     this.maxRounds = config.maxRounds || config.max_rounds || 5;
+    this.exitCriteria = config.exit_criteria || config.exitCriteria;
+    
+    // 默认退出策略：不支持退出机制（由子类覆盖）
+    this.exitPolicy = {
+      supportsExit: false,
+    };
   }
 
   /**
@@ -255,5 +265,229 @@ export abstract class BaseAction {
       jsonText = jsonText.replace(/```\n?/g, '').replace(/```\n?$/g, '');
     }
     return jsonText.trim();
+  }
+
+  /**
+   * 退出条件评估（辅助方法，仅供交互型 Action 内部使用）
+   * 
+   * 按照四级优先级执行退出决策：
+   * 1. 硬性上限检查（max_rounds）
+   * 2. 退出标志检查（EXIT 变量）
+   * 3. 退出条件评估（exit_criteria）
+   * 4. LLM 建议（llm_suggestion）
+   * 
+   * @param context - 执行上下文
+   * @param llmOutput - LLM 输出结果（可选）
+   * @returns 退出决策结果
+   */
+  protected evaluateExitCondition(
+    context: ActionContext,
+    llmOutput?: Record<string, any>
+  ): ExitDecision {
+    // 如果 Action 不支持退出机制，默认不退出
+    if (!this.exitPolicy.supportsExit) {
+      return {
+        should_exit: false,
+        reason: 'Action does not support exit mechanism',
+        decision_source: 'llm_suggestion',
+      };
+    }
+
+    const enabledSources = this.exitPolicy.enabledSources || ['max_rounds', 'exit_flag', 'exit_criteria', 'llm_suggestion'];
+
+    // 优先级 1: 硬性上限检查（max_rounds）
+    if (enabledSources.includes('max_rounds') && this.currentRound >= this.maxRounds) {
+      return {
+        should_exit: true,
+        reason: `达到最大轮次限制 (${this.maxRounds})`,
+        decision_source: 'max_rounds',
+      };
+    }
+
+    // 优先级 2: 退出标志检查（EXIT 字段）
+    if (enabledSources.includes('exit_flag') && llmOutput) {
+      const exitFlag = llmOutput.EXIT || llmOutput.exit;
+      if (exitFlag === 'true' || exitFlag === true) {
+        const exitReason = llmOutput.exit_reason || llmOutput.BRIEF || '满足退出标志';
+        return {
+          should_exit: true,
+          reason: exitReason,
+          decision_source: 'exit_flag',
+        };
+      }
+    }
+
+    // 优先级 3: 退出条件评估（exit_criteria）
+    if (enabledSources.includes('exit_criteria') && this.exitCriteria) {
+      const criteriaResult = this.evaluateExitCriteria(context, llmOutput);
+      // 如果应该退出，直接返回
+      if (criteriaResult.should_exit) {
+        return criteriaResult;
+      }
+      // 如果有明确的不满足原因（非“退出条件不完整”），也直接返回
+      if (criteriaResult.reason !== '退出条件不完整') {
+        return criteriaResult;
+      }
+    }
+
+    // 优先级 4: LLM 建议（llm_suggestion）
+    if (enabledSources.includes('llm_suggestion') && llmOutput) {
+      const shouldExit = llmOutput.should_exit || llmOutput.shouldExit;
+      if (shouldExit === true) {
+        const exitReason = llmOutput.exit_reason || llmOutput.exitReason || 'LLM 建议退出';
+        return {
+          should_exit: true,
+          reason: exitReason,
+          decision_source: 'llm_suggestion',
+        };
+      }
+    }
+
+    // 默认：继续
+    return {
+      should_exit: false,
+      reason: '未满足退出条件，继续执行',
+      decision_source: 'llm_suggestion',
+    };
+  }
+
+  /**
+   * 评估退出条件（exit_criteria）
+   * 
+   * @param context - 执行上下文
+   * @param llmOutput - LLM 输出结果（可选）
+   * @returns 退出决策结果
+   */
+  private evaluateExitCriteria(
+    context: ActionContext,
+    llmOutput?: Record<string, any>
+  ): ExitDecision {
+    if (!this.exitCriteria) {
+      return {
+        should_exit: false,
+        reason: '无退出条件配置',
+        decision_source: 'exit_criteria',
+      };
+    }
+
+    const conditions: string[] = [];
+
+    // 检查最小轮次要求
+    if (this.exitCriteria.min_rounds && this.currentRound < this.exitCriteria.min_rounds) {
+      return {
+        should_exit: false,
+        reason: `未达到最小轮次要求 (${this.currentRound}/${this.exitCriteria.min_rounds})`,
+        decision_source: 'exit_criteria',
+      };
+    }
+
+    // 检查理解度阈值
+    if (this.exitCriteria.understanding_threshold !== undefined && llmOutput) {
+      const understandingLevel =
+        llmOutput.assessment?.understanding_level ||
+        llmOutput.understanding_level ||
+        0;
+
+      if (understandingLevel >= this.exitCriteria.understanding_threshold) {
+        conditions.push(`理解度达标 (${understandingLevel}>=${this.exitCriteria.understanding_threshold})`);
+      } else {
+        return {
+          should_exit: false,
+          reason: `理解度未达标 (${understandingLevel}<${this.exitCriteria.understanding_threshold})`,
+          decision_source: 'exit_criteria',
+        };
+      }
+    }
+
+    // 检查是否允许有疑问时退出
+    if (this.exitCriteria.has_questions !== undefined && llmOutput) {
+      const hasQuestions =
+        llmOutput.assessment?.has_questions ||
+        llmOutput.has_questions ||
+        false;
+
+      if (!this.exitCriteria.has_questions && hasQuestions) {
+        return {
+          should_exit: false,
+          reason: '用户仍有疑问，不允许退出',
+          decision_source: 'exit_criteria',
+        };
+      }
+
+      if (!hasQuestions) {
+        conditions.push('无疑问');
+      }
+    }
+
+    // 检查自定义条件
+    if (this.exitCriteria.custom_conditions && context.scopeResolver) {
+      for (const condition of this.exitCriteria.custom_conditions) {
+        const position = {
+          phaseId: context.phaseId,
+          topicId: context.topicId,
+          actionId: context.actionId,
+        };
+
+        const variableValue = context.scopeResolver.resolveVariable(condition.variable, position);
+        const actualValue = variableValue?.value;
+
+        const satisfied = this.evaluateCondition(actualValue, condition.operator, condition.value);
+
+        if (!satisfied) {
+          return {
+            should_exit: false,
+            reason: `自定义条件不满足: ${condition.variable} ${condition.operator} ${condition.value}`,
+            decision_source: 'exit_criteria',
+          };
+        }
+
+        conditions.push(`${condition.variable} ${condition.operator} ${condition.value}`);
+      }
+    }
+
+    // 所有条件满足
+    if (conditions.length > 0) {
+      return {
+        should_exit: true,
+        reason: `满足退出条件: ${conditions.join(', ')}`,
+        decision_source: 'exit_criteria',
+      };
+    }
+
+    return {
+      should_exit: false,
+      reason: '退出条件不完整',
+      decision_source: 'exit_criteria',
+    };
+  }
+
+  /**
+   * 评估单个条件
+   */
+  private evaluateCondition(actualValue: any, operator: string, expectedValue: any): boolean {
+    switch (operator) {
+      case '==':
+        return actualValue == expectedValue;
+      case '!=':
+        return actualValue != expectedValue;
+      case '>':
+        return Number(actualValue) > Number(expectedValue);
+      case '<':
+        return Number(actualValue) < Number(expectedValue);
+      case '>=':
+        return Number(actualValue) >= Number(expectedValue);
+      case '<=':
+        return Number(actualValue) <= Number(expectedValue);
+      case 'contains':
+        if (typeof actualValue === 'string' && typeof expectedValue === 'string') {
+          return actualValue.includes(expectedValue);
+        }
+        if (Array.isArray(actualValue)) {
+          return actualValue.includes(expectedValue);
+        }
+        return false;
+      default:
+        return false;
+    }
   }
 }
