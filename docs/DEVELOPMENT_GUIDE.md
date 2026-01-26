@@ -85,14 +85,49 @@ packages/
 
 ## 核心概念
 
-### 1. 领域模型
+### 1. 架构分层（DDD 视角）
+
+本项目遵循领域驱动设计（DDD）原则，分为以下层次：
+
+- **Domain Layer (领域层)**
+  - Session 聚合：会话执行 BC 的核心聚合根
+  - Script 实体：脚本元数据与解析后结构（Phase/Topic/ActionDefinition）
+  - Message 实体/值对象：对话消息
+  - Variable 领域对象：变量状态、作用域与历史管理
+
+- **Application Layer (应用层)**
+  - 动作执行器：Ai*Action 类（如 AiSayAction、AiAskAction）
+  - 引擎层：ScriptExecutor、LLMOrchestrator、VariableExtractor 等
+  - 应用服务：ISessionApplicationService 等（DDD 第三阶段新增）
+
+- **Infrastructure Layer (基础设施层)**
+  - API 路由与持久化
+  - 外部 LLM 服务适配
+
+### 2. 领域词汇表
+
+| 术语 | 定义 | DDD 层次 |
+|------|------|----------|
+| **Session** | 一次完整的咨询会话，是会话执行 BC 的核心聚合根 | 领域层 |
+| **Script** | 描述会谈流程的 YAML 脚本，包含 Phase/Topic/ActionDefinition 结构 | 领域层 |
+| **Phase** | 脚本中的阶段，围绕一个阶段性目标组织相关话题 | 领域层 |
+| **Topic** | 脚本中的话题，围绕一个具体的“最小咨询目标”组织一组动作 | 领域层 |
+| **ActionDefinition** | 脚本中的动作定义（Topic 内的值对象），描述“要做什么”与“业务意图” | 领域层 |
+| **Ai*Action Executor** | 动作执行器（应用层服务），在运行时执行 ActionDefinition，协调 LLM/记忆/变量/用户交互 | 应用层 |
+| **Message** | 会话中的单条对话消息，参与 conversationHistory 维护 | 领域层 |
+| **Variable** | 会话中的变量状态，用于驱动会谈流程与分支决策 | 领域层 |
+| **ScriptExecutor** | 脚本执行引擎，根据脚本结构逐步推进会话执行 | 应用层 |
+| **LLMOrchestrator** | LLM 编排引擎，封装与 LLM 的交互与结构化输出 | 应用层 |
+| **VariableExtractor** | 变量提取引擎，从对话与 LLM 输出中抽取变量 | 应用层 |
+
+### 3. 领域模型
 
 - **Session（会话）**: 一次完整的咨询会话
 - **Message（消息）**: 会话中的单条消息
 - **Variable（变量）**: 会话中的变量状态
 - **Script（脚本）**: YAML 脚本定义
 
-### 2. 脚本层次结构
+### 4. 脚本层次结构
 
 ```
 Session（会谈）
@@ -101,7 +136,7 @@ Session（会谈）
           └── Action（咨询动作）
 ```
 
-### 3. Action 类型（MVP阶段）
+### 5. Action 类型（MVP阶段）
 
 - `ai_say`: 向用户传达信息
 - `ai_ask`: 引导式提问收集信息
@@ -347,3 +382,96 @@ SELECT * FROM sessions;
 - [Fastify 文档](https://www.fastify.io/docs/latest/)
 - [Drizzle ORM 文档](https://orm.drizzle.team/docs/overview)
 - [脚本示例](../scripts/)
+
+## DDD 重构成果（第三阶段）
+
+### 重构目标
+
+第三阶段主题：**跨上下文协作与工具化增强**
+
+### Story 1: API 层与核心引擎的边界
+
+**成果**：
+- ✅ 定义了 `ISessionApplicationService` 应用服务接口
+- ✅ 创建 `packages/core-engine/src/application/session-application-service.ts`
+- ✅ 作为防腐层（Anti-Corruption Layer）隔离核心引擎与 API 层
+
+**接口设计原则**：
+1. 输入参数只包含必要的业务标识与数据，不包含基础设施细节
+2. 输出结果携带完整的执行结果与状态，便于 API 层转换为 HTTP 响应
+3. 错误处理通过统一的错误类型封装，避免暴露内部异常
+
+**核心类型**：
+```typescript
+export interface ISessionApplicationService {
+  initializeSession(request: InitializeSessionRequest): Promise<SessionExecutionResponse>;
+  processUserInput(request: ProcessUserInputRequest): Promise<SessionExecutionResponse>;
+}
+```
+
+### Story 2: 调试信息管道化
+
+**成果**：
+- ✅ 创建 `packages/core-engine/docs/debug-info-pipeline.md` 文档
+- ✅ 定义统一的调试信息结构 `LLMDebugInfo`
+- ✅ 明确调试信息从 LLM 到响应的完整流转路径
+
+**调试信息流转架构**：
+```
+LLMProvider → LLMOrchestrator → Action.execute() → 
+ScriptExecutor → SessionApplicationService → API Layer → Script Editor
+```
+
+**核心规则**：
+1. 单一来源原则：调试信息只在 LLMProvider 层生成
+2. 最近调用原则：只保留最近一次 LLM 调用的调试信息
+3. 可选传递原则：所有接口中 `debugInfo` 均为可选字段
+4. Action 未完成也传递：即使 Action 未完成也应传递调试信息
+
+### Story 3: 版本演进策略
+
+**成果**：
+- ✅ 创建 `packages/core-engine/docs/version-evolution-strategy.md` 文档
+- ✅ 定义脚本与引擎的版本兼容性策略
+- ✅ 明确语义化版本号规范与兼容性矩阵
+
+**核心兼容性规则**：
+1. **引擎向后兼容保证**：引擎版本 N 必须能执行版本 N-1 和 N-2 的脚本
+2. **脚本向前兼容检测**：脚本版本 N 在引擎版本 N-1 上执行时给出清晰错误提示
+3. **字段可选性原则**：新增字段必须是可选的，提供默认值
+4. **字段重命名策略**：同时支持旧字段名和新字段名（snake_case ↔ camelCase）
+
+**版本格式**：遵循语义化版本 (Semantic Versioning)
+```
+MAJOR.MINOR.PATCH
+```
+
+### 测试覆盖增强
+
+**成果**：
+- ✅ 创建 `packages/core-engine/test/TEST_COVERAGE_PLAN.md` 文档
+- ✅ 创建 `packages/core-engine/test/session-application-service.test.ts` 测试框架
+- ✅ 定义测试金字塔与优先级策略
+
+**测试覆盖率目标**：
+- Domain Layer: 90%
+- Actions: 85%
+- Engines: 80%
+- Application Services: 80%
+- **整体: 85%**
+
+### 文档输出
+
+1. **应用服务接口**：`packages/core-engine/src/application/session-application-service.ts`
+2. **调试信息管道**：`packages/core-engine/docs/debug-info-pipeline.md`
+3. **版本演进策略**：`packages/core-engine/docs/version-evolution-strategy.md`
+4. **测试覆盖计划**：`packages/core-engine/test/TEST_COVERAGE_PLAN.md`
+
+### 后续工作
+
+- [ ] 实现 `ISessionApplicationService` 的默认实现
+- [ ] 在 API 层中使用应用服务接口
+- [ ] 实现版本检测机制
+- [ ] 完成 P0 优先级测试用例
+- [ ] 达成测试覆盖率 85% 目标
+

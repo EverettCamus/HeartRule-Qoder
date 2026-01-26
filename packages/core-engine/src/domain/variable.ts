@@ -11,6 +11,23 @@ export interface VariableHistoryEntry {
 
 /**
  * 变量状态领域模型
+ * 
+ * 【DDD 视角】领域实体，封装单个变量的完整生命周期与业务规则
+ * 
+ * 核心职责：
+ * 1. 值管理：维护变量的当前值、类型、来源
+ * 2. 更新策略：支持 OVERWRITE、APPEND、MERGE 三种更新模式
+ * 3. 历史管理：记录变量变更历史，支持回滚操作
+ * 4. 作用域属性：标记变量属于哪个作用域（global/session/phase/topic）
+ * 
+ * 业务规则：
+ * - OVERWRITE: 直接覆盖旧值
+ * - APPEND: 将新值追加到数组末尾（非数组时转为数组）
+ * - MERGE: 对象深度合并（非对象时退化为 OVERWRITE）
+ * 
+ * 使用场景：
+ * - 持久化层：作为 database 表的对象映射
+ * - 运行时：Session 中的 variableStore 存储的是简化版 VariableValue
  */
 export class VariableState {
   public variableId: string;

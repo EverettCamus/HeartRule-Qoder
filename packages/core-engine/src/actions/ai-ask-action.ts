@@ -1,6 +1,21 @@
 /**
  * AiAskAction - AI向用户提问并提取答案
  *
+ * 【DDD 视角】应用层服务 - Action 执行器
+ * 负责将脚本中的 ai_ask 动作定义转化为实际执行过程
+ * 
+ * 核心能力：
+ * 1. 多轮追问：支持根据 exit 条件进行智能追问，直到收集足够信息
+ * 2. 变量提取：从用户回答中提取结构化信息并写入合适作用域
+ * 3. 提示词模板：支持两种模板（simple-ask / multi-round-ask）
+ * 4. 退出决策：LLM 自动判断是否满足 exit 条件
+ * 5. 作用域自动注册：自动将 output 变量注册到 topic 作用域
+ * 
+ * 业务规则：
+ * - 模板选择：有 exit 或 output 时使用 multi-round-ask，否则使用 simple-ask
+ * - 变量作用域：未明确声明的 output 变量默认注册到 topic 作用域
+ * - 退出条件：LLM 判断 BRIEF 是否满足 exit 条件
+ * 
  * 参照: legacy-python/src/actions/ai_ask.py
  */
 

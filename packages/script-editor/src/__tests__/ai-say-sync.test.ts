@@ -8,8 +8,8 @@
  * 3. 比 E2E 测试更轻量，运行速度快，适合 CI/CD
  */
 
-import { describe, test, expect, beforeEach } from 'vitest';
 import yaml from 'js-yaml';
+import { describe, test, expect, beforeEach } from 'vitest';
 
 // 模拟解析和同步函数的核心逻辑
 describe('ai_say 属性框编辑同步到 YAML', () => {

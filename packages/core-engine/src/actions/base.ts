@@ -1,3 +1,17 @@
+/**
+ * @deprecated 旧版 Action 基类，将在第二阶段迁移到 base-action.ts
+ * 
+ * 请使用 base-action.ts 中的新版接口：
+ * - 支持 variableStore 分层结构
+ * - 支持 LLM 调试信息
+ * - 支持作用域解析器
+ * 
+ * 迁移计划：
+ * 1. 首先将新 Action 实现迁移到 base-action.ts
+ * 2. 验证所有现有测试通过
+ * 3. 删除此文件
+ */
+
 import type { Message } from '../domain/message.js';
 
 /**

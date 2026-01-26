@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+
 import { ScriptExecutor, ExecutionStatus } from '../src/engines/script-execution/script-executor.js';
 import type { ExecutionState } from '../src/engines/script-execution/script-executor.js';
 

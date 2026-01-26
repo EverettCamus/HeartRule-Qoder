@@ -2,11 +2,13 @@
  * 强制更新脚本 - 直接从文件读取
  */
 
-import { db } from './src/db/index.js';
-import { scripts } from './src/db/schema.js';
-import { eq } from 'drizzle-orm';
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+
+import { eq } from 'drizzle-orm';
+
+import { db } from './src/db/index.js';
+import { scripts } from './src/db/schema.js';
 
 async function main() {
   try {

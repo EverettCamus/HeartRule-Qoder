@@ -1,11 +1,20 @@
 /**
  * AiSayAction - AI向用户传达信息（增强版）
  *
- * 新增能力：
- * - 支持多轮对话（基于 max_rounds 控制）
- * - 支持提示词模板系统（两层变量替换）
- * - 支持理解度评估与智能退出决策
- * - 保持向后兼容（require_acknowledgment 机制）
+ * 【DDD 视角】应用层服务 - Action 执行器
+ * 负责将脚本中的 ai_say 动作定义转化为实际执行过程
+ * 
+ * 核心能力：
+ * 1. 多轮对话：基于 max_rounds 控制，支持与用户多轮交互直到理解
+ * 2. 提示词模板：两层变量替换（脚本变量 + 系统变量）
+ * 3. 理解度评估：LLM 智能判断用户是否已理解内容
+ * 4. 智能退出：基于 exit_criteria 自动决策是否结束对话
+ * 5. 向后兼容：保留 require_acknowledgment 机制
+ * 
+ * 业务规则：
+ * - 模板模式：当配置 max_rounds 或 exit_criteria 时启用
+ * - 兼容模式：简单单轮对话，仅输出静态内容
+ * - 退出决策顺序：max_rounds > exit_criteria > llm_suggestion
  */
 
 import { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';

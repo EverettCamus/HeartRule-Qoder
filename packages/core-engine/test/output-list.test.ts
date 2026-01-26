@@ -3,6 +3,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
+
 import { AiAskAction } from '../src/actions/ai-ask-action.js';
 
 describe('AiAskAction - output_list 生成', () => {

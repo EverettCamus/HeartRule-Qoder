@@ -1,5 +1,3 @@
-import React, { useState, useEffect } from 'react';
-import { Spin, Button, Tag, Empty, message, Modal, Space, Typography, Divider } from 'antd';
 import {
   HistoryOutlined,
   CheckCircleOutlined,
@@ -7,6 +5,9 @@ import {
   ExclamationCircleOutlined,
   EditOutlined,
 } from '@ant-design/icons';
+import { Spin, Button, Tag, Empty, message, Modal, Space, Typography, Divider } from 'antd';
+import React, { useState, useEffect } from 'react';
+
 import { versionsApi, type ProjectVersion } from '../../api/projects';
 import { globalHistoryManager } from '../../utils/history-manager';
 import './style.css';

@@ -2,10 +2,11 @@
  * 修复 action_1 的配置，添加 require_acknowledgment: true
  */
 
-import { db } from './src/db/index.js';
-import { scripts } from './src/db/schema.js';
 import { eq } from 'drizzle-orm';
 import yaml from 'yaml';
+
+import { db } from './src/db/index.js';
+import { scripts } from './src/db/schema.js';
 
 async function main() {
   try {

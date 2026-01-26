@@ -2,9 +2,10 @@
  * 修复 action_1 的配置（v2 - 直接拼接 YAML）
  */
 
+import { eq } from 'drizzle-orm';
+
 import { db } from './src/db/index.js';
 import { scripts } from './src/db/schema.js';
-import { eq } from 'drizzle-orm';
 
 async function main() {
   try {

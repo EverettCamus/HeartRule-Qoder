@@ -2,9 +2,10 @@
  * 更新 script_files 表中的 YAML 内容
  */
 
+import { eq } from 'drizzle-orm';
+
 import { db } from './src/db/index.js';
 import { scriptFiles } from './src/db/schema.js';
-import { eq } from 'drizzle-orm';
 
 async function main() {
   try {

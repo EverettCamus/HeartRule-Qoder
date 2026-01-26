@@ -3,7 +3,18 @@
  *
  * 参照: legacy-python/src/engines/script_execution/executor.py
  * MVP 简化版本：支持 ai_say 和 ai_ask
+ * 
+ * 【DDD 视角 - 重构进行中】
+ * ExecutionState 是执行器的临时运行时结构，用于驱动脚本执行流程。
+ * Session 领域模型才是持久化的状态承载者。
+ * 
+ * 重构方向：
+ * - ExecutionState 简化为纯粹的执行视图（当前位置 + 临时上下文）
+ * - 状态变更逻辑收敛到 Session 聚合根
+ * - 执行器从 Session 读取/更新状态，而非自行维护副本
  */
+
+import type { VariableStore } from '@heartrule/shared-types';
 
 import { createAction } from '../../actions/action-registry.js';
 import { AiAskAction } from '../../actions/ai-ask-action.js';
@@ -12,7 +23,6 @@ import type { BaseAction, ActionContext, ActionResult } from '../../actions/base
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
 import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.js';
-import type { VariableStore } from '@heartrule/shared-types';
 import { VariableScopeResolver } from '../variable-scope/variable-scope-resolver.js';
 
 /**
@@ -37,6 +47,13 @@ export interface ExecutionPosition {
 
 /**
  * 执行状态
+ * 
+ * 【临时结构】用于在脚本执行过程中传递状态，不直接持久化。
+ * 该结构将在重构第二阶段进一步简化，状态维护职责转移到 Session 领域模型。
+ * 
+ * 未来方向：
+ * - 简化为执行视图：currentPosition + context + tempCache
+ * - 移除与 Session 重复的字段（status, variables, conversationHistory 等）
  */
 export interface ExecutionState {
   status: ExecutionStatus;

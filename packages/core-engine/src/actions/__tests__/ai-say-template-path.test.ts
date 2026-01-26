@@ -1,7 +1,8 @@
 import { describe, test, expect, beforeEach } from 'vitest';
+
+import { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
 import { AiSayAction } from '../ai-say-action.js';
 import type { ActionContext } from '../base.js';
-import { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
 
 /**
  * 【Bug修复回归测试】模板路径配置错误

@@ -5,6 +5,7 @@
  */
 
 import { describe, test, expect, beforeEach } from 'vitest';
+
 import { AiSayAction } from '../ai-say-action.js';
 import type { ActionContext } from '../base-action.js';
 

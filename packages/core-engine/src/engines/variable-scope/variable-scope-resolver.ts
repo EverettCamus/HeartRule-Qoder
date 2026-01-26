@@ -1,8 +1,22 @@
 /**
  * 变量作用域解析器
  * 
- * 负责变量的作用域解析与优先级查找
- * 实现设计文档中的 VariableScopeResolver 领域服务
+ * 【DDD 视角】领域服务，负责变量的作用域解析与优先级查找
+ * 
+ * 核心职责：
+ * 1. 作用域决策：根据变量定义或默认策略确定变量应写入的作用域
+ * 2. 优先级查找：按 topic > phase > session > global 顺序查找变量值
+ * 3. 变量定义管理：维护变量的作用域元数据（从脚本 declare 中读取）
+ * 
+ * 作用域规则：
+ * - global: 全局配置、常量，跨会话共享
+ * - session: 会话级变量，存储用户身份、会话元数据等
+ * - phase: 阶段级变量，适合临时状态与中间结果
+ * - topic: 话题级变量，最小生命周期，适合单一话题内的临时数据
+ * 
+ * 默认策略：
+ * - 未定义的变量默认写入 topic 作用域（最小生命周期，避免数据泄漏）
+ * - 查找时按优先级从内层到外层逐级查找
  */
 
 import type { VariableStore, VariableValue, VariableDefinition, Position } from '@heartrule/shared-types';
@@ -10,6 +24,9 @@ import { VariableScope } from '@heartrule/shared-types';
 
 /**
  * 变量作用域解析器（领域服务）
+ * 
+ * 负责变量在不同作用域之间的读写逻辑，封装作用域规则。
+ * 与 Session 领域模型协作，Session 维护 variableStore，该解析器提供访问逻辑。
  */
 export class VariableScopeResolver {
   private variableDefinitions: Map<string, VariableDefinition>;
