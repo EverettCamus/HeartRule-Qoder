@@ -22,7 +22,7 @@ import type { ExecutionStatus, ExecutionPosition } from '@heartrule/shared-types
 import type { LLMDebugInfo } from '../engines/llm-orchestration/orchestrator.js';
 
 // 动态导入类型，避免循环依赖
-type ScriptExecutor = any;
+
 
 /**
  * 扩展的执行位置信息（包含多轮对话状态）

@@ -1,4 +1,4 @@
-import { SessionStatus, ExecutionStatus, type ExecutionPosition , VariableStore } from '@heartrule/shared-types';
+import { SessionStatus, ExecutionStatus, type ExecutionPosition, type VariableStore } from '@heartrule/shared-types';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { BaseAction } from '../actions/base-action.js';
