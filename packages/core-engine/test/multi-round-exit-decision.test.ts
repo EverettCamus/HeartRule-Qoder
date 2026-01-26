@@ -1,17 +1,18 @@
 /**
  * 多轮对话智能终止判断测试
- * 
+ *
  * 测试目标：
  * - BaseAction.evaluateExitCondition 的四级优先级判定
  * - AiSayAction 和 AiAskAction 的退出决策集成
  * - ExecutionState.metadata 的退出历史记录
  */
 
+import type { VariableStore } from '@heartrule/shared-types';
+import { VariableScope } from '@heartrule/shared-types';
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { BaseAction } from '../src/actions/base-action.js';
 import type { ActionContext, ActionResult } from '../src/actions/base-action.js';
-import type { ExitDecision, VariableStore } from '@heartrule/shared-types';
-import { VariableScope } from '@heartrule/shared-types';
 import { VariableScopeResolver } from '../src/engines/variable-scope/variable-scope-resolver.js';
 
 // 创建测试用的 Action 子类
@@ -27,9 +28,9 @@ class TestInteractiveAction extends BaseAction {
     };
   }
 
-  async execute(context: ActionContext, userInput?: string | null): Promise<ActionResult> {
+  async execute(context: ActionContext, _userInput?: string | null): Promise<ActionResult> {
     this.currentRound++;
-    
+
     // 模拟 LLM 输出
     const llmOutput = {
       EXIT: 'false',
@@ -60,7 +61,7 @@ class TestInteractiveAction extends BaseAction {
 class TestNonInteractiveAction extends BaseAction {
   static actionType = 'test_non_interactive';
 
-  async execute(context: ActionContext, userInput?: string | null): Promise<ActionResult> {
+  async execute(_context: ActionContext, _userInput?: string | null): Promise<ActionResult> {
     return {
       success: true,
       completed: true,
@@ -364,7 +365,7 @@ describe('多轮对话智能终止判断', () => {
           };
         }
 
-        async execute(context: ActionContext): Promise<ActionResult> {
+        async execute(_context: ActionContext): Promise<ActionResult> {
           return { success: true, completed: true };
         }
       }
@@ -405,7 +406,7 @@ describe('多轮对话智能终止判断', () => {
       });
 
       // 第一轮：用户理解度不足
-      let result = await action.execute(context, '我不太明白');
+      const result = await action.execute(context, '我不太明白');
       expect(result.completed).toBe(false);
       expect(result.metadata?.exitDecision?.should_exit).toBe(false);
 

@@ -3,31 +3,37 @@
  *
  * 【DDD 视角】应用层抽象基类
  * 定义 Action 执行器的通用结构与行为
- * 
+ *
  * 核心职责：
  * 1. 执行上下文：封装 Action 执行时需要的所有信息（session/phase/topic/variables）
  * 2. 结果结构：统一返回格式（成功状态/完成标记/AI消息/提取变量）
  * 3. 状态管理：维护 Action 的轮次计数与完成状态
  * 4. 变量操作：提供变量读取与模板替换的通用方法
- * 
+ *
  * 设计要点：
  * - ActionContext: 执行上下文，包含 Session 状态、变量、对话历史等
  * - ActionResult: 统一返回结构，支持多轮对话（completed 标记）
  * - BaseAction: 抽象基类，所有具体 Action 继承并实现 execute 方法
- * 
+ *
  * 参照 Python 版本: legacy-python/src/actions/base.py
  */
 
 import * as path from 'path';
 
-import type { VariableStore, Position, ExitDecision, ExitCriteria, ExitPolicy, ExitDecisionSource } from '@heartrule/shared-types';
+import type {
+  VariableStore,
+  Position,
+  ExitDecision,
+  ExitCriteria,
+  ExitPolicy,
+} from '@heartrule/shared-types';
 
 import type { LLMDebugInfo } from '../engines/llm-orchestration/orchestrator.js';
 import { VariableScopeResolver } from '../engines/variable-scope/variable-scope-resolver.js';
 
 /**
  * Action 执行上下文
- * 
+ *
  * 封装 Action 执行时需要的所有上下文信息：
  * - 位置信息：sessionId, phaseId, topicId, actionId
  * - 变量状态：variables (旧版) + variableStore (新版分层结构)
@@ -56,7 +62,7 @@ export interface ActionContext {
 
 /**
  * Action 执行结果
- * 
+ *
  * 统一的返回结构，支持多轮对话与变量提取：
  * - success: 执行是否成功（false 表示出错）
  * - completed: Action 是否完成（false 表示需等待用户下一轮输入）
@@ -81,14 +87,14 @@ export interface ActionResult {
  *
  * 【DDD 视角】应用层抽象基类
  * 所有 Action 执行器的抽象父类，定义通用行为与接口。
- * 
+ *
  * 核心能力：
  * - execute(): 抽象方法，由子类实现具体执行逻辑
  * - substituteVariables(): 变量模板替换，支持作用域查找
  * - getConfig(): 配置读取，兼容 camelCase 和 snake_case
  * - reset(): 重置 Action 状态（轮次计数）
  * - evaluateExitCondition(): 辅助方法，用于交互型 Action 的退出决策
- * 
+ *
  * 状态管理：
  * - currentRound: 当前执行轮次（多轮对话场景）
  * - maxRounds: 最大轮次限制
@@ -109,7 +115,7 @@ export abstract class BaseAction {
     this.config = config;
     this.maxRounds = config.maxRounds || config.max_rounds || 5;
     this.exitCriteria = config.exit_criteria || config.exitCriteria;
-    
+
     // 默认退出策略：不支持退出机制（由子类覆盖）
     this.exitPolicy = {
       supportsExit: false,
@@ -269,13 +275,13 @@ export abstract class BaseAction {
 
   /**
    * 退出条件评估（辅助方法，仅供交互型 Action 内部使用）
-   * 
+   *
    * 按照四级优先级执行退出决策：
    * 1. 硬性上限检查（max_rounds）
    * 2. 退出标志检查（EXIT 变量）
    * 3. 退出条件评估（exit_criteria）
    * 4. LLM 建议（llm_suggestion）
-   * 
+   *
    * @param context - 执行上下文
    * @param llmOutput - LLM 输出结果（可选）
    * @returns 退出决策结果
@@ -293,7 +299,12 @@ export abstract class BaseAction {
       };
     }
 
-    const enabledSources = this.exitPolicy.enabledSources || ['max_rounds', 'exit_flag', 'exit_criteria', 'llm_suggestion'];
+    const enabledSources = this.exitPolicy.enabledSources || [
+      'max_rounds',
+      'exit_flag',
+      'exit_criteria',
+      'llm_suggestion',
+    ];
 
     // 优先级 1: 硬性上限检查（max_rounds）
     if (enabledSources.includes('max_rounds') && this.currentRound >= this.maxRounds) {
@@ -353,7 +364,7 @@ export abstract class BaseAction {
 
   /**
    * 评估退出条件（exit_criteria）
-   * 
+   *
    * @param context - 执行上下文
    * @param llmOutput - LLM 输出结果（可选）
    * @returns 退出决策结果
@@ -384,12 +395,12 @@ export abstract class BaseAction {
     // 检查理解度阈值
     if (this.exitCriteria.understanding_threshold !== undefined && llmOutput) {
       const understandingLevel =
-        llmOutput.assessment?.understanding_level ||
-        llmOutput.understanding_level ||
-        0;
+        llmOutput.assessment?.understanding_level || llmOutput.understanding_level || 0;
 
       if (understandingLevel >= this.exitCriteria.understanding_threshold) {
-        conditions.push(`理解度达标 (${understandingLevel}>=${this.exitCriteria.understanding_threshold})`);
+        conditions.push(
+          `理解度达标 (${understandingLevel}>=${this.exitCriteria.understanding_threshold})`
+        );
       } else {
         return {
           should_exit: false,
@@ -401,10 +412,7 @@ export abstract class BaseAction {
 
     // 检查是否允许有疑问时退出
     if (this.exitCriteria.has_questions !== undefined && llmOutput) {
-      const hasQuestions =
-        llmOutput.assessment?.has_questions ||
-        llmOutput.has_questions ||
-        false;
+      const hasQuestions = llmOutput.assessment?.has_questions || llmOutput.has_questions || false;
 
       if (!this.exitCriteria.has_questions && hasQuestions) {
         return {
