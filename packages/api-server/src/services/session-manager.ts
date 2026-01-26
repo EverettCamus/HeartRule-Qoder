@@ -7,6 +7,7 @@
 import { ScriptExecutor, ExecutionStatus } from '@heartrule/core-engine';
 import type { ExecutionState } from '@heartrule/core-engine';
 import type { DetailedApiError } from '@heartrule/shared-types';
+import { VariableScope } from '@heartrule/shared-types';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
@@ -274,7 +275,7 @@ export class SessionManager {
       lastAiMessage: null,
     };
 
-    // 确保 variableStore.global 包含最新的全局变量
+    // 确保 variableStore.global 包含最新的全局变量，并添加 scope 元数据
     if (executionState.variableStore) {
       if (!executionState.variableStore.global) executionState.variableStore.global = {};
       for (const [key, value] of Object.entries(globalVariables)) {
@@ -284,9 +285,18 @@ export class SessionManager {
             type: typeof value,
             source: 'global_sync',
             lastUpdated: new Date().toISOString(),
+            scope: VariableScope.GLOBAL, // 🔧 明确标记为global作用域
           };
+          console.log(
+            `[SessionManager] 🔄 Synced global variable "${key}" to variableStore.global:`,
+            value
+          );
         }
       }
+      console.log(
+        '[SessionManager] ✅ Global variables synchronized:',
+        Object.keys(executionState.variableStore.global)
+      );
     }
 
     console.log('[SessionManager] 📋 Restored execution state:', {
@@ -584,6 +594,11 @@ export class SessionManager {
           }
         }
       }
+
+      console.log(
+        '[SessionManager] 📋 Loaded global variables from global.yaml:',
+        Object.keys(globalVariables)
+      );
 
       return globalVariables;
     } catch (error) {
