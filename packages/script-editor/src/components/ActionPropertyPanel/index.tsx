@@ -1,4 +1,5 @@
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import type { ValidationErrorDetail } from '@heartrule/core-engine';
 import {
   Form,
   Input,
@@ -14,6 +15,7 @@ import {
   Switch,
   InputNumber,
   Checkbox,
+  Alert,
 } from 'antd';
 import React, { useRef } from 'react';
 
@@ -28,12 +30,14 @@ interface ActionPropertyPanelProps {
   action: Action | null;
   actionIndex: number | null;
   onSave: (updatedAction: Action) => void;
+  validationErrors?: ValidationErrorDetail[];
 }
 
 export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
   action,
   actionIndex,
   onSave,
+  validationErrors = [],
 }) => {
   const [form] = Form.useForm();
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -54,7 +58,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
         formValues.max_rounds = action.max_rounds ?? 5;
         formValues.exit_criteria = {
           understanding_threshold: action.exit_criteria?.understanding_threshold ?? 80,
-          has_questions: action.exit_criteria?.has_questions ?? false
+          has_questions: action.exit_criteria?.has_questions ?? false,
         };
       } else if (action.type === 'ai_ask') {
         formValues.ai_ask = action.ai_ask;
@@ -98,12 +102,12 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
 
       if (action.type === 'ai_say') {
         Object.assign(updatedAction, {
-          content: values.content,  // 使用新字段
-          ai_say: values.content,   // 同时更新旧字段以保持向后兼容
+          content: values.content, // 使用新字段
+          ai_say: values.content, // 同时更新旧字段以保持向后兼容
           tone: values.tone || undefined,
           require_acknowledgment: values.require_acknowledgment,
           max_rounds: values.max_rounds,
-          exit_criteria: values.exit_criteria,  // 新增退出条件
+          exit_criteria: values.exit_criteria, // 新增退出条件
         });
       } else if (action.type === 'ai_ask') {
         Object.assign(updatedAction, {
@@ -148,7 +152,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
-    
+
     autoSaveTimerRef.current = setTimeout(() => {
       handleSave();
     }, 600); // 600ms 防抖延迟
@@ -173,11 +177,39 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
 
   return (
     <div className="action-property-panel">
+      {/* 验证错误提示 */}
+      {validationErrors.length > 0 && (
+        <div style={{ padding: '16px', paddingBottom: 0 }}>
+          <Alert
+            message={`此 Action 存在 ${validationErrors.length} 个验证错误`}
+            description={
+              <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                {validationErrors.map((error, index) => (
+                  <li key={index}>
+                    <Text type="danger">{error.message}</Text>
+                    {error.suggestion && (
+                      <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
+                        💡 {error.suggestion}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            }
+            type="error"
+            showIcon
+            closable={false}
+            style={{ marginBottom: '16px' }}
+          />
+        </div>
+      )}
+
       <Card
         title={
           <Space>
             <Text strong>Action Property Settings</Text>
             <Tag color="blue">#{(actionIndex ?? 0) + 1}</Tag>
+            {validationErrors.length > 0 && <Tag color="error">有错误</Tag>}
           </Space>
         }
         size="small"
@@ -192,10 +224,10 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                 rules={[{ required: true, message: 'Please enter the lecture content' }]}
                 tooltip="Core content for lecture/persuasion, supports multi-line text and script variables"
               >
-                <TextArea 
-                  rows={10} 
-                  placeholder="Enter lecture content, can use variables like {variable_name}..." 
-                  showCount 
+                <TextArea
+                  rows={10}
+                  placeholder="Enter lecture content, can use variables like {variable_name}..."
+                  showCount
                 />
               </Form.Item>
 
@@ -203,8 +235,8 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
 
               <Row gutter={16}>
                 <Col span={8}>
-                  <Form.Item 
-                    label="Require Acknowledgment" 
+                  <Form.Item
+                    label="Require Acknowledgment"
                     name="require_acknowledgment"
                     valuePropName="checked"
                     tooltip="Whether user reply is required before continuing"
@@ -213,8 +245,8 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                   </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item 
-                    label="Max Rounds" 
+                  <Form.Item
+                    label="Max Rounds"
                     name="max_rounds"
                     tooltip="Protection mechanism against infinite loops"
                     rules={[{ type: 'number', min: 1, max: 20 }]}
@@ -234,23 +266,23 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                 <Panel header="Advanced Exit Condition Settings (Optional)" key="exit_criteria">
                   <Row gutter={16}>
                     <Col span={12}>
-                      <Form.Item 
-                        label="Understanding Threshold" 
+                      <Form.Item
+                        label="Understanding Threshold"
                         name={['exit_criteria', 'understanding_threshold']}
                         tooltip="Allow exit when user understanding reaches this threshold (0-100)"
                       >
-                        <InputNumber 
-                          min={0} 
-                          max={100} 
+                        <InputNumber
+                          min={0}
+                          max={100}
                           style={{ width: '100%' }}
-                          formatter={value => `${value}%`}
-                          parser={value => value?.replace('%', '') as any}
+                          formatter={(value) => `${value}%`}
+                          parser={(value) => value?.replace('%', '') as any}
                         />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item 
-                        label="Allow Exit With Questions" 
+                      <Form.Item
+                        label="Allow Exit With Questions"
                         name={['exit_criteria', 'has_questions']}
                         valuePropName="checked"
                         tooltip="Whether to allow exiting topic when user still has questions"
@@ -283,17 +315,13 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                   </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item 
-                    label="Max Rounds" 
-                    name="max_rounds"
-                    tooltip="最大交互轮数"
-                  >
+                  <Form.Item label="Max Rounds" name="max_rounds" tooltip="最大交互轮数">
                     <InputNumber min={1} max={10} style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item 
-                    label="Required" 
+                  <Form.Item
+                    label="Required"
                     name="required"
                     valuePropName="checked"
                     tooltip="是否必填"
@@ -316,7 +344,7 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                 配置需要从用户回答中提取的变量，支持提取单个或多个变量
               </Text>
               <Form.List name="output">
-                {(fields, { add, remove}) => (
+                {(fields, { add, remove }) => (
                   <>
                     {fields.map((field, index) => (
                       <Card
@@ -358,33 +386,30 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                           style={{ marginBottom: 0 }}
                           tooltip="帮助 AI 理解如何提取该变量的描述"
                         >
-                          <TextArea 
-                            rows={2} 
-                            placeholder="例：从用户回复中提取姓名或昵称" 
-                          />
+                          <TextArea rows={2} placeholder="例：从用户回复中提取姓名或昵称" />
                         </Form.Item>
                       </Card>
                     ))}
-                    <Button 
-                      type="dashed" 
-                      onClick={() => add()} 
-                      block 
+                    <Button
+                      type="dashed"
+                      onClick={() => add()}
+                      block
                       icon={<PlusOutlined />}
                       style={{ marginTop: 8 }}
                     >
                       添加输出变量
                     </Button>
                     {fields.length === 0 && (
-                      <div style={{ 
-                        padding: '20px', 
-                        textAlign: 'center', 
-                        background: '#fafafa', 
-                        borderRadius: '4px',
-                        border: '1px dashed #d9d9d9'
-                      }}>
-                        <Text type="secondary">
-                          暂无变量配置，点击上方按钮添加变量提取配置
-                        </Text>
+                      <div
+                        style={{
+                          padding: '20px',
+                          textAlign: 'center',
+                          background: '#fafafa',
+                          borderRadius: '4px',
+                          border: '1px dashed #d9d9d9',
+                        }}
+                      >
+                        <Text type="secondary">暂无变量配置，点击上方按钮添加变量提取配置</Text>
                       </div>
                     )}
                   </>

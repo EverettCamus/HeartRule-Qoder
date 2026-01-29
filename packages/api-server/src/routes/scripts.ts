@@ -1,3 +1,4 @@
+import { schemaValidator } from '@heartrule/core-engine';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
@@ -46,12 +47,31 @@ export async function registerScriptRoutes(app: FastifyInstance) {
         const now = new Date();
 
         // 解析 YAML 内容
-        let parsedContent: any = null;
+        let parsedContent: Record<string, unknown> | null = null;
         try {
           parsedContent = yaml.parse(body.scriptContent);
           app.log.info({ scriptId }, 'YAML parsed successfully');
+
+          // 执行 Schema 验证
+          const validationResult = schemaValidator.validateYAML(body.scriptContent);
+          if (!validationResult.valid) {
+            app.log.warn({ scriptId, errors: validationResult.errors }, 'Schema validation failed');
+            return reply.status(400).send({
+              success: false,
+              error: 'SCHEMA_VALIDATION_FAILED',
+              message: '脚本 Schema 验证失败',
+              errors: validationResult.errors,
+            });
+          }
+          app.log.info({ scriptId }, 'Schema validation passed');
         } catch (parseError) {
-          app.log.warn({ scriptId, error: parseError }, 'Failed to parse YAML, storing as null');
+          app.log.warn({ scriptId, error: parseError }, 'Failed to parse YAML');
+          return reply.status(400).send({
+            success: false,
+            error: 'YAML_PARSE_ERROR',
+            message: 'YAML 解析失败',
+            details: (parseError as Error).message,
+          });
         }
 
         await db.insert(scripts).values({
@@ -217,12 +237,34 @@ export async function registerScriptRoutes(app: FastifyInstance) {
         const now = new Date();
 
         // 解析 YAML 内容
-        let parsedContent: any = null;
+        let parsedContent: Record<string, unknown> | null = null;
         try {
           parsedContent = yaml.parse(yamlContent);
           app.log.info({ scriptName }, 'YAML parsed successfully for import');
+
+          // 执行 Schema 验证
+          const validationResult = schemaValidator.validateYAML(yamlContent);
+          if (!validationResult.valid) {
+            app.log.warn(
+              { scriptName, errors: validationResult.errors },
+              'Schema validation failed during import'
+            );
+            return reply.status(400).send({
+              success: false,
+              error: 'SCHEMA_VALIDATION_FAILED',
+              message: '脚本 Schema 验证失败',
+              errors: validationResult.errors,
+            });
+          }
+          app.log.info({ scriptName }, 'Schema validation passed for import');
         } catch (parseError) {
           app.log.warn({ scriptName, error: parseError }, 'Failed to parse YAML during import');
+          return reply.status(400).send({
+            success: false,
+            error: 'YAML_PARSE_ERROR',
+            message: 'YAML 解析失败',
+            details: (parseError as Error).message,
+          });
         }
 
         if (existingScript) {
@@ -307,12 +349,21 @@ export async function registerScriptRoutes(app: FastifyInstance) {
           });
         }
 
-        // TODO: 使用YAMLParser验证脚本
-        // 目前返回模拟结果
-        return {
-          valid: true,
-          message: 'Script validation successful (mock)',
-        };
+        // 使用 SchemaValidator 验证脚本
+        const validationResult = schemaValidator.validateYAML(script.scriptContent);
+
+        if (validationResult.valid) {
+          return {
+            valid: true,
+            message: '脚本验证成功',
+          };
+        } else {
+          return reply.status(400).send({
+            valid: false,
+            message: '脚本验证失败',
+            errors: validationResult.errors,
+          });
+        }
       } catch (error) {
         app.log.error(error);
         return reply.status(500).send({

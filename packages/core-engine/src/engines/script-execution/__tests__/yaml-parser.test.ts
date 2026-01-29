@@ -74,16 +74,14 @@ session:
 
   it('should validate technique script schema', () => {
     const validData = {
-      topic: {
-        topic_id: 'technique1',
-        actions: [
-          {
-            action_type: 'ai_ask',
-            action_id: 'question1',
-            config: {},
-          },
-        ],
-      },
+      topic_id: 'technique_1',
+      actions: [
+        {
+          action_type: 'ai_ask',
+          action_id: 'question1',
+          config: {},
+        },
+      ],
     };
 
     expect(() => parser.validateTechniqueScript(validData)).not.toThrow();

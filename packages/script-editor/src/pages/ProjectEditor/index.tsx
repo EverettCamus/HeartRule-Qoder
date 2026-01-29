@@ -32,6 +32,7 @@ import {
   Divider,
   Dropdown,
   Menu,
+  Alert,
 } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import yaml from 'js-yaml';
@@ -46,10 +47,14 @@ import { ActionPropertyPanel } from '../../components/ActionPropertyPanel';
 import DebugChatPanel from '../../components/DebugChatPanel';
 import DebugConfigModal from '../../components/DebugConfigModal';
 import { PhaseTopicPropertyPanel } from '../../components/PhaseTopicPropertyPanel';
+import ValidationErrorPanel from '../../components/ValidationErrorPanel';
 import VersionListPanel from '../../components/VersionListPanel';
+import { ValidationService } from '../../services/validation-service';
+import type { ValidationResult } from '../../services/validation-service';
 import type { Action, SessionScript, Step } from '../../types/action';
 import { globalHistoryManager } from '../../utils/history-manager';
 import type { FocusPath } from '../../utils/history-manager';
+import { isErrorForAction } from '../../utils/validation-path-parser';
 import './style.css';
 
 const { Header, Sider, Content } = Layout;
@@ -100,6 +105,11 @@ const ProjectEditor: React.FC = () => {
   // 版本管理面板状态
   const [versionPanelVisible, setVersionPanelVisible] = useState(false);
 
+  // YAML Schema 验证相关状态
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [showValidationErrors, setShowValidationErrors] = useState(true);
+  const validationServiceRef = useRef(new ValidationService({ debounceMs: 500 }));
+
   // 可视化编辑相关状态
   const [editMode, setEditMode] = useState<'yaml' | 'visual'>('yaml'); // 编辑模式：YAML/可视化
   const [parsedScript, setParsedScript] = useState<SessionScript | null>(null); // 解析后的脚本
@@ -140,47 +150,49 @@ const ProjectEditor: React.FC = () => {
 
   // 自动保存的 debounce timer
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // ActionNodeList 组件引用，用于控制展开和滚动
   const actionNodeListRef = useRef<ActionNodeListRef>(null);
-  
+
   // 正在处理的 undo/redo 操作（防止并发）
   const processingUndoRedoRef = useRef<boolean>(false);
-  
+
   // 使用 ref 追踪当前选中的文件（避免闭包问题）
   const selectedFileRef = useRef<ScriptFile | null>(null);
-  
+
   // 追踪是否已经为当前文件推入过初始状态
   const initialStatePushedRef = useRef<Set<string>>(new Set());
-  
+
   // 为每个文件保存一份YAML基线（避免跨文件污染）
   const fileYamlBaseRef = useRef<Map<string, string>>(new Map());
-  
+
   // 同步 selectedFile 到 ref
   useEffect(() => {
-    console.log(`[StateSync] selectedFile 更新: ${selectedFile?.fileName} (id: ${selectedFile?.id})`);
+    console.log(
+      `[StateSync] selectedFile 更新: ${selectedFile?.fileName} (id: ${selectedFile?.id})`
+    );
     selectedFileRef.current = selectedFile;
   }, [selectedFile]);
-  
+
   // 监听 currentPhases 和 selectedFile，在首次加载时推入初始状态
   useEffect(() => {
     if (!selectedFile || currentPhases.length === 0) {
       return;
     }
-    
+
     // 检查是否已经为该文件推入过初始状态
     if (initialStatePushedRef.current.has(selectedFile.id)) {
       return;
     }
-    
+
     // 检查历史栈中是否已有该文件的记录
-    const hasHistory = globalHistoryManager.getEntries().some(e => e.fileId === selectedFile.id);
+    const hasHistory = globalHistoryManager.getEntries().some((e) => e.fileId === selectedFile.id);
     if (hasHistory) {
       console.log(`[InitialState] 文件 ${selectedFile.fileName} 已有历史记录，跳过`);
       initialStatePushedRef.current.add(selectedFile.id);
       return;
     }
-    
+
     // 计算一个合理的初始焦点（如果存在Action）
     let initialFocus: FocusPath | null = null;
     if (
@@ -195,7 +207,7 @@ const ProjectEditor: React.FC = () => {
         type: 'action',
       };
     }
-    
+
     // 推入初始状态（作为第一条操作，其 beforePhases 为空）
     console.log(`[InitialState] 🎉 为文件 ${selectedFile.fileName} 推入初始状态`);
     globalHistoryManager.push({
@@ -208,10 +220,10 @@ const ProjectEditor: React.FC = () => {
       operation: '初始状态',
       timestamp: Date.now(),
     });
-    
+
     initialStatePushedRef.current.add(selectedFile.id);
   }, [currentPhases, selectedFile]);
-  
+
   // 监控 fileContent 变化，用于调试
   useEffect(() => {
     console.log('[fileContent Changed] fileContent 长度:', fileContent.length);
@@ -245,51 +257,60 @@ const ProjectEditor: React.FC = () => {
             topic.actions?.forEach((action: any) => {
               // 规范化 Action 类型，将 config 字段映射到前端期望的字段名
               if (action.action_type === 'ai_say') {
-                const contentValue = action.config?.content_template || '';
+                // 优先使用 content，然后回退到 content_template（向后兼容）
+                const contentValue =
+                  action.config?.content || action.config?.content_template || '';
                 actions.push({
                   type: 'ai_say',
-                  content: contentValue,  // 新字段
-                  ai_say: contentValue,   // 旧字段，保持向后兼容
+                  content: contentValue, // 新字段
+                  ai_say: contentValue, // 旧字段，保持向后兼容
                   tone: action.config?.tone,
-                  condition: action.config?.condition,
-                  require_acknowledgment: action.config?.require_acknowledgment,
+                  exit: action.config?.exit,
+                  condition: action.condition,
                   max_rounds: action.config?.max_rounds,
                   action_id: action.action_id,
                   _raw: action, // 保留原始数据用于反向转换
                 });
               } else if (action.action_type === 'ai_ask') {
+                // 优先使用 content，然后回退到 question_template 或 content_template
+                const contentValue =
+                  action.config?.content ||
+                  action.config?.question_template ||
+                  action.config?.content_template ||
+                  '';
                 actions.push({
                   type: 'ai_ask',
-                  ai_ask: action.config?.question_template || action.config?.content_template || '',
+                  ai_ask: contentValue,
                   tone: action.config?.tone,
                   exit: action.config?.exit,
-                  tolist: action.config?.tolist,
-                  question_template: action.config?.question_template,
-                  target_variable: action.config?.target_variable,
-                  extraction_prompt: action.config?.extraction_prompt,
-                  required: action.config?.required,
                   max_rounds: action.config?.max_rounds,
-                  output: action.config?.target_variable
-                    ? [
-                        {
-                          get: action.config.target_variable,
-                          define: action.config.extraction_prompt || '',
-                        },
-                      ]
-                    : action.config?.output || [],
-                  condition: action.config?.condition,
+                  output: action.config?.output || [],
+                  condition: action.condition,
                   action_id: action.action_id,
                   _raw: action,
                 });
               } else if (action.action_type === 'ai_think') {
+                // 优先使用 content，然后回退到 prompt_template
+                const contentValue =
+                  action.config?.content ||
+                  action.config?.prompt_template ||
+                  action.config?.think_goal ||
+                  '';
                 actions.push({
                   type: 'ai_think',
-                  think: action.config?.prompt_template || action.config?.think_goal || '',
-                  output: (action.config?.output_variables || []).map((v: string) => ({
-                    get: v,
-                    define: '',
-                  })),
-                  condition: action.config?.condition,
+                  think: contentValue,
+                  output: action.config?.output || [],
+                  condition: action.condition,
+                  action_id: action.action_id,
+                  _raw: action,
+                });
+              } else if (action.action_type === 'use_skill') {
+                actions.push({
+                  type: 'use_skill',
+                  skill: action.config?.skill || '',
+                  input: action.config?.input || [],
+                  output: action.config?.output || [],
+                  condition: action.condition,
                   action_id: action.action_id,
                   _raw: action,
                 });
@@ -434,10 +455,10 @@ const ProjectEditor: React.FC = () => {
 
     try {
       setLoading(true);
-      
+
       // 注意：不在这里 clear，因为切换文件时也会触发 loadProjectData
       // clear 应该在 useEffect 中检测 projectId 变化时执行
-      
+
       const [projectRes, filesRes] = await Promise.all([
         projectsApi.getProject(projectId),
         projectsApi.getProjectFiles(projectId),
@@ -455,23 +476,23 @@ const ProjectEditor: React.FC = () => {
 
         // 优先级：1. 当前选中的文件 2. URL中的fileId 3. 第一个文件
         let targetFile = null;
-        
+
         // 如果当前有选中的文件，优先重新加载该文件（版本切换场景）
         const currentFileId = selectedFileRef.current?.id;
         if (currentFileId) {
           targetFile = filesRes.data.find((f) => f.id === currentFileId);
         }
-        
+
         // 如果没有选中文件，检查URL中的fileId
         if (!targetFile && fileId) {
           targetFile = filesRes.data.find((f) => f.id === fileId);
         }
-        
+
         // 都没有就加载第一个文件
         if (!targetFile && filesRes.data.length > 0) {
           targetFile = filesRes.data[0];
         }
-        
+
         if (targetFile) {
           loadFile(targetFile);
         }
@@ -482,7 +503,6 @@ const ProjectEditor: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, fileId]);
 
   // 监听 projectId 变化，切换工程时清空历史栈
@@ -529,13 +549,22 @@ const ProjectEditor: React.FC = () => {
     if (file.fileType === 'session' && content) {
       parseYamlToScript(content);
       setEditMode('visual'); // 需求1: 会谈脚本默认使用可视化编辑模式
+
+      // 触发点 1: 文件打开时验证
+      const result = validationServiceRef.current.validateOnOpen(content);
+      setValidationResult(result);
+      setShowValidationErrors(true);
+
+      if (!result.valid) {
+        console.log(`[Validation] 文件打开验证失败，发现 ${result.errors.length} 个错误`);
+      }
     } else {
       setParsedScript(null);
       setCurrentPhases([]);
       setSelectedActionPath(null);
       setEditMode('yaml'); // 非会谈脚本只能用 YAML 模式
+      setValidationResult(null); // 清除验证结果
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 处理树节点选择
@@ -574,6 +603,15 @@ const ProjectEditor: React.FC = () => {
         // 更新该文件的YAML基线（包含metadata的修改）
         fileYamlBaseRef.current.set(selectedFile.id, e.target.value);
         parseYamlToScript(e.target.value);
+
+        // 触发点 2: 内容变更时验证（带防抖）
+        validationServiceRef.current.validateOnChange(e.target.value, (result) => {
+          setValidationResult(result);
+          setShowValidationErrors(true);
+          if (!result.valid) {
+            console.log(`[Validation] 内容变更验证失败，发现 ${result.errors.length} 个错误`);
+          }
+        });
       }
     },
     [selectedFile]
@@ -584,6 +622,19 @@ const ProjectEditor: React.FC = () => {
     if (!selectedFile || !projectId) return;
 
     try {
+      // 触发点 3: 保存前验证（阻塞式）
+      if (selectedFile.fileType === 'session') {
+        const result = await validationServiceRef.current.validateBeforeSave(fileContent);
+        setValidationResult(result);
+        setShowValidationErrors(true);
+
+        if (!result.valid) {
+          console.log(`[Validation] 保存前验证失败，发现 ${result.errors.length} 个错误`);
+          message.error(`验证失败，发现 ${result.errors.length} 个错误，请修复后再保存`);
+          return; // 阻止保存
+        }
+      }
+
       setSaving(true);
       await projectsApi.updateFile(projectId, selectedFile.id, {
         yamlContent: fileContent,
@@ -617,7 +668,7 @@ const ProjectEditor: React.FC = () => {
 
     try {
       setSaving(true);
-      
+
       // 获取当前最新版本号
       let newVersion = 'v1.0.0'; // 默认首个版本
       try {
@@ -680,20 +731,20 @@ const ProjectEditor: React.FC = () => {
       console.log('[syncPhasesToYaml] targetFileId:', targetFileId || '未指定，使用当前文件');
       console.log('[syncPhasesToYaml] parsedScript 状态:', parsedScript ? '存在' : 'null');
       console.log('[syncPhasesToYaml] selectedFile:', selectedFile?.fileName);
-      
+
       try {
         let updatedScript: any;
         let baseScript: any = null;
 
         // 使用显式传入的 targetFileId，或者使用当前文件 ID
         const currentFileId = targetFileId || selectedFile?.id || selectedFileRef.current?.id;
-        
+
         // 获取目标文件信息（用于 session_id）
         let targetFile = selectedFile;
         if (targetFileId && targetFileId !== selectedFile?.id) {
-          targetFile = files.find(f => f.id === targetFileId) || selectedFile;
+          targetFile = files.find((f) => f.id === targetFileId) || selectedFile;
         }
-        
+
         if (currentFileId) {
           const baseYaml = fileYamlBaseRef.current.get(currentFileId);
           if (baseYaml) {
@@ -734,7 +785,7 @@ const ProjectEditor: React.FC = () => {
             phases: [],
           };
         }
-        
+
         // 新格式：更新 session.phases
         if (updatedScript?.session) {
           console.log('[syncPhasesToYaml] 检测到 session 结构');
@@ -743,7 +794,7 @@ const ProjectEditor: React.FC = () => {
             updatedScript.session.phases = [];
             console.log('[syncPhasesToYaml] 初始化 session.phases 数组');
           }
-          
+
           console.log('[syncPhasesToYaml] 开始构建 phases 数据...');
           // 重建 phases 结构，保持其他字段不变
           updatedScript.session.phases = phases.map((phase, pi) => {
@@ -755,68 +806,134 @@ const ProjectEditor: React.FC = () => {
               description: phase.description,
               topics: phase.topics.map((topic, ti) => {
                 const originalTopic = originalPhase.topics?.[ti] || {};
-                return {
+                const topicResult: any = {
                   ...originalTopic,
                   topic_id: topic.topic_id,
                   topic_name: topic.topic_name,
                   description: topic.description,
-                  declare: topic.localVariables,
                   actions: topic.actions.map((action) => {
-                    // 将前端字段映射回 config 格式
+                    // 将前端字段映射回 config 格式（符合最新 Schema 规范）
                     if (action._raw) {
                       // 使用保留的原始数据
                       const rawAction = action._raw as any;
                       if (action.type === 'ai_say') {
-                        // 修复: 优先使用 content 字段，如果没有则回退到 ai_say
+                        // ai_say: 使用 content 字段（不是 content_template）
                         const contentValue = action.content || action.ai_say || '';
-                        return {
-                          ...rawAction,
-                          config: {
-                            ...rawAction.config,
-                            content_template: contentValue,
-                            tone: action.tone,
-                            condition: action.condition,
-                            require_acknowledgment: action.require_acknowledgment,
-                            max_rounds: action.max_rounds,
-                          },
+                        const config: any = {};
+
+                        // 必填字段
+                        if (contentValue) {
+                          config.content = contentValue;
+                        }
+
+                        // 只包含非空字段
+                        if (action.tone) config.tone = action.tone;
+                        if (action.exit) config.exit = action.exit;
+                        if (action.max_rounds) config.max_rounds = action.max_rounds;
+
+                        const result: any = {
+                          action_type: 'ai_say',
+                          action_id: rawAction.action_id || action.id,
+                          config,
                         };
+
+                        if (action.condition) result.condition = action.condition;
+                        return result;
                       } else if (action.type === 'ai_ask') {
-                        return {
-                          ...rawAction,
-                          config: {
-                            ...rawAction.config,
-                            question_template: action.ai_ask,
-                            tone: action.tone,
-                            exit: action.exit,
-                            tolist: action.tolist,
-                            target_variable: action.target_variable || action.output?.[0]?.get,
-                            extraction_prompt: action.extraction_prompt || action.output?.[0]?.define,
-                            required: action.required,
-                            max_rounds: action.max_rounds,
-                            output: action.output && action.output.length > 1 ? action.output : undefined,
-                            condition: action.condition,
-                          },
+                        // ai_ask: 使用 content 字段（不是 question_template）
+                        // 移除废弃字段: tolist, target_variable, extraction_prompt, required
+                        const config: any = {};
+
+                        // 必填字段
+                        if (action.ai_ask) {
+                          config.content = action.ai_ask;
+                        }
+
+                        // 只包含非空字段
+                        if (action.tone) config.tone = action.tone;
+                        if (action.exit) config.exit = action.exit;
+                        if (action.max_rounds) config.max_rounds = action.max_rounds;
+
+                        // 只在有输出变量时才包含 output 数组
+                        if (action.output && action.output.length > 0) {
+                          config.output = action.output;
+                        }
+
+                        const result: any = {
+                          action_type: 'ai_ask',
+                          action_id: rawAction.action_id || action.id,
+                          config,
                         };
+
+                        if (action.condition) result.condition = action.condition;
+                        return result;
                       } else if (action.type === 'ai_think') {
-                        return {
-                          ...rawAction,
-                          config: {
-                            ...rawAction.config,
-                            prompt_template: action.think,
-                            output_variables: action.output?.map((o) => o.get),
-                            condition: action.condition,
-                          },
+                        // ai_think: 使用 content 字段（不是 prompt_template）
+                        const config: any = {};
+
+                        // 必填字段
+                        if (action.think) {
+                          config.content = action.think;
+                        }
+
+                        // 使用 output 数组（不是 output_variables）
+                        if (action.output && action.output.length > 0) {
+                          config.output = action.output;
+                        }
+
+                        const result: any = {
+                          action_type: 'ai_think',
+                          action_id: rawAction.action_id || action.id,
+                          config,
                         };
+
+                        if (action.condition) result.condition = action.condition;
+                        return result;
+                      } else if (action.type === 'use_skill') {
+                        // use_skill: 使用 skill, input, output 字段
+                        const config: any = {};
+
+                        // 必填字段
+                        if (action.skill) {
+                          config.skill = action.skill;
+                        }
+
+                        if (action.input && action.input.length > 0) {
+                          config.input = action.input;
+                        }
+
+                        if (action.output && action.output.length > 0) {
+                          config.output = action.output;
+                        }
+
+                        const result: any = {
+                          action_type: 'use_skill',
+                          action_id: rawAction.action_id || action.id,
+                          config,
+                        };
+
+                        if (action.condition) result.condition = action.condition;
+                        return result;
                       }
                       return rawAction;
                     }
                     return action;
                   }),
                 };
+
+                // 只在 declare 非空时才添加
+                if (topic.localVariables && topic.localVariables.length > 0) {
+                  topicResult.declare = topic.localVariables;
+                }
+
+                return topicResult;
               }),
             };
           });
-          console.log('[syncPhasesToYaml] phases 数据构建完成，数量:', updatedScript.session.phases.length);
+          console.log(
+            '[syncPhasesToYaml] phases 数据构建完成，数量:',
+            updatedScript.session.phases.length
+          );
         }
         // 旧格式：更新 sessions[].stages[].steps[].actions[]
         else if (updatedScript.sessions?.[0]?.stages?.[0]?.steps) {
@@ -839,13 +956,13 @@ const ProjectEditor: React.FC = () => {
         });
         console.log('[syncPhasesToYaml] YAML 转换完成，长度:', newYaml.length);
         console.log('[syncPhasesToYaml] YAML 内容预览:', newYaml.substring(0, 200));
-        
+
         setFileContent(newYaml);
         console.log('[syncPhasesToYaml] setFileContent 调用完成');
-        
+
         setParsedScript(updatedScript);
         console.log('[syncPhasesToYaml] setParsedScript 调用完成');
-        
+
         console.log('[syncPhasesToYaml] YAML 同步成功，phases 数量:', phases.length);
       } catch (error) {
         console.error('同步到 YAML 失败:', error);
@@ -854,6 +971,303 @@ const ProjectEditor: React.FC = () => {
     },
     [parsedScript, selectedFile, files]
   );
+
+  /**
+   * 格式化 YAML 内容
+   * 功能：
+   * 1. 解析 YAML 并重新格式化
+   * 2. 统一缩进为 2 空格
+   * 3. 移除多余空行
+   * 4. 自动添加标记未保存
+   */
+  /**
+   * 智能修复 YAML 缩进错误
+   * 在解析前尝试修复常见的缩进问题
+   */
+  const fixYAMLIndentation = useCallback((yamlContent: string): string => {
+    const lines = yamlContent.split('\n');
+    const fixedLines: string[] = [];
+    let lastListItemIndent: number | null = null;
+    let lastKeyIndent: number | null = null;
+    let inListItem = false; // 追踪是否在列表项内部
+
+    console.log('[FixIndent] 开始修复 YAML 缩进...');
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmedLine = line.trimStart();
+
+      // 空行或注释直接保留
+      if (!trimmedLine || trimmedLine.startsWith('#')) {
+        fixedLines.push(line);
+        continue;
+      }
+
+      // 计算当前行的缩进
+      const currentIndent = line.length - trimmedLine.length;
+
+      // 检测是否是列表项（以 - 开头）
+      const isListItem = /^-\s+\w+:/.test(trimmedLine);
+
+      // 检测是否是键值对（包含冒号）
+      const keyMatch = trimmedLine.match(/^([\w_]+):\s*(.*)$/);
+      const isKeyValue = keyMatch !== null;
+
+      // 检测是否是纯列表项标记（只有 -）
+      const isPureListMarker = /^-\s*$/.test(trimmedLine);
+
+      console.log(
+        `[FixIndent] 第${i + 1}行: "${trimmedLine.substring(0, 30)}..." | 缩进=${currentIndent}, inListItem=${inListItem}, lastListItemIndent=${lastListItemIndent}`
+      );
+
+      if (isListItem) {
+        // 记录列表项的缩进
+        lastListItemIndent = currentIndent;
+        lastKeyIndent = null;
+        inListItem = true;
+        console.log(`[FixIndent] → 检测到列表项，设置 lastListItemIndent=${currentIndent}`);
+        fixedLines.push(line);
+        continue;
+      }
+
+      if (isPureListMarker) {
+        lastListItemIndent = currentIndent;
+        lastKeyIndent = null;
+        inListItem = true;
+        console.log(`[FixIndent] → 检测到纯列表标记`);
+        fixedLines.push(line);
+        continue;
+      }
+
+      // 【优先检查】：如果在列表项内部，且当前行是 Action 字段，检查缩进是否正确
+      if (inListItem && lastListItemIndent !== null && isKeyValue && keyMatch) {
+        const actionFields = ['action_type', 'action_id', 'config', 'condition'];
+        const key = keyMatch[1];
+
+        if (actionFields.includes(key)) {
+          // 这是 Action 的字段，应该缩进 = 列表项缩进 + 2
+          const correctIndent = lastListItemIndent + 2;
+
+          if (currentIndent !== correctIndent) {
+            console.log(
+              `[FixIndent] → 修复 Action 字段 "${key}" 缩进: ${currentIndent} -> ${correctIndent}`
+            );
+            fixedLines.push(' '.repeat(correctIndent) + trimmedLine);
+            lastKeyIndent = correctIndent;
+            continue;
+          }
+        }
+      }
+
+      // 检测是否退出了列表项（缩进小于或等于列表项缩进）
+      if (
+        inListItem &&
+        lastListItemIndent !== null &&
+        currentIndent <= lastListItemIndent &&
+        !isListItem &&
+        !isPureListMarker
+      ) {
+        // 非 Action 字段才真正退出列表项
+        const actionFields = ['action_type', 'action_id', 'config', 'condition'];
+        const key = keyMatch?.[1];
+
+        if (!key || !actionFields.includes(key)) {
+          // 真的退出了列表项
+          console.log(`[FixIndent] → 退出列表项（字段: ${key || 'unknown'}）`);
+          inListItem = false;
+          lastListItemIndent = null;
+        }
+      }
+
+      if (isKeyValue && keyMatch) {
+        const key = keyMatch[1];
+
+        // 规则1：修复列表项内的第一个字段后续字段
+        if (lastListItemIndent !== null && i > 0) {
+          const prevLine = lines[i - 1].trimStart();
+          const prevIsListItem = /^-\s+\w+:/.test(prevLine);
+
+          if (prevIsListItem) {
+            // 前一行是列表项（如 "- action_id: xxx"）
+            // 当前行应该缩进 = 列表项缩进 + 2
+            const correctIndent = lastListItemIndent + 2;
+
+            if (currentIndent !== correctIndent) {
+              console.log(
+                `[FixIndent] 修复列表项后的字段 "${key}" 的缩进: ${currentIndent} -> ${correctIndent}`
+              );
+              fixedLines.push(' '.repeat(correctIndent) + trimmedLine);
+              lastKeyIndent = correctIndent;
+              continue;
+            }
+          } else if (lastKeyIndent !== null && !prevLine.startsWith('-')) {
+            // 前一行是普通字段（不是列表项）
+            const prevKeyMatch = prevLine.match(/^([\w_]+):/);
+            if (prevKeyMatch && prevKeyMatch[1]) {
+              const prevIndent = lines[i - 1].length - lines[i - 1].trimStart().length;
+
+              // 检查是否应该是子字段（如 config 的子字段）
+              const prevKey = prevKeyMatch[1];
+              const configSubFields = [
+                'content',
+                'tone',
+                'exit',
+                'max_rounds',
+                'output',
+                'skill',
+                'input',
+              ];
+              const isSubField = prevKey === 'config' && configSubFields.includes(key);
+
+              if (isSubField) {
+                // 应该是子字段，缩进 = 父字段缩进 + 2
+                const correctIndent = prevIndent + 2;
+                if (currentIndent !== correctIndent) {
+                  console.log(
+                    `[FixIndent] 修复子字段 "${key}" 的缩进: ${currentIndent} -> ${correctIndent}`
+                  );
+                  fixedLines.push(' '.repeat(correctIndent) + trimmedLine);
+                  lastKeyIndent = correctIndent;
+                  continue;
+                }
+              } else if (currentIndent < prevIndent) {
+                // 缩进减少，可能是返回到上一级
+                fixedLines.push(line);
+                lastKeyIndent = currentIndent;
+                // 检查是否退出了列表项的范围
+                if (currentIndent <= lastListItemIndent) {
+                  inListItem = false;
+                  lastListItemIndent = null;
+                }
+                continue;
+              } else if (
+                inListItem &&
+                currentIndent !== prevIndent &&
+                currentIndent !== prevIndent + 2
+              ) {
+                // 在列表项内，同级字段应该对齐
+                console.log(
+                  `[FixIndent] 修复同级字段 "${key}" 的缩进: ${currentIndent} -> ${prevIndent}`
+                );
+                fixedLines.push(' '.repeat(prevIndent) + trimmedLine);
+                lastKeyIndent = prevIndent;
+                continue;
+              }
+            }
+          }
+        }
+
+        // 规则2：修复 config 子字段
+        const configSubFields = [
+          'content',
+          'tone',
+          'exit',
+          'max_rounds',
+          'output',
+          'skill',
+          'input',
+        ];
+
+        if (configSubFields.includes(key) && i > 0) {
+          const prevLine = lines[i - 1].trimStart();
+          if (prevLine.startsWith('config:')) {
+            const prevIndent = lines[i - 1].length - lines[i - 1].trimStart().length;
+            const correctIndent = prevIndent + 2;
+
+            if (currentIndent !== correctIndent) {
+              console.log(
+                `[FixIndent] 修复 config 子字段 "${key}" 的缩进: ${currentIndent} -> ${correctIndent}`
+              );
+              fixedLines.push(' '.repeat(correctIndent) + trimmedLine);
+              lastKeyIndent = correctIndent;
+              continue;
+            }
+          }
+        }
+
+        // 规则3：修复 config 字段本身
+        if (key === 'config' && lastListItemIndent !== null) {
+          const correctIndent = lastListItemIndent + 2;
+          if (currentIndent !== correctIndent) {
+            console.log(`[FixIndent] 修复 config 字段的缩进: ${currentIndent} -> ${correctIndent}`);
+            fixedLines.push(' '.repeat(correctIndent) + trimmedLine);
+            lastKeyIndent = correctIndent;
+            continue;
+          }
+        }
+
+        // 更新 lastKeyIndent
+        lastKeyIndent = currentIndent;
+      }
+
+      // 如果没有修复，保留原行
+      fixedLines.push(line);
+    }
+
+    return fixedLines.join('\n');
+  }, []);
+
+  const handleFormatYAML = useCallback(() => {
+    if (!fileContent) {
+      message.warning('没有内容可以格式化');
+      return;
+    }
+
+    try {
+      let contentToFormat = fileContent;
+
+      // 第一步：尝试智能修复缩进错误
+      try {
+        yaml.load(fileContent);
+        console.log('[FormatYAML] YAML 语法正确，直接格式化');
+      } catch (parseError) {
+        console.log('[FormatYAML] YAML 解析失败，尝试智能修复缩进...', parseError);
+        contentToFormat = fixYAMLIndentation(fileContent);
+
+        // 验证修复后是否可以解析
+        try {
+          yaml.load(contentToFormat);
+          message.info('检测到缩进错误，已自动修复');
+          console.log('[FormatYAML] 缩进修复成功');
+        } catch (fixError) {
+          console.error('[FormatYAML] 缩进修复失败:', fixError);
+          throw new Error(
+            `无法自动修复 YAML 语法错误，请手动检查：${fixError instanceof Error ? fixError.message : '未知错误'}`
+          );
+        }
+      }
+
+      // 第二步：解析并重新格式化
+      const parsedYaml = yaml.load(contentToFormat);
+
+      const formattedYaml = yaml.dump(parsedYaml, {
+        indent: 2, // 使用 2 空格缩进
+        lineWidth: 120, // 每行最大 120 字符
+        noRefs: true, // 不使用引用
+        sortKeys: false, // 保持原有键顺序
+        quotingType: '"', // 统一使用双引号
+        forceQuotes: false, // 仅在必要时使用引号
+      });
+
+      // 更新内容
+      setFileContent(formattedYaml);
+      setHasUnsavedChanges(true);
+
+      // 重新触发验证
+      if (selectedFile?.fileType === 'session') {
+        validationServiceRef.current.validateOnChange(formattedYaml, (result) => {
+          setValidationResult(result);
+          setShowValidationErrors(true);
+        });
+      }
+
+      message.success('YAML 格式化成功！');
+      console.log('[FormatYAML] 格式化完成');
+    } catch (error) {
+      console.error('[FormatYAML] 格式化失败:', error);
+      message.error(`YAML 格式化失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  }, [fileContent, selectedFile, fixYAMLIndentation]);
 
   /**
    * 推送历史记录（需求4 - 使用全局历史管理器）
@@ -899,29 +1313,44 @@ const ProjectEditor: React.FC = () => {
       // 使用 ref 检查文件匹配（不再使用 state）
       const currentFile = selectedFileRef.current;
       console.log(`[FocusNavigation] 🔍 文件匹配检查:`);
-      console.log(`[FocusNavigation]   当前文件(ref): ${currentFile?.fileName} (id: ${currentFile?.id})`);
+      console.log(
+        `[FocusNavigation]   当前文件(ref): ${currentFile?.fileName} (id: ${currentFile?.id})`
+      );
       console.log(`[FocusNavigation]   目标文件: targetFileId = ${targetFileId}`);
       console.log(`[FocusNavigation]   匹配结果: ${currentFile?.id === targetFileId}`);
-      
+
       if (currentFile?.id !== targetFileId) {
         console.warn('[FocusNavigation] ⚠️ 当前文件与目标文件不匹配，跳过焦点导航');
         return;
       }
 
       console.log(`[FocusNavigation] 🎯 应用焦点: type=${focusPath.type}`);
-      
+
       // 应用焦点
       setTimeout(() => {
-        if (focusPath.type === 'action' && focusPath.phaseIndex !== undefined && focusPath.topicIndex !== undefined && focusPath.actionIndex !== undefined) {
-          console.log(`[FocusNavigation] 🎯 设置 Action 焦点: [${focusPath.phaseIndex}, ${focusPath.topicIndex}, ${focusPath.actionIndex}]`);
+        if (
+          focusPath.type === 'action' &&
+          focusPath.phaseIndex !== undefined &&
+          focusPath.topicIndex !== undefined &&
+          focusPath.actionIndex !== undefined
+        ) {
+          console.log(
+            `[FocusNavigation] 🎯 设置 Action 焦点: [${focusPath.phaseIndex}, ${focusPath.topicIndex}, ${focusPath.actionIndex}]`
+          );
           setSelectedActionPath({
             phaseIndex: focusPath.phaseIndex,
             topicIndex: focusPath.topicIndex,
             actionIndex: focusPath.actionIndex,
           });
           setEditingType('action');
-        } else if (focusPath.type === 'topic' && focusPath.phaseIndex !== undefined && focusPath.topicIndex !== undefined) {
-          console.log(`[FocusNavigation] 🎯 设置 Topic 焦点: [${focusPath.phaseIndex}, ${focusPath.topicIndex}]`);
+        } else if (
+          focusPath.type === 'topic' &&
+          focusPath.phaseIndex !== undefined &&
+          focusPath.topicIndex !== undefined
+        ) {
+          console.log(
+            `[FocusNavigation] 🎯 设置 Topic 焦点: [${focusPath.phaseIndex}, ${focusPath.topicIndex}]`
+          );
           setSelectedTopicPath({
             phaseIndex: focusPath.phaseIndex,
             topicIndex: focusPath.topicIndex,
@@ -934,7 +1363,7 @@ const ProjectEditor: React.FC = () => {
           });
           setEditingType('phase');
         }
-        
+
         // 调用 ActionNodeList 的展开和滚动方法
         if (actionNodeListRef.current) {
           console.log('[FocusNavigation] 📜 调用 expandAndScrollTo');
@@ -950,51 +1379,53 @@ const ProjectEditor: React.FC = () => {
    * 关键修复：使用 entry.beforePhases 恢复到操作前状态
    */
   const handleUndo = useCallback(() => {
-    console.log('\n========== [Undo] 开始执行 ==========')
+    console.log('\n========== [Undo] 开始执行 ==========');
     console.log(`[Undo] 锁状态: ${processingUndoRedoRef.current}`);
-    
+
     // 防止并发执行
     if (processingUndoRedoRef.current) {
       console.log('[Undo] ❌ 正在处理上一个操作，请稍候');
       return;
     }
-    
+
     const entry = globalHistoryManager.undo();
     console.log(`[Undo] 历史管理器返回:`, entry);
-    
+
     if (!entry) {
       console.log('[Undo] ⚠️ 没有可撤销的历史');
       message.info('Already at the earliest state');
       return;
     }
-  
+
     // 使用 ref 获取最新的 selectedFile
     const currentFile = selectedFileRef.current;
     console.log(`[Undo] 📄 当前文件: ${currentFile?.fileName} (id: ${currentFile?.id})`);
     console.log(`[Undo] 🎯 目标文件: ${entry.fileName} (id: ${entry.fileId})`);
     console.log(`[Undo] 📝 操作描述: ${entry.operation}`);
-    console.log(`[Undo] 🔍 文件匹配检查: ${currentFile?.id} === ${entry.fileId} ? ${currentFile?.id === entry.fileId}`);
-    
+    console.log(
+      `[Undo] 🔍 文件匹配检查: ${currentFile?.id} === ${entry.fileId} ? ${currentFile?.id === entry.fileId}`
+    );
+
     processingUndoRedoRef.current = true;
     console.log('[Undo] 🔒 已加锁');
-  
+
     // 关键修复：使用 beforePhases 恢复到操作前状态
     const phasesToRestore = entry.beforePhases;
     const focusToRestore = entry.beforeFocusPath;
-    
+
     console.log(`[Undo] 📊 将恢复到 beforePhases，长度: ${phasesToRestore.length}`);
-    
+
     // 检查文件是否匹配
     if (currentFile?.id !== entry.fileId) {
       console.log('[Undo] ⚡ 需要跨文件切换');
-      
+
       const targetFile = files.find((f) => f.id === entry.fileId);
       console.log(`[Undo] 📋 files 数组长度: ${files.length}`);
       console.log(`[Undo] 🔎 查找结果:`, targetFile ? `找到 ${targetFile.fileName}` : '未找到');
-      
+
       if (targetFile) {
         console.log(`[Undo] ➡️ 切换: ${currentFile?.fileName} -> ${targetFile.fileName}`);
-        
+
         // 直接更新所有状态
         console.log('[Undo] 📌 开始更新 React 状态...');
         setSelectedFile(targetFile);
@@ -1004,14 +1435,16 @@ const ProjectEditor: React.FC = () => {
         setSelectedTopicPath(null);
         setEditingType(null);
         console.log('[Undo] ✅ React 状态更新调用完成（等待批量更新）');
-        
+
         // 等待 React 批量更新完成
         setTimeout(() => {
           console.log(`\n[Undo-Timeout] ⏰ 延迟回调触发`);
-          console.log(`[Undo-Timeout] 📄 selectedFileRef.current: ${selectedFileRef.current?.fileName}`);
+          console.log(
+            `[Undo-Timeout] 📄 selectedFileRef.current: ${selectedFileRef.current?.fileName}`
+          );
           console.log(`[Undo-Timeout] 🎯 targetFile: ${targetFile.fileName}`);
           console.log(`[Undo-Timeout] 📊 beforePhases 长度: ${phasesToRestore.length}`);
-          
+
           // 直接恢复历史数据
           console.log('[Undo-Timeout] 💾 开始恢复历史数据...');
           setCurrentPhases(phasesToRestore);
@@ -1020,13 +1453,13 @@ const ProjectEditor: React.FC = () => {
           setHasUnsavedChanges(true);
           setEditMode('visual');
           console.log('[Undo-Timeout] ✅ 数据恢复完成');
-            
+
           // 应用焦点导航
           console.log('[Undo-Timeout] 🎯 应用焦点导航...');
           applyFocusNavigation(focusToRestore, entry.fileId);
-            
+
           message.success(`Undone: ${entry.operation} (${targetFile.fileName})`);
-          
+
           // 释放锁
           processingUndoRedoRef.current = false;
           console.log('[Undo-Timeout] 🔓 释放锁');
@@ -1035,7 +1468,10 @@ const ProjectEditor: React.FC = () => {
       } else {
         console.error(`[Undo] ❌ 无法找到目标文件！`);
         console.error(`[Undo] 目标 fileId: ${entry.fileId}`);
-        console.error(`[Undo] 当前 files:`, files.map(f => ({ id: f.id, name: f.fileName })));
+        console.error(
+          `[Undo] 当前 files:`,
+          files.map((f) => ({ id: f.id, name: f.fileName }))
+        );
         message.error('Target file not found');
         processingUndoRedoRef.current = false;
         globalHistoryManager.resetUndoRedoFlag();
@@ -1046,39 +1482,45 @@ const ProjectEditor: React.FC = () => {
       // 同一文件，直接恢复数据
       console.log('[Undo] ✨ 同文件操作，直接恢复');
       console.log(`[Undo] 📊 beforePhases 长度: ${phasesToRestore.length}`);
-      
+
       // 计算 beforePhases 中的 Action 总数
       const totalActions = phasesToRestore.reduce((sum: number, phase: PhaseWithTopics) => {
-        return sum + phase.topics.reduce((topicSum: number, topic: TopicWithActions) => topicSum + topic.actions.length, 0);
+        return (
+          sum +
+          phase.topics.reduce(
+            (topicSum: number, topic: TopicWithActions) => topicSum + topic.actions.length,
+            0
+          )
+        );
       }, 0);
       console.log(`[Undo] 🎯 beforePhases 中的 Action 总数: ${totalActions}`);
-      
+
       // 输出详细结构
       phasesToRestore.forEach((phase: PhaseWithTopics, pi: number) => {
         phase.topics.forEach((topic: TopicWithActions, ti: number) => {
           console.log(`[Undo]   Phase[${pi}].Topic[${ti}]: ${topic.actions.length} Actions`);
         });
       });
-      
+
       setCurrentPhases(phasesToRestore);
       console.log('[Undo] ✅ setCurrentPhases 调用完成');
-      
+
       syncPhasesToYaml(phasesToRestore);
       console.log('[Undo] ✅ syncPhasesToYaml 调用完成');
-      
+
       setHasUnsavedChanges(true);
-  
+
       // 应用焦点导航
       applyFocusNavigation(focusToRestore, entry.fileId);
-  
+
       message.success(`Undone: ${entry.operation}`);
-      
+
       // 释放锁
       processingUndoRedoRef.current = false;
       console.log('[Undo] 🔓 释放锁');
       console.log('========== [Undo] 同文件操作完成 ==========\n');
     }
-      
+
     // 重置标记
     setTimeout(() => globalHistoryManager.resetUndoRedoFlag(), 100);
   }, [files, syncPhasesToYaml, applyFocusNavigation]);
@@ -1093,7 +1535,7 @@ const ProjectEditor: React.FC = () => {
       console.log('[Redo] 正在处理上一个操作，请稍候');
       return;
     }
-    
+
     const entry = globalHistoryManager.redo();
     if (!entry) {
       message.info('Already at the latest state');
@@ -1103,7 +1545,7 @@ const ProjectEditor: React.FC = () => {
     // 使用 ref 获取最新的 selectedFile
     const currentFile = selectedFileRef.current;
     console.log(`[Redo] 当前文件: ${currentFile?.fileName}, 目标文件ID: ${entry.fileId}`);
-    
+
     processingUndoRedoRef.current = true;
 
     // 关键修复：使用 afterPhases 恢复到操作后状态
@@ -1115,7 +1557,7 @@ const ProjectEditor: React.FC = () => {
       const targetFile = files.find((f) => f.id === entry.fileId);
       if (targetFile) {
         console.log(`[Redo] 需要切换文件: ${currentFile?.fileName} -> ${targetFile.fileName}`);
-        
+
         // 直接更新所有状态
         setSelectedFile(targetFile);
         setSelectedKeys([targetFile.id]);
@@ -1123,24 +1565,24 @@ const ProjectEditor: React.FC = () => {
         setSelectedPhasePath(null);
         setSelectedTopicPath(null);
         setEditingType(null);
-        
+
         // 等待 React 批量更新完成
         setTimeout(() => {
           console.log(`[Redo] 开始恢复数据到: ${targetFile.fileName}`);
           console.log(`[Redo] afterPhases 长度: ${phasesToRestore.length}`);
-          
+
           // 直接恢复历史数据
           setCurrentPhases(phasesToRestore);
           // 关键修复：跨文件时传入 targetFile.id
           syncPhasesToYaml(phasesToRestore, targetFile.id);
           setHasUnsavedChanges(true);
           setEditMode('visual');
-          
+
           // 应用焦点导航
           applyFocusNavigation(focusToRestore, entry.fileId);
-          
+
           message.success(`Redone: ${entry.operation} (${targetFile.fileName})`);
-          
+
           // 释放锁
           processingUndoRedoRef.current = false;
           console.log('[Redo] 操作完成，释放锁');
@@ -1163,12 +1605,12 @@ const ProjectEditor: React.FC = () => {
       applyFocusNavigation(focusToRestore, entry.fileId);
 
       message.success(`Redone: ${entry.operation}`);
-      
+
       // 释放锁
       processingUndoRedoRef.current = false;
       console.log('[Redo] 同文件操作完成');
     }
-    
+
     // 重置标记
     setTimeout(() => globalHistoryManager.resetUndoRedoFlag(), 100);
   }, [selectedFile, files, syncPhasesToYaml, applyFocusNavigation]);
@@ -1195,7 +1637,7 @@ const ProjectEditor: React.FC = () => {
       const afterPhases = JSON.parse(JSON.stringify(currentPhases)); // 深拷贝
       afterPhases[phaseIndex].topics[topicIndex].actions[actionIndex] = updatedAction;
       setCurrentPhases(afterPhases);
-      
+
       const afterFocus: FocusPath = {
         phaseIndex,
         topicIndex,
@@ -1221,7 +1663,7 @@ const ProjectEditor: React.FC = () => {
     console.log('[handleAddPhase] 开始添加新 Phase');
     console.log('[handleAddPhase] 当前 currentPhases 数量:', currentPhases.length);
     console.log('[handleAddPhase] parsedScript:', parsedScript ? '存在' : '为null');
-    
+
     const beforePhases = JSON.parse(JSON.stringify(currentPhases));
     const newPhases = JSON.parse(JSON.stringify(currentPhases));
     const newPhaseIndex = newPhases.length;
@@ -1454,10 +1896,10 @@ const ProjectEditor: React.FC = () => {
       setCurrentPhases((prevPhases) => {
         // 关键修复：先保存删除前的状态
         const beforePhases = JSON.parse(JSON.stringify(prevPhases));
-        
+
         const newPhases = JSON.parse(JSON.stringify(prevPhases));
         newPhases.splice(phaseIndex, 1);
-        
+
         // 推送历史：before = 删除前，after = 删除后
         pushHistory(beforePhases, newPhases, 'Delete Phase', null, null);
 
@@ -1475,7 +1917,7 @@ const ProjectEditor: React.FC = () => {
         syncPhasesToYaml(newPhases);
         setHasUnsavedChanges(true);
         message.success('Phase deleted');
-        
+
         return newPhases;
       });
     },
@@ -1491,13 +1933,13 @@ const ProjectEditor: React.FC = () => {
       setCurrentPhases((prevPhases) => {
         // 关键修复：先保存删除前的状态
         const beforePhases = JSON.parse(JSON.stringify(prevPhases));
-          
+
         const newPhases = JSON.parse(JSON.stringify(prevPhases));
         newPhases[phaseIndex].topics.splice(topicIndex, 1);
-        
+
         // 推送历史
         pushHistory(beforePhases, newPhases, 'Delete Topic', null, null);
-  
+
         // 如果删除的是当前选中的 topic，清空选中状态
         if (
           selectedActionPath?.phaseIndex === phaseIndex &&
@@ -1515,11 +1957,11 @@ const ProjectEditor: React.FC = () => {
             topicIndex: selectedActionPath.topicIndex - 1,
           });
         }
-  
+
         syncPhasesToYaml(newPhases);
         setHasUnsavedChanges(true);
         message.success('Topic deleted');
-          
+
         return newPhases;
       });
     },
@@ -1544,9 +1986,9 @@ const ProjectEditor: React.FC = () => {
 
         // 关键修复：在删除前保存当前状态
         const beforePhases = JSON.parse(JSON.stringify(prevPhases));
-        
+
         topic.actions.splice(actionIndex, 1);
-        
+
         // 推送历史
         pushHistory(beforePhases, newPhases, 'Delete Action', null, null);
 
@@ -1573,7 +2015,7 @@ const ProjectEditor: React.FC = () => {
         syncPhasesToYaml(newPhases);
         setHasUnsavedChanges(true);
         message.success('Action deleted');
-        
+
         return newPhases; // 返回新状态
       });
     },
@@ -1778,11 +2220,7 @@ const ProjectEditor: React.FC = () => {
       content: (
         <div>
           <div style={{ marginBottom: '8px' }}>Please enter the session script name:</div>
-          <Input
-            id="session-name-input"
-            placeholder="e.g. first-day"
-            defaultValue="new-session"
-          />
+          <Input id="session-name-input" placeholder="e.g. first-day" defaultValue="new-session" />
         </div>
       ),
       onOk: async () => {
@@ -1792,7 +2230,7 @@ const ProjectEditor: React.FC = () => {
 
         try {
           setSaving(true);
-          
+
           // 创建新的 session 文件，使用默认模板
           const defaultSessionContent = {
             session: {
@@ -1854,7 +2292,12 @@ const ProjectEditor: React.FC = () => {
   // 自动保存（需求3）：监听 currentPhases 变化，1秒后自动保存
   useEffect(() => {
     // 只在可视化编辑模式且有未保存变化时才自动保存
-    if (editMode !== 'visual' || !hasUnsavedChanges || !selectedFile || selectedFile.fileType !== 'session') {
+    if (
+      editMode !== 'visual' ||
+      !hasUnsavedChanges ||
+      !selectedFile ||
+      selectedFile.fileType !== 'session'
+    ) {
       return;
     }
 
@@ -1885,7 +2328,7 @@ const ProjectEditor: React.FC = () => {
         handleUndo();
       }
       // Ctrl+Shift+Z / Cmd+Shift+Z or Ctrl+Y / Cmd+Y: Redo
-      else if ((e.ctrlKey || e.metaKey) && (e.shiftKey && e.key === 'z' || e.key === 'y')) {
+      else if ((e.ctrlKey || e.metaKey) && ((e.shiftKey && e.key === 'z') || e.key === 'y')) {
         e.preventDefault();
         handleRedo();
       }
@@ -1958,7 +2401,7 @@ const ProjectEditor: React.FC = () => {
             <Button
               icon={<BugOutlined />}
               onClick={() => setDebugConfigVisible(true)}
-              disabled={!project || files.filter(f => f.fileType === 'session').length === 0}
+              disabled={!project || files.filter((f) => f.fileType === 'session').length === 0}
             >
               Debug
             </Button>
@@ -2034,11 +2477,13 @@ const ProjectEditor: React.FC = () => {
               <Text strong>Project Files</Text>
               <Dropdown
                 overlay={
-                  <Menu onClick={({ key }) => {
-                    if (key === 'session') {
-                      handleCreateSession();
-                    }
-                  }}>
+                  <Menu
+                    onClick={({ key }) => {
+                      if (key === 'session') {
+                        handleCreateSession();
+                      }
+                    }}
+                  >
                     <Menu.Item key="session" icon={<FileTextOutlined />}>
                       New Session Script
                     </Menu.Item>
@@ -2105,15 +2550,42 @@ const ProjectEditor: React.FC = () => {
 
                   <Title level={5}>Quick Actions</Title>
                   <Space direction="vertical" style={{ width: '100%' }}>
-                    <Button 
-                      block 
+                    <Button
+                      block
                       icon={<HistoryOutlined />}
                       onClick={() => setVersionPanelVisible(true)}
                     >
                       View Version History
                     </Button>
-                    <Button block>Format YAML</Button>
-                    <Button block>Validate Script</Button>
+                    <Button
+                      block
+                      icon={<FormOutlined />}
+                      onClick={handleFormatYAML}
+                      disabled={!fileContent}
+                    >
+                      Format YAML
+                    </Button>
+                    <Button
+                      block
+                      onClick={() => {
+                        // 触发点 4: 手动触发验证
+                        if (selectedFile?.fileType === 'session' && fileContent) {
+                          const result = validationServiceRef.current.validateManual(fileContent);
+                          setValidationResult(result);
+                          setShowValidationErrors(true);
+
+                          if (result.valid) {
+                            message.success('验证通过，没有发现错误');
+                          } else {
+                            message.error(`验证失败，发现 ${result.errors.length} 个错误`);
+                          }
+                        } else {
+                          message.info('请选择一个会谈脚本文件');
+                        }
+                      }}
+                    >
+                      Validate Script
+                    </Button>
                   </Space>
                 </div>
               ) : (
@@ -2168,7 +2640,7 @@ const ProjectEditor: React.FC = () => {
                               console.log('切换到可视化编辑模式');
                               console.log('当前 Phases 数量:', currentPhases.length);
                               console.log('解析的脚本:', parsedScript);
-                              
+
                               // 切换到可视化模式时，重新解析 YAML 内容以确保数据同步
                               if (fileContent) {
                                 parseYamlToScript(fileContent);
@@ -2197,6 +2669,14 @@ const ProjectEditor: React.FC = () => {
                 {editMode === 'yaml' ? (
                   // YAML 编辑器
                   <div style={{ flex: 1, padding: '16px 24px', overflow: 'auto', minHeight: 0 }}>
+                    {/* 验证错误面板 */}
+                    {validationResult && !validationResult.valid && showValidationErrors && (
+                      <ValidationErrorPanel
+                        errors={validationResult.errors}
+                        onClose={() => setShowValidationErrors(false)}
+                      />
+                    )}
+
                     <TextArea
                       value={fileContent}
                       onChange={handleContentChange}
@@ -2211,97 +2691,125 @@ const ProjectEditor: React.FC = () => {
                   </div>
                 ) : (
                   // 可视化节点编辑
-                  <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-                    {/* 左侧：Action 节点列表 */}
-                    <div
-                      style={{
-                        width: '50%',
-                        borderRight: '1px solid #f0f0f0',
-                        overflow: 'auto',
-                        minHeight: 0,
-                      }}
-                    >
-                      <ActionNodeList
-                        ref={actionNodeListRef}
-                        phases={currentPhases}
-                        selectedActionPath={selectedActionPath}
-                        selectedPhasePath={selectedPhasePath}
-                        selectedTopicPath={selectedTopicPath}
-                        onSelectAction={handleSelectAction}
-                        onSelectPhase={handleSelectPhase}
-                        onSelectTopic={handleSelectTopic}
-                        onAddPhase={handleAddPhase}
-                        onAddTopic={handleAddTopic}
-                        onAddAction={handleAddAction}
-                        onDeletePhase={handleDeletePhase}
-                        onDeleteTopic={handleDeleteTopic}
-                        onDeleteAction={handleDeleteAction}
-                        onMovePhase={handleMovePhase}
-                        onMoveTopic={handleMoveTopic}
-                        onMoveAction={handleMoveAction}
-                      />
-                    </div>
-
-                    {/* 右侧：属性编辑面板 */}
-                    <div
-                      style={{
-                        width: '50%',
-                        overflow: 'auto',
-                        minHeight: 0,
-                      }}
-                    >
-                      {editingType === 'phase' && selectedPhasePath !== null && (
-                        <PhaseTopicPropertyPanel
-                          type="phase"
-                          data={{
-                            id: currentPhases[selectedPhasePath.phaseIndex].phase_id,
-                            name: currentPhases[selectedPhasePath.phaseIndex].phase_name,
-                            description: currentPhases[selectedPhasePath.phaseIndex].description,
-                          }}
-                          onSave={handlePhaseSave}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    {/* 验证错误摘要（Visual Editor 模式） */}
+                    {validationResult && !validationResult.valid && showValidationErrors && (
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
+                        <Alert
+                          message={`发现 ${validationResult.errors.length} 个脚本验证错误`}
+                          description="请检查并修复错误后保存。点击有错误的 Action 查看详情。"
+                          type="error"
+                          showIcon
+                          closable
+                          onClose={() => setShowValidationErrors(false)}
                         />
-                      )}
+                      </div>
+                    )}
 
-                      {editingType === 'topic' && selectedTopicPath !== null && (
-                        <PhaseTopicPropertyPanel
-                          type="topic"
-                          data={{
-                            id: currentPhases[selectedTopicPath.phaseIndex].topics[
-                              selectedTopicPath.topicIndex
-                            ].topic_id,
-                            name: currentPhases[selectedTopicPath.phaseIndex].topics[
-                              selectedTopicPath.topicIndex
-                            ].topic_name,
-                            description:
-                              currentPhases[selectedTopicPath.phaseIndex].topics[
+                    <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+                      {/* 左侧：Action 节点列表 */}
+                      <div
+                        style={{
+                          width: '50%',
+                          borderRight: '1px solid #f0f0f0',
+                          overflow: 'auto',
+                          minHeight: 0,
+                        }}
+                      >
+                        <ActionNodeList
+                          ref={actionNodeListRef}
+                          phases={currentPhases}
+                          selectedActionPath={selectedActionPath}
+                          selectedPhasePath={selectedPhasePath}
+                          selectedTopicPath={selectedTopicPath}
+                          onSelectAction={handleSelectAction}
+                          onSelectPhase={handleSelectPhase}
+                          onSelectTopic={handleSelectTopic}
+                          onAddPhase={handleAddPhase}
+                          onAddTopic={handleAddTopic}
+                          onAddAction={handleAddAction}
+                          onDeletePhase={handleDeletePhase}
+                          onDeleteTopic={handleDeleteTopic}
+                          onDeleteAction={handleDeleteAction}
+                          onMovePhase={handleMovePhase}
+                          onMoveTopic={handleMoveTopic}
+                          onMoveAction={handleMoveAction}
+                        />
+                      </div>
+
+                      {/* 右侧：属性编辑面板 */}
+                      <div
+                        style={{
+                          width: '50%',
+                          overflow: 'auto',
+                          minHeight: 0,
+                        }}
+                      >
+                        {editingType === 'phase' && selectedPhasePath !== null && (
+                          <PhaseTopicPropertyPanel
+                            type="phase"
+                            data={{
+                              id: currentPhases[selectedPhasePath.phaseIndex].phase_id,
+                              name: currentPhases[selectedPhasePath.phaseIndex].phase_name,
+                              description: currentPhases[selectedPhasePath.phaseIndex].description,
+                            }}
+                            onSave={handlePhaseSave}
+                          />
+                        )}
+
+                        {editingType === 'topic' && selectedTopicPath !== null && (
+                          <PhaseTopicPropertyPanel
+                            type="topic"
+                            data={{
+                              id: currentPhases[selectedTopicPath.phaseIndex].topics[
                                 selectedTopicPath.topicIndex
-                              ].description,
-                            localVariables:
-                              currentPhases[selectedTopicPath.phaseIndex].topics[
+                              ].topic_id,
+                              name: currentPhases[selectedTopicPath.phaseIndex].topics[
                                 selectedTopicPath.topicIndex
-                              ].localVariables,
-                          }}
-                          onSave={handleTopicSave}
-                        />
-                      )}
+                              ].topic_name,
+                              description:
+                                currentPhases[selectedTopicPath.phaseIndex].topics[
+                                  selectedTopicPath.topicIndex
+                                ].description,
+                              localVariables:
+                                currentPhases[selectedTopicPath.phaseIndex].topics[
+                                  selectedTopicPath.topicIndex
+                                ].localVariables,
+                            }}
+                            onSave={handleTopicSave}
+                          />
+                        )}
 
-                      {editingType === 'action' && selectedActionPath !== null && (
-                        <ActionPropertyPanel
-                          action={
-                            currentPhases[selectedActionPath.phaseIndex]?.topics[
-                              selectedActionPath.topicIndex
-                            ]?.actions[selectedActionPath.actionIndex] ?? null
-                          }
-                          actionIndex={selectedActionPath.actionIndex}
-                          onSave={handleActionSave}
-                        />
-                      )}
+                        {editingType === 'action' && selectedActionPath !== null && (
+                          <ActionPropertyPanel
+                            action={
+                              currentPhases[selectedActionPath.phaseIndex]?.topics[
+                                selectedActionPath.topicIndex
+                              ]?.actions[selectedActionPath.actionIndex] ?? null
+                            }
+                            actionIndex={selectedActionPath.actionIndex}
+                            onSave={handleActionSave}
+                            validationErrors={
+                              validationResult?.errors.filter((error) =>
+                                isErrorForAction(
+                                  error.path,
+                                  selectedActionPath.phaseIndex,
+                                  selectedActionPath.topicIndex,
+                                  selectedActionPath.actionIndex
+                                )
+                              ) ?? []
+                            }
+                          />
+                        )}
 
-                      {editingType === null && (
-                        <div style={{ padding: '24px', textAlign: 'center' }}>
-                          <Text type="secondary">Please select a Phase, Topic, or Action on the left</Text>
-                        </div>
-                      )}
+                        {editingType === null && (
+                          <div style={{ padding: '24px', textAlign: 'center' }}>
+                            <Text type="secondary">
+                              Please select a Phase, Topic, or Action on the left
+                            </Text>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

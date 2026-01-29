@@ -1,6 +1,6 @@
-import { ActionTypeSchema } from '@heartrule/shared-types';
 import * as yaml from 'js-yaml';
-import { z } from 'zod';
+
+import { schemaValidator } from '../../schemas/index.js';
 
 /**
  * YAML脚本解析器
@@ -29,67 +29,22 @@ export class YAMLParser {
   }
 
   /**
-   * 验证会谈流程脚本Schema
+   * 验证会谈流程脚本 Schema
+   *
+   * 使用新的 JSON Schema 验证体系替代原有的 Zod 验证
+   * 验证失败时抛出 SchemaValidationError 异常
    */
   validateSessionScript(data: unknown): void {
-    const schema = z.object({
-      session: z.object({
-        session_id: z.string(),
-        phases: z.array(
-          z.object({
-            phase_id: z.string(),
-            entry_condition: z.record(z.unknown()).optional(),
-            topics: z.array(
-              z.object({
-                topic_id: z.string(),
-                actions: z.array(
-                  z.object({
-                    action_type: ActionTypeSchema,
-                    action_id: z.string(),
-                    config: z.record(z.unknown()).optional(),
-                  })
-                ),
-              })
-            ),
-          })
-        ),
-      }),
-    });
-
-    try {
-      schema.parse(data);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        throw new Error(`Session script validation failed: ${JSON.stringify(error.errors)}`);
-      }
-      throw error;
-    }
+    schemaValidator.validateSessionOrThrow(data);
   }
 
   /**
-   * 验证咨询技术脚本Schema
+   * 验证咨询技术脚本 Schema
+   *
+   * 使用新的 JSON Schema 验证体系替代原有的 Zod 验证
+   * 验证失败时抛出 SchemaValidationError 异常
    */
   validateTechniqueScript(data: unknown): void {
-    const schema = z.object({
-      topic: z.object({
-        topic_id: z.string(),
-        actions: z.array(
-          z.object({
-            action_type: ActionTypeSchema,
-            action_id: z.string(),
-            config: z.record(z.unknown()).optional(),
-          })
-        ),
-      }),
-    });
-
-    try {
-      schema.parse(data);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        throw new Error(`Technique script validation failed: ${JSON.stringify(error.errors)}`);
-      }
-      throw error;
-    }
+    schemaValidator.validateTechniqueOrThrow(data);
   }
 }

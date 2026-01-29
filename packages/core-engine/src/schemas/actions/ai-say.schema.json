@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ai-say-config.schema.json",
+  "title": "AI Say Action Config Schema",
+  "description": "ai_say 动作的配置 Schema",
+  "type": "object",
+  "required": ["content"],
+  "properties": {
+    "content": {
+      "type": "string",
+      "minLength": 1,
+      "description": "内容模板"
+    },
+    "tone": {
+      "type": "string",
+      "description": "语气风格"
+    },
+    "exit": {
+      "type": "string",
+      "description": "退出条件"
+    },
+    "max_rounds": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "最大轮数"
+    }
+  },
+  "additionalProperties": false
+}

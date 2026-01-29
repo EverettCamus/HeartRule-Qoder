@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "use-skill-config.schema.json",
+  "title": "Use Skill Action Config Schema",
+  "description": "use_skill 动作的配置 Schema",
+  "type": "object",
+  "required": ["skill"],
+  "properties": {
+    "skill": {
+      "type": "string",
+      "minLength": 1,
+      "description": "技能名称"
+    },
+    "input": {
+      "type": "array",
+      "items": {
+        "$ref": "output-field.schema.json"
+      },
+      "description": "输入参数"
+    },
+    "output": {
+      "type": "array",
+      "items": {
+        "$ref": "output-field.schema.json"
+      },
+      "description": "输出变量配置"
+    }
+  },
+  "additionalProperties": false
+}

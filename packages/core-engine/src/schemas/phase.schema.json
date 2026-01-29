@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "phase.schema.json",
+  "title": "Phase Schema",
+  "description": "Phase 层级 Schema",
+  "type": "object",
+  "required": ["phase_id", "topics"],
+  "properties": {
+    "phase_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "阶段唯一标识"
+    },
+    "phase_name": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "阶段显示名称"
+    },
+    "phase_goal": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "阶段目标描述"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "阶段描述"
+    },
+    "entry_condition": {
+      "type": "object",
+      "description": "进入条件配置"
+    },
+    "topics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "topic.schema.json"
+      },
+      "description": "话题列表"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "action-base.schema.json",
+  "title": "Action Base Schema",
+  "description": "所有 Action 的基础 Schema，根据 action_type 动态验证 config",
+  "type": "object",
+  "required": ["action_type", "action_id"],
+  "properties": {
+    "action_type": {
+      "type": "string",
+      "enum": ["ai_say", "ai_ask", "ai_think", "use_skill"],
+      "description": "动作类型"
+    },
+    "action_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "动作唯一标识"
+    },
+    "condition": {
+      "type": "string",
+      "description": "执行条件表达式"
+    },
+    "config": {
+      "type": "object",
+      "description": "Action 配置对象（具体结构由 action_type 决定）"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "action_type": { "const": "ai_ask" } }
+      },
+      "then": {
+        "properties": {
+          "config": { "$ref": "ai-ask-config.schema.json" }
+        },
+        "required": ["config"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "action_type": { "const": "ai_say" } }
+      },
+      "then": {
+        "properties": {
+          "config": { "$ref": "ai-say-config.schema.json" }
+        },
+        "required": ["config"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "action_type": { "const": "ai_think" } }
+      },
+      "then": {
+        "properties": {
+          "config": { "$ref": "ai-think-config.schema.json" }
+        },
+        "required": ["config"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "action_type": { "const": "use_skill" } }
+      },
+      "then": {
+        "properties": {
+          "config": { "$ref": "use-skill-config.schema.json" }
+        },
+        "required": ["config"]
+      }
+    }
+  ],
+  "additionalProperties": false
+}

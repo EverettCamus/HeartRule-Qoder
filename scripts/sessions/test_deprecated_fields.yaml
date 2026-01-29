@@ -1,0 +1,49 @@
+# 测试废弃字段验证功能
+# 此文件故意包含废弃字段以测试验证功能
+
+metadata:
+  name: "测试废弃字段"
+  version: "1.0"
+  description: "用于测试 Visual Editor 模式下的废弃字段检测"
+
+session:
+  session_id: "test_deprecated_fields_v1"
+  session_name: "测试废弃字段"
+  
+  phases:
+    - phase_id: "phase_1"
+      phase_name: "测试阶段"
+      
+      topics:
+        - topic_id: "topic_1"
+          topic_name: "测试话题"
+          
+          actions:
+            # Action 1: ai_say 使用废弃字段 content_template
+            - action_type: "ai_say"
+              action_id: "action_1"
+              config:
+                content_template: "这是一个废弃字段，应该被检测到"
+                
+            # Action 2: ai_ask 使用多个废弃字段
+            - action_type: "ai_ask"
+              action_id: "action_2"
+              config:
+                content_template: "向来访者询问如何称呼"
+                question_template: "向来访者询问如何称呼"
+                exit: "收到来访者的称呼"
+                target_variable: "user_name"
+                extraction_prompt: "来访者可以接受的称呼"
+                required: false
+                max_rounds: 3
+                
+            # Action 3: ai_ask 正确格式（无废弃字段）
+            - action_type: "ai_ask"
+              action_id: "action_3"
+              config:
+                content: "请告诉我你的名字"
+                exit: "获得用户名"
+                max_rounds: 3
+                output:
+                  - get: "user_name"
+                    define: "用户的名字"

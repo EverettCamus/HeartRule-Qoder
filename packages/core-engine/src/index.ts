@@ -1,8 +1,8 @@
 /**
  * Core Engine Package
- * 
+ *
  * 基于DDD的核心引擎实现，包含领域模型、应用服务与基础设施适配器
- * 
+ *
  * 架构分层：
  * - Domain Layer: 领域模型（Session, Script, Message, Variable, ActionDefinition）
  * - Application Layer: 动作执行器（Ai*Action）与引擎（ScriptExecutor, LLMOrchestrator 等）
@@ -14,7 +14,7 @@
 // =============================================================================
 /**
  * 引擎版本号 (语义化版本)
- * 
+ *
  * @remarks
  * 用于版本兼容性检测与脚本验证
  * 格式: MAJOR.MINOR.PATCH
@@ -26,7 +26,7 @@ export const ENGINE_VERSION = '2.1.0';
 
 /**
  * 支持的最低脚本版本
- * 
+ *
  * @remarks
  * 引擎版本 N 必须能执行版本 N-1 和 N-2 的脚本
  */
@@ -34,7 +34,7 @@ export const MIN_SCRIPT_VERSION = '2.0.0';
 
 /**
  * 检查脚本兼容性
- * 
+ *
  * @param scriptVersion - 脚本版本号
  * @returns 兼容性结果
  */
@@ -115,8 +115,8 @@ export * from './actions/base-action.js';
 export * from './actions/action-registry.js';
 
 // 具体动作执行器实现
-export * from './actions/ai-say-action.js';  // AI 讲解/介绍动作执行器
-export * from './actions/ai-ask-action.js';  // AI 追问/提问动作执行器
+export * from './actions/ai-say-action.js'; // AI 讲解/介绍动作执行器
+export * from './actions/ai-ask-action.js'; // AI 追问/提问动作执行器
 
 // =============================================================================
 // Application Layer - Application Services (应用层 - 应用服务接口)
@@ -149,6 +149,16 @@ export * from './engines/prompt-template/index.js';
 
 // MemoryEngine: 记忆引擎，管理长期/短期记忆的读写（待实现）
 export * from './engines/memory/index.js';
+
+// YAMLParser: YAML 脚本解析器，支持 Schema 验证
+export * from './engines/script-execution/yaml-parser.js';
+
+// =============================================================================
+// Schema Validation (Schema 验证体系)
+// =============================================================================
+// YAML 脚本 Schema 验证服务，提供完整的验证与错误处理能力
+
+export * from './schemas/index.js';
 
 // =============================================================================
 // 注：旧版接口（已废弃，待迁移）

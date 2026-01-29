@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "output-field.schema.json",
+  "title": "OutputField",
+  "description": "输出字段配置",
+  "type": "object",
+  "properties": {
+    "get": {
+      "type": "string",
+      "description": "提取变量名"
+    },
+    "set": {
+      "type": "string",
+      "description": "设置变量名"
+    },
+    "define": {
+      "type": "string",
+      "description": "变量定义说明"
+    },
+    "value": {
+      "type": "string",
+      "description": "直接设置的值"
+    }
+  },
+  "additionalProperties": false
+}
