@@ -1,6 +1,6 @@
 import { defineConfig } from 'tsup';
-import { copyFileSync, mkdirSync, readdirSync, statSync } from 'fs';
-import { join, dirname } from 'path';
+import { copyFileSync, mkdirSync, readdirSync } from 'fs';
+import { join } from 'path';
 
 // 递归复制目录
 function copyDir(src: string, dest: string) {
