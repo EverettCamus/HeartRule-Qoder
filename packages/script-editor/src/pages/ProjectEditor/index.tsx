@@ -1,10 +1,6 @@
 import {
   FolderOutlined,
   FileOutlined,
-  SaveOutlined,
-  RocketOutlined,
-  ArrowLeftOutlined,
-  PlusOutlined,
   FileTextOutlined,
   GlobalOutlined,
   UserOutlined,
@@ -12,52 +8,34 @@ import {
   FormOutlined,
   BulbOutlined,
   HistoryOutlined,
-  CodeOutlined,
-  AppstoreOutlined,
-  LeftOutlined,
   RightOutlined,
-  BugOutlined,
 } from '@ant-design/icons';
-import {
-  Layout,
-  Typography,
-  Tree,
-  Button,
-  Space,
-  message,
-  Modal,
-  Input,
-  Spin,
-  Tag,
-  Divider,
-  Dropdown,
-  Menu,
-  Alert,
-} from 'antd';
+import { Layout, Typography, Button, Space, message, Modal, Input, Spin } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import yaml from 'js-yaml';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import { projectsApi, versionsApi } from '../../api/projects';
-import type { Project, ScriptFile } from '../../api/projects';
-import { ActionNodeList } from '../../components/ActionNodeList';
+import type { ScriptFile } from '../../api/projects';
 import type { ActionNodeListRef } from '../../components/ActionNodeList';
-import { ActionPropertyPanel } from '../../components/ActionPropertyPanel';
 import DebugChatPanel from '../../components/DebugChatPanel';
 import DebugConfigModal from '../../components/DebugConfigModal';
-import { PhaseTopicPropertyPanel } from '../../components/PhaseTopicPropertyPanel';
-import ValidationErrorPanel from '../../components/ValidationErrorPanel';
 import VersionListPanel from '../../components/VersionListPanel';
-import { ValidationService } from '../../services/validation-service';
-import type { ValidationResult } from '../../services/validation-service';
-import type { Action, SessionScript, Step } from '../../types/action';
+import { useEditorState } from '../../hooks/useEditorState';
+import { useFileTreeState } from '../../hooks/useFileTreeState';
+import { yamlService } from '../../services/YamlService';
+import type { PhaseWithTopics, TopicWithActions } from '../../services/YamlService';
+import type { Action } from '../../types/action';
 import { globalHistoryManager } from '../../utils/history-manager';
 import type { FocusPath } from '../../utils/history-manager';
-import { isErrorForAction } from '../../utils/validation-path-parser';
+
+import EditorContent from './EditorContent';
+import FileTreeSidebar from './FileTreeSidebar';
+import ProjectEditorHeader from './ProjectEditorHeader';
 import './style.css';
 
-const { Header, Sider, Content } = Layout;
+const { Content } = Layout;
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
@@ -75,20 +53,64 @@ const ProjectEditor: React.FC = () => {
   const { projectId, fileId } = useParams<{ projectId: string; fileId?: string }>();
   const navigate = useNavigate();
 
-  // State
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [project, setProject] = useState<Project | null>(null);
-  const [files, setFiles] = useState<ScriptFile[]>([]);
-  const [selectedFile, setSelectedFile] = useState<ScriptFile | null>(null);
-  const [fileContent, setFileContent] = useState<string>('');
-  const [treeData, setTreeData] = useState<FileTreeNode[]>([]);
-  const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
-  const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  // 状态管理Hooks
+  const editorState = useEditorState();
+  const fileTreeState = useFileTreeState();
+
+  // 从状态Hooks解构常用变量（保持兼容性）
+  const {
+    editMode,
+    setEditMode,
+    fileContent,
+    setFileContent,
+    hasUnsavedChanges,
+    setHasUnsavedChanges,
+    parsedScript,
+    setParsedScript,
+    currentPhases,
+    setCurrentPhases,
+    validationResult,
+    setValidationResult,
+    showValidationErrors,
+    setShowValidationErrors,
+    validationServiceRef,
+    selectedActionPath,
+    setSelectedActionPath,
+    selectedPhasePath,
+    setSelectedPhasePath,
+    selectedTopicPath,
+    setSelectedTopicPath,
+    editingType,
+    setEditingType,
+    fileYamlBaseRef,
+    selectedFileRef,
+  } = editorState;
+
+  const {
+    loading,
+    setLoading,
+    saving,
+    setSaving,
+    project,
+    setProject,
+    files,
+    setFiles,
+    selectedFile,
+    setSelectedFile,
+    treeData,
+    setTreeData,
+    expandedKeys,
+    setExpandedKeys,
+    selectedKeys,
+    setSelectedKeys,
+    leftCollapsed,
+    setLeftCollapsed,
+  } = fileTreeState;
+
+  // UI状态（未纳入Hook）
   const [publishModalVisible, setPublishModalVisible] = useState(false);
   const [versionNote, setVersionNote] = useState('');
-  const [leftCollapsed, setLeftCollapsed] = useState(false); // 左侧文件树折叠状态
+  const [versionPanelVisible, setVersionPanelVisible] = useState(false);
 
   // 调试功能相关状态
   const [debugConfigVisible, setDebugConfigVisible] = useState(false);
@@ -102,69 +124,23 @@ const ProjectEditor: React.FC = () => {
     versionNumber?: string;
   } | null>(null);
 
-  // 版本管理面板状态
-  const [versionPanelVisible, setVersionPanelVisible] = useState(false);
-
-  // YAML Schema 验证相关状态
-  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
-  const [showValidationErrors, setShowValidationErrors] = useState(true);
-  const validationServiceRef = useRef(new ValidationService({ debounceMs: 500 }));
-
-  // 可视化编辑相关状态
-  const [editMode, setEditMode] = useState<'yaml' | 'visual'>('yaml'); // 编辑模式：YAML/可视化
-  const [parsedScript, setParsedScript] = useState<SessionScript | null>(null); // 解析后的脚本
-
-  // 层级结构数据和选中路径
-  interface TopicWithActions {
-    topic_id: string;
-    topic_name?: string;
-    description?: string;
-    localVariables?: Array<{ name: string; type?: string; description?: string }>;
-    actions: Action[];
-  }
-
-  interface PhaseWithTopics {
-    phase_id: string;
-    phase_name?: string;
-    description?: string;
-    topics: TopicWithActions[];
-  }
-
-  const [currentPhases, setCurrentPhases] = useState<PhaseWithTopics[]>([]); // 层级结构数据
-  const [selectedActionPath, setSelectedActionPath] = useState<{
-    phaseIndex: number;
-    topicIndex: number;
-    actionIndex: number;
-  } | null>(null); // 选中的 Action 路径
-  const [selectedPhasePath, setSelectedPhasePath] = useState<{ phaseIndex: number } | null>(null); // 选中的 Phase 路径
-  const [selectedTopicPath, setSelectedTopicPath] = useState<{
-    phaseIndex: number;
-    topicIndex: number;
-  } | null>(null); // 选中的 Topic 路径
-  const [editingType, setEditingType] = useState<'phase' | 'topic' | 'action' | null>(null); // 当前编辑的类型
-
-  // Undo/Redo 历史栈（已废弃，使用全局 globalHistoryManager）
-  // const [history, setHistory] = useState<PhaseWithTopics[][]>([]);
-  // const [historyIndex, setHistoryIndex] = useState(-1);
-  // const [isUndoRedoAction, setIsUndoRedoAction] = useState(false);
-
-  // 自动保存的 debounce timer
+  // Refs
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // ActionNodeList 组件引用，用于控制展开和滚动
   const actionNodeListRef = useRef<ActionNodeListRef>(null);
-
-  // 正在处理的 undo/redo 操作（防止并发）
   const processingUndoRedoRef = useRef<boolean>(false);
-
-  // 使用 ref 追踪当前选中的文件（避免闭包问题）
-  const selectedFileRef = useRef<ScriptFile | null>(null);
-
-  // 追踪是否已经为当前文件推入过初始状态
   const initialStatePushedRef = useRef<Set<string>>(new Set());
 
-  // 为每个文件保存一份YAML基线（避免跨文件污染）
-  const fileYamlBaseRef = useRef<Map<string, string>>(new Map());
+  // 文件操作Hook（未使用，保留作为参考）
+  // const fileOperations = useFileOperations({
+  //   projectId,
+  //   fileId,
+  //   navigate,
+  //   editorState,
+  //   fileTreeState,
+  //   buildFileTree,
+  //   parseYamlToScript,
+  //   fixYAMLIndentation,
+  // });
 
   // 同步 selectedFile 到 ref
   useEffect(() => {
@@ -234,157 +210,16 @@ const ProjectEditor: React.FC = () => {
 
   /**
    * 解析 YAML 为脚本结构（保留层级结构）
+   * 使用 yamlService 服务
    */
   const parseYamlToScript = useCallback((yamlContent: string) => {
-    try {
-      const parsed = yaml.load(yamlContent) as any;
-      setParsedScript(parsed);
+    const result = yamlService.parseYamlToScript(yamlContent);
 
-      console.log('解析的完整脚本:', parsed);
-
-      const phases: PhaseWithTopics[] = [];
-
-      // 新格式：session.phases[].topics[].actions[]
-      if (parsed?.session?.phases) {
-        console.log('检测到新格式脚本 (session.phases)');
-
-        parsed.session.phases.forEach((phase: any) => {
-          const topics: TopicWithActions[] = [];
-
-          phase.topics?.forEach((topic: any) => {
-            const actions: Action[] = [];
-
-            topic.actions?.forEach((action: any) => {
-              // 规范化 Action 类型，将 config 字段映射到前端期望的字段名
-              if (action.action_type === 'ai_say') {
-                // 优先使用 content，然后回退到 content_template（向后兼容）
-                const contentValue =
-                  action.config?.content || action.config?.content_template || '';
-                actions.push({
-                  type: 'ai_say',
-                  content: contentValue, // 新字段
-                  ai_say: contentValue, // 旧字段，保持向后兼容
-                  tone: action.config?.tone,
-                  exit: action.config?.exit,
-                  condition: action.condition,
-                  max_rounds: action.config?.max_rounds,
-                  action_id: action.action_id,
-                  _raw: action, // 保留原始数据用于反向转换
-                });
-              } else if (action.action_type === 'ai_ask') {
-                // 优先使用 content，然后回退到 question_template 或 content_template
-                const contentValue =
-                  action.config?.content ||
-                  action.config?.question_template ||
-                  action.config?.content_template ||
-                  '';
-                actions.push({
-                  type: 'ai_ask',
-                  ai_ask: contentValue,
-                  tone: action.config?.tone,
-                  exit: action.config?.exit,
-                  max_rounds: action.config?.max_rounds,
-                  output: action.config?.output || [],
-                  condition: action.condition,
-                  action_id: action.action_id,
-                  _raw: action,
-                });
-              } else if (action.action_type === 'ai_think') {
-                // 优先使用 content，然后回退到 prompt_template
-                const contentValue =
-                  action.config?.content ||
-                  action.config?.prompt_template ||
-                  action.config?.think_goal ||
-                  '';
-                actions.push({
-                  type: 'ai_think',
-                  think: contentValue,
-                  output: action.config?.output || [],
-                  condition: action.condition,
-                  action_id: action.action_id,
-                  _raw: action,
-                });
-              } else if (action.action_type === 'use_skill') {
-                actions.push({
-                  type: 'use_skill',
-                  skill: action.config?.skill || '',
-                  input: action.config?.input || [],
-                  output: action.config?.output || [],
-                  condition: action.condition,
-                  action_id: action.action_id,
-                  _raw: action,
-                });
-              } else if (action.ai_say) {
-                // 兼容旧的直接字段格式
-                actions.push({ type: 'ai_say', ...action });
-              } else if (action.ai_ask) {
-                actions.push({ type: 'ai_ask', ...action });
-              } else if (action.think) {
-                actions.push({ type: 'ai_think', ...action });
-              } else {
-                actions.push(action);
-              }
-            });
-
-            topics.push({
-              topic_id: topic.topic_id,
-              topic_name: topic.topic_name,
-              description: topic.description,
-              localVariables: topic.declare || [],
-              actions,
-            });
-          });
-
-          phases.push({
-            phase_id: phase.phase_id,
-            phase_name: phase.phase_name,
-            description: phase.description,
-            topics,
-          });
-        });
-      }
-      // 旧格式：sessions[].stages[].steps[].actions[] - 将其转换为单一 Phase/Topic
-      else if (parsed?.sessions?.[0]?.stages?.[0]?.steps) {
-        console.log('检测到旧格式脚本 (sessions.stages.steps)');
-        const firstStepWithActions = parsed.sessions[0].stages[0].steps.find(
-          (step: Step) => step.actions && step.actions.length > 0
-        );
-
-        if (firstStepWithActions?.actions) {
-          const actions: Action[] = [];
-          firstStepWithActions.actions.forEach((action: any) => {
-            if (action.ai_say) actions.push({ type: 'ai_say', ...action });
-            else if (action.ai_ask) actions.push({ type: 'ai_ask', ...action });
-            else if (action.think) actions.push({ type: 'ai_think', ...action });
-            else if (action.say) actions.push({ type: 'say', ...action });
-            else if (action.user_say) actions.push({ type: 'user_say', ...action });
-            else actions.push(action);
-          });
-
-          // 将旧格式转换为单一 Phase 和 Topic
-          phases.push({
-            phase_id: 'legacy_phase',
-            phase_name: '会谈阶段',
-            topics: [
-              {
-                topic_id: 'legacy_topic',
-                topic_name: '会谈主题',
-                actions,
-              },
-            ],
-          });
-        }
-      }
-
-      const totalActions = phases.reduce(
-        (sum, p) => sum + p.topics.reduce((s, t) => s + t.actions.length, 0),
-        0
-      );
-      console.log(`提取到的层级结构: ${phases.length} Phases, 总计 ${totalActions} Actions`);
-
-      setCurrentPhases(phases);
-    } catch (error) {
-      console.error('YAML 解析失败:', error);
+    if (result.success) {
+      setParsedScript(result.parsedScript);
+      setCurrentPhases(result.phases);
+    } else {
+      console.error('YAML 解析失败:', result.error);
       setParsedScript(null);
       setCurrentPhases([]);
     }
@@ -729,13 +564,8 @@ const ProjectEditor: React.FC = () => {
       console.log('[syncPhasesToYaml] 开始执行');
       console.log('[syncPhasesToYaml] 输入 phases 数量:', phases.length);
       console.log('[syncPhasesToYaml] targetFileId:', targetFileId || '未指定，使用当前文件');
-      console.log('[syncPhasesToYaml] parsedScript 状态:', parsedScript ? '存在' : 'null');
-      console.log('[syncPhasesToYaml] selectedFile:', selectedFile?.fileName);
 
       try {
-        let updatedScript: any;
-        let baseScript: any = null;
-
         // 使用显式传入的 targetFileId，或者使用当前文件 ID
         const currentFileId = targetFileId || selectedFile?.id || selectedFileRef.current?.id;
 
@@ -745,8 +575,12 @@ const ProjectEditor: React.FC = () => {
           targetFile = files.find((f) => f.id === targetFileId) || selectedFile;
         }
 
+        // 获取基线脚本
+        let baseScript: any = null;
+        let baseYaml: string | undefined;
+
         if (currentFileId) {
-          const baseYaml = fileYamlBaseRef.current.get(currentFileId);
+          baseYaml = fileYamlBaseRef.current.get(currentFileId);
           if (baseYaml) {
             try {
               baseScript = yaml.load(baseYaml) as any;
@@ -757,213 +591,28 @@ const ProjectEditor: React.FC = () => {
           }
         }
 
-        // 优先级: 文件基线 > parsedScript > 创建新结构
-        if (baseScript) {
-          updatedScript = JSON.parse(JSON.stringify(baseScript));
-        } else if (parsedScript) {
+        // 优先级: 文件基线 > parsedScript
+        if (!baseScript && parsedScript) {
           console.log('[syncPhasesToYaml] 使用现有 parsedScript 作为基线');
-          updatedScript = JSON.parse(JSON.stringify(parsedScript)); // 深拷贝
-        } else {
-          // 如果都没有，创建新的脚本结构
-          console.log('[syncPhasesToYaml] 没有可用基线，创建新的脚本结构');
-          updatedScript = {
-            session: {
-              session_id: targetFile?.fileName?.replace('.yaml', '') || 'new-session',
-              session_name: targetFile?.fileName?.replace('.yaml', '') || 'New Session',
-              phases: [],
-            },
-          };
-          console.log('[syncPhasesToYaml] 创建的新结构:', JSON.stringify(updatedScript, null, 2));
+          baseScript = parsedScript;
         }
 
-        // 确保 updatedScript 有 session 结构
-        if (!updatedScript.session) {
-          console.log('[syncPhasesToYaml] 脚本中没有 session 结构，创建新的 session');
-          updatedScript.session = {
-            session_id: targetFile?.fileName?.replace('.yaml', '') || 'new-session',
-            session_name: targetFile?.fileName?.replace('.yaml', '') || 'New Session',
-            phases: [],
-          };
-        }
-
-        // 新格式：更新 session.phases
-        if (updatedScript?.session) {
-          console.log('[syncPhasesToYaml] 检测到 session 结构');
-          // 确保 session.phases 存在
-          if (!updatedScript.session.phases) {
-            updatedScript.session.phases = [];
-            console.log('[syncPhasesToYaml] 初始化 session.phases 数组');
-          }
-
-          console.log('[syncPhasesToYaml] 开始构建 phases 数据...');
-          // 重建 phases 结构，保持其他字段不变
-          updatedScript.session.phases = phases.map((phase, pi) => {
-            const originalPhase = (parsedScript as any)?.session?.phases?.[pi] || {};
-            return {
-              ...originalPhase,
-              phase_id: phase.phase_id,
-              phase_name: phase.phase_name,
-              description: phase.description,
-              topics: phase.topics.map((topic, ti) => {
-                const originalTopic = originalPhase.topics?.[ti] || {};
-                const topicResult: any = {
-                  ...originalTopic,
-                  topic_id: topic.topic_id,
-                  topic_name: topic.topic_name,
-                  description: topic.description,
-                  actions: topic.actions.map((action) => {
-                    // 将前端字段映射回 config 格式（符合最新 Schema 规范）
-                    if (action._raw) {
-                      // 使用保留的原始数据
-                      const rawAction = action._raw as any;
-                      if (action.type === 'ai_say') {
-                        // ai_say: 使用 content 字段（不是 content_template）
-                        const contentValue = action.content || action.ai_say || '';
-                        const config: any = {};
-
-                        // 必填字段
-                        if (contentValue) {
-                          config.content = contentValue;
-                        }
-
-                        // 只包含非空字段
-                        if (action.tone) config.tone = action.tone;
-                        if (action.exit) config.exit = action.exit;
-                        if (action.max_rounds) config.max_rounds = action.max_rounds;
-
-                        const result: any = {
-                          action_type: 'ai_say',
-                          action_id: rawAction.action_id || action.id,
-                          config,
-                        };
-
-                        if (action.condition) result.condition = action.condition;
-                        return result;
-                      } else if (action.type === 'ai_ask') {
-                        // ai_ask: 使用 content 字段（不是 question_template）
-                        // 移除废弃字段: tolist, target_variable, extraction_prompt, required
-                        const config: any = {};
-
-                        // 必填字段
-                        if (action.ai_ask) {
-                          config.content = action.ai_ask;
-                        }
-
-                        // 只包含非空字段
-                        if (action.tone) config.tone = action.tone;
-                        if (action.exit) config.exit = action.exit;
-                        if (action.max_rounds) config.max_rounds = action.max_rounds;
-
-                        // 只在有输出变量时才包含 output 数组
-                        if (action.output && action.output.length > 0) {
-                          config.output = action.output;
-                        }
-
-                        const result: any = {
-                          action_type: 'ai_ask',
-                          action_id: rawAction.action_id || action.id,
-                          config,
-                        };
-
-                        if (action.condition) result.condition = action.condition;
-                        return result;
-                      } else if (action.type === 'ai_think') {
-                        // ai_think: 使用 content 字段（不是 prompt_template）
-                        const config: any = {};
-
-                        // 必填字段
-                        if (action.think) {
-                          config.content = action.think;
-                        }
-
-                        // 使用 output 数组（不是 output_variables）
-                        if (action.output && action.output.length > 0) {
-                          config.output = action.output;
-                        }
-
-                        const result: any = {
-                          action_type: 'ai_think',
-                          action_id: rawAction.action_id || action.id,
-                          config,
-                        };
-
-                        if (action.condition) result.condition = action.condition;
-                        return result;
-                      } else if (action.type === 'use_skill') {
-                        // use_skill: 使用 skill, input, output 字段
-                        const config: any = {};
-
-                        // 必填字段
-                        if (action.skill) {
-                          config.skill = action.skill;
-                        }
-
-                        if (action.input && action.input.length > 0) {
-                          config.input = action.input;
-                        }
-
-                        if (action.output && action.output.length > 0) {
-                          config.output = action.output;
-                        }
-
-                        const result: any = {
-                          action_type: 'use_skill',
-                          action_id: rawAction.action_id || action.id,
-                          config,
-                        };
-
-                        if (action.condition) result.condition = action.condition;
-                        return result;
-                      }
-                      return rawAction;
-                    }
-                    return action;
-                  }),
-                };
-
-                // 只在 declare 非空时才添加
-                if (topic.localVariables && topic.localVariables.length > 0) {
-                  topicResult.declare = topic.localVariables;
-                }
-
-                return topicResult;
-              }),
-            };
-          });
-          console.log(
-            '[syncPhasesToYaml] phases 数据构建完成，数量:',
-            updatedScript.session.phases.length
-          );
-        }
-        // 旧格式：更新 sessions[].stages[].steps[].actions[]
-        else if (updatedScript.sessions?.[0]?.stages?.[0]?.steps) {
-          console.log('[syncPhasesToYaml] 检测到旧格式');
-          const stepIndex = updatedScript.sessions[0].stages[0].steps.findIndex(
-            (step: Step) => step.actions && step.actions.length > 0
-          );
-
-          if (stepIndex !== -1 && phases[0]?.topics[0]?.actions) {
-            updatedScript.sessions[0].stages[0].steps[stepIndex].actions =
-              phases[0].topics[0].actions;
-          }
-        }
-
-        console.log('[syncPhasesToYaml] 开始转换为 YAML...');
-        // 转换回 YAML
-        const newYaml = yaml.dump(updatedScript, {
-          lineWidth: -1,
-          noRefs: true,
+        // 使用 yamlService 同步
+        const result = yamlService.syncPhasesToYaml({
+          phases,
+          baseScript,
+          baseYaml,
+          targetFile: targetFile || undefined,
         });
-        console.log('[syncPhasesToYaml] YAML 转换完成，长度:', newYaml.length);
-        console.log('[syncPhasesToYaml] YAML 内容预览:', newYaml.substring(0, 200));
 
-        setFileContent(newYaml);
-        console.log('[syncPhasesToYaml] setFileContent 调用完成');
-
-        setParsedScript(updatedScript);
-        console.log('[syncPhasesToYaml] setParsedScript 调用完成');
-
-        console.log('[syncPhasesToYaml] YAML 同步成功，phases 数量:', phases.length);
+        if (result.success) {
+          setFileContent(result.yaml);
+          setParsedScript(result.script);
+          console.log('[syncPhasesToYaml] YAML 同步成功，phases 数量:', phases.length);
+        } else {
+          console.error('同步到 YAML 失败:', result.error);
+          message.error('Sync failed');
+        }
       } catch (error) {
         console.error('同步到 YAML 失败:', error);
         message.error('Sync failed');
@@ -984,227 +633,12 @@ const ProjectEditor: React.FC = () => {
    * 智能修复 YAML 缩进错误
    * 在解析前尝试修复常见的缩进问题
    */
+  /**
+   * 智能修复 YAML 缩进错误
+   * 使用 yamlService 服务
+   */
   const fixYAMLIndentation = useCallback((yamlContent: string): string => {
-    const lines = yamlContent.split('\n');
-    const fixedLines: string[] = [];
-    let lastListItemIndent: number | null = null;
-    let lastKeyIndent: number | null = null;
-    let inListItem = false; // 追踪是否在列表项内部
-
-    console.log('[FixIndent] 开始修复 YAML 缩进...');
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const trimmedLine = line.trimStart();
-
-      // 空行或注释直接保留
-      if (!trimmedLine || trimmedLine.startsWith('#')) {
-        fixedLines.push(line);
-        continue;
-      }
-
-      // 计算当前行的缩进
-      const currentIndent = line.length - trimmedLine.length;
-
-      // 检测是否是列表项（以 - 开头）
-      const isListItem = /^-\s+\w+:/.test(trimmedLine);
-
-      // 检测是否是键值对（包含冒号）
-      const keyMatch = trimmedLine.match(/^([\w_]+):\s*(.*)$/);
-      const isKeyValue = keyMatch !== null;
-
-      // 检测是否是纯列表项标记（只有 -）
-      const isPureListMarker = /^-\s*$/.test(trimmedLine);
-
-      console.log(
-        `[FixIndent] 第${i + 1}行: "${trimmedLine.substring(0, 30)}..." | 缩进=${currentIndent}, inListItem=${inListItem}, lastListItemIndent=${lastListItemIndent}`
-      );
-
-      if (isListItem) {
-        // 记录列表项的缩进
-        lastListItemIndent = currentIndent;
-        lastKeyIndent = null;
-        inListItem = true;
-        console.log(`[FixIndent] → 检测到列表项，设置 lastListItemIndent=${currentIndent}`);
-        fixedLines.push(line);
-        continue;
-      }
-
-      if (isPureListMarker) {
-        lastListItemIndent = currentIndent;
-        lastKeyIndent = null;
-        inListItem = true;
-        console.log(`[FixIndent] → 检测到纯列表标记`);
-        fixedLines.push(line);
-        continue;
-      }
-
-      // 【优先检查】：如果在列表项内部，且当前行是 Action 字段，检查缩进是否正确
-      if (inListItem && lastListItemIndent !== null && isKeyValue && keyMatch) {
-        const actionFields = ['action_type', 'action_id', 'config', 'condition'];
-        const key = keyMatch[1];
-
-        if (actionFields.includes(key)) {
-          // 这是 Action 的字段，应该缩进 = 列表项缩进 + 2
-          const correctIndent = lastListItemIndent + 2;
-
-          if (currentIndent !== correctIndent) {
-            console.log(
-              `[FixIndent] → 修复 Action 字段 "${key}" 缩进: ${currentIndent} -> ${correctIndent}`
-            );
-            fixedLines.push(' '.repeat(correctIndent) + trimmedLine);
-            lastKeyIndent = correctIndent;
-            continue;
-          }
-        }
-      }
-
-      // 检测是否退出了列表项（缩进小于或等于列表项缩进）
-      if (
-        inListItem &&
-        lastListItemIndent !== null &&
-        currentIndent <= lastListItemIndent &&
-        !isListItem &&
-        !isPureListMarker
-      ) {
-        // 非 Action 字段才真正退出列表项
-        const actionFields = ['action_type', 'action_id', 'config', 'condition'];
-        const key = keyMatch?.[1];
-
-        if (!key || !actionFields.includes(key)) {
-          // 真的退出了列表项
-          console.log(`[FixIndent] → 退出列表项（字段: ${key || 'unknown'}）`);
-          inListItem = false;
-          lastListItemIndent = null;
-        }
-      }
-
-      if (isKeyValue && keyMatch) {
-        const key = keyMatch[1];
-
-        // 规则1：修复列表项内的第一个字段后续字段
-        if (lastListItemIndent !== null && i > 0) {
-          const prevLine = lines[i - 1].trimStart();
-          const prevIsListItem = /^-\s+\w+:/.test(prevLine);
-
-          if (prevIsListItem) {
-            // 前一行是列表项（如 "- action_id: xxx"）
-            // 当前行应该缩进 = 列表项缩进 + 2
-            const correctIndent = lastListItemIndent + 2;
-
-            if (currentIndent !== correctIndent) {
-              console.log(
-                `[FixIndent] 修复列表项后的字段 "${key}" 的缩进: ${currentIndent} -> ${correctIndent}`
-              );
-              fixedLines.push(' '.repeat(correctIndent) + trimmedLine);
-              lastKeyIndent = correctIndent;
-              continue;
-            }
-          } else if (lastKeyIndent !== null && !prevLine.startsWith('-')) {
-            // 前一行是普通字段（不是列表项）
-            const prevKeyMatch = prevLine.match(/^([\w_]+):/);
-            if (prevKeyMatch && prevKeyMatch[1]) {
-              const prevIndent = lines[i - 1].length - lines[i - 1].trimStart().length;
-
-              // 检查是否应该是子字段（如 config 的子字段）
-              const prevKey = prevKeyMatch[1];
-              const configSubFields = [
-                'content',
-                'tone',
-                'exit',
-                'max_rounds',
-                'output',
-                'skill',
-                'input',
-              ];
-              const isSubField = prevKey === 'config' && configSubFields.includes(key);
-
-              if (isSubField) {
-                // 应该是子字段，缩进 = 父字段缩进 + 2
-                const correctIndent = prevIndent + 2;
-                if (currentIndent !== correctIndent) {
-                  console.log(
-                    `[FixIndent] 修复子字段 "${key}" 的缩进: ${currentIndent} -> ${correctIndent}`
-                  );
-                  fixedLines.push(' '.repeat(correctIndent) + trimmedLine);
-                  lastKeyIndent = correctIndent;
-                  continue;
-                }
-              } else if (currentIndent < prevIndent) {
-                // 缩进减少，可能是返回到上一级
-                fixedLines.push(line);
-                lastKeyIndent = currentIndent;
-                // 检查是否退出了列表项的范围
-                if (currentIndent <= lastListItemIndent) {
-                  inListItem = false;
-                  lastListItemIndent = null;
-                }
-                continue;
-              } else if (
-                inListItem &&
-                currentIndent !== prevIndent &&
-                currentIndent !== prevIndent + 2
-              ) {
-                // 在列表项内，同级字段应该对齐
-                console.log(
-                  `[FixIndent] 修复同级字段 "${key}" 的缩进: ${currentIndent} -> ${prevIndent}`
-                );
-                fixedLines.push(' '.repeat(prevIndent) + trimmedLine);
-                lastKeyIndent = prevIndent;
-                continue;
-              }
-            }
-          }
-        }
-
-        // 规则2：修复 config 子字段
-        const configSubFields = [
-          'content',
-          'tone',
-          'exit',
-          'max_rounds',
-          'output',
-          'skill',
-          'input',
-        ];
-
-        if (configSubFields.includes(key) && i > 0) {
-          const prevLine = lines[i - 1].trimStart();
-          if (prevLine.startsWith('config:')) {
-            const prevIndent = lines[i - 1].length - lines[i - 1].trimStart().length;
-            const correctIndent = prevIndent + 2;
-
-            if (currentIndent !== correctIndent) {
-              console.log(
-                `[FixIndent] 修复 config 子字段 "${key}" 的缩进: ${currentIndent} -> ${correctIndent}`
-              );
-              fixedLines.push(' '.repeat(correctIndent) + trimmedLine);
-              lastKeyIndent = correctIndent;
-              continue;
-            }
-          }
-        }
-
-        // 规则3：修复 config 字段本身
-        if (key === 'config' && lastListItemIndent !== null) {
-          const correctIndent = lastListItemIndent + 2;
-          if (currentIndent !== correctIndent) {
-            console.log(`[FixIndent] 修复 config 字段的缩进: ${currentIndent} -> ${correctIndent}`);
-            fixedLines.push(' '.repeat(correctIndent) + trimmedLine);
-            lastKeyIndent = correctIndent;
-            continue;
-          }
-        }
-
-        // 更新 lastKeyIndent
-        lastKeyIndent = currentIndent;
-      }
-
-      // 如果没有修复，保留原行
-      fixedLines.push(line);
-    }
-
-    return fixedLines.join('\n');
+    return yamlService.fixYamlIndentation(yamlContent);
   }, []);
 
   const handleFormatYAML = useCallback(() => {
@@ -2351,483 +1785,82 @@ const ProjectEditor: React.FC = () => {
   return (
     <Layout className="project-editor">
       {/* 顶部导航栏 */}
-      <Header
-        className="editor-header"
-        style={{ background: '#fff', padding: '0 24px', borderBottom: '1px solid #f0f0f0' }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            height: '100%',
-          }}
-        >
-          <Space size="middle" align="center">
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/projects')}>
-              Back to list
-            </Button>
-            <Divider type="vertical" />
-            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <Title
-                level={4}
-                style={{ margin: 0, lineHeight: '1.2', fontSize: '18px', marginBottom: '2px' }}
-              >
-                {project?.projectName}
-              </Title>
-              <Text type="secondary" style={{ fontSize: '12px', lineHeight: '1' }}>
-                Engine version: {project?.engineVersion}
-              </Text>
-            </div>
-            {project?.status && (
-              <Tag color={project.status === 'published' ? 'success' : 'default'}>
-                {project.status === 'draft'
-                  ? 'Draft'
-                  : project.status === 'published'
-                    ? 'Published'
-                    : 'Archived'}
-              </Tag>
-            )}
-            {hasUnsavedChanges && <Tag color="warning">Unsaved</Tag>}
-          </Space>
-          <Space>
-            <Button
-              icon={<HistoryOutlined />}
-              onClick={() => setVersionPanelVisible(!versionPanelVisible)}
-              type={versionPanelVisible ? 'primary' : 'default'}
-            >
-              版本管理
-            </Button>
-            <Button
-              icon={<BugOutlined />}
-              onClick={() => setDebugConfigVisible(true)}
-              disabled={!project || files.filter((f) => f.fileType === 'session').length === 0}
-            >
-              Debug
-            </Button>
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              loading={saving}
-              onClick={handleSave}
-              disabled={!hasUnsavedChanges}
-            >
-              Save {hasUnsavedChanges && '(Ctrl+S)'}
-            </Button>
-            <Button icon={<RocketOutlined />} onClick={() => setPublishModalVisible(true)}>
-              Publish Version
-            </Button>
-          </Space>
-        </div>
-      </Header>
+      <ProjectEditorHeader
+        project={project}
+        hasUnsavedChanges={hasUnsavedChanges}
+        saving={saving}
+        versionPanelVisible={versionPanelVisible}
+        files={files}
+        onBack={() => navigate('/projects')}
+        onSave={handleSave}
+        onPublish={() => setPublishModalVisible(true)}
+        onDebug={() => setDebugConfigVisible(true)}
+        onVersionToggle={() => setVersionPanelVisible(!versionPanelVisible)}
+      />
 
       <Layout style={{ height: 'calc(100vh - 64px)' }}>
         {/* 左侧文件树 */}
-        <Sider
-          width={300}
-          collapsedWidth={50}
-          collapsible
+        <FileTreeSidebar
+          selectedFile={selectedFile}
           collapsed={leftCollapsed}
+          treeData={treeData}
+          expandedKeys={expandedKeys}
+          selectedKeys={selectedKeys}
           onCollapse={setLeftCollapsed}
-          trigger={null}
-          theme="light"
-          style={{
-            borderRight: '1px solid #f0f0f0',
-            overflow: 'hidden',
-            position: 'relative',
-            display: 'flex',
-            flexDirection: 'column',
+          onTreeSelect={handleTreeSelect}
+          onCreateSession={handleCreateSession}
+          onFormatYaml={handleFormatYAML}
+          onValidate={() => {
+            if (selectedFile?.fileType === 'session' && fileContent) {
+              const result = validationServiceRef.current.validateManual(fileContent);
+              setValidationResult(result);
+              setShowValidationErrors(true);
+              if (result.valid) {
+                message.success('验证通过，没有发现错误');
+              } else {
+                message.error(`验证失败，发现 ${result.errors.length} 个错误`);
+              }
+            } else {
+              message.info('请选择一个会谈脚本文件');
+            }
           }}
-        >
-          {/* 折叠按钮 */}
-          <div
-            style={{
-              padding: '8px',
-              borderBottom: '1px solid #f0f0f0',
-              display: 'flex',
-              justifyContent: leftCollapsed ? 'center' : 'flex-end',
-            }}
-          >
-            <Button
-              type="text"
-              icon={leftCollapsed ? <RightOutlined /> : <LeftOutlined />}
-              onClick={() => setLeftCollapsed(!leftCollapsed)}
-              size="small"
-            />
-          </div>
-
-          {/* 工程文件树区域 - 可滚动 */}
-          <div
-            style={{
-              padding: leftCollapsed ? '8px' : '16px',
-              display: leftCollapsed ? 'none' : 'block',
-              flex: 1,
-              overflow: 'auto',
-              minHeight: 0,
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '12px',
-              }}
-            >
-              <Text strong>Project Files</Text>
-              <Dropdown
-                overlay={
-                  <Menu
-                    onClick={({ key }) => {
-                      if (key === 'session') {
-                        handleCreateSession();
-                      }
-                    }}
-                  >
-                    <Menu.Item key="session" icon={<FileTextOutlined />}>
-                      New Session Script
-                    </Menu.Item>
-                  </Menu>
-                }
-              >
-                <Button size="small" icon={<PlusOutlined />} />
-              </Dropdown>
-            </div>
-            <Tree
-              showIcon
-              treeData={treeData}
-              expandedKeys={expandedKeys}
-              selectedKeys={selectedKeys}
-              onExpand={(keys) => setExpandedKeys(keys)}
-              onSelect={handleTreeSelect}
-            />
-          </div>
-
-          {/* 文件属性区域 - 固定底部，独立滚动 */}
-          {!leftCollapsed && (
-            <div
-              style={{
-                borderTop: '1px solid #f0f0f0',
-                padding: '16px',
-                maxHeight: '40vh',
-                overflow: 'auto',
-                flexShrink: 0,
-              }}
-            >
-              <Title level={5} style={{ marginTop: 0 }}>
-                File Details
-              </Title>
-              {selectedFile ? (
-                <div>
-                  <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                    <div>
-                      <Text type="secondary">File Name</Text>
-                      <div>
-                        <Text>{selectedFile.fileName}</Text>
-                      </div>
-                    </div>
-                    <div>
-                      <Text type="secondary">File Type</Text>
-                      <div>
-                        <Tag>{selectedFile.fileType}</Tag>
-                      </div>
-                    </div>
-                    <div>
-                      <Text type="secondary">Created At</Text>
-                      <div>
-                        <Text>{new Date(selectedFile.createdAt).toLocaleString()}</Text>
-                      </div>
-                    </div>
-                    <div>
-                      <Text type="secondary">Updated At</Text>
-                      <div>
-                        <Text>{new Date(selectedFile.updatedAt).toLocaleString()}</Text>
-                      </div>
-                    </div>
-                  </Space>
-
-                  <Divider />
-
-                  <Title level={5}>Quick Actions</Title>
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <Button
-                      block
-                      icon={<HistoryOutlined />}
-                      onClick={() => setVersionPanelVisible(true)}
-                    >
-                      View Version History
-                    </Button>
-                    <Button
-                      block
-                      icon={<FormOutlined />}
-                      onClick={handleFormatYAML}
-                      disabled={!fileContent}
-                    >
-                      Format YAML
-                    </Button>
-                    <Button
-                      block
-                      onClick={() => {
-                        // 触发点 4: 手动触发验证
-                        if (selectedFile?.fileType === 'session' && fileContent) {
-                          const result = validationServiceRef.current.validateManual(fileContent);
-                          setValidationResult(result);
-                          setShowValidationErrors(true);
-
-                          if (result.valid) {
-                            message.success('验证通过，没有发现错误');
-                          } else {
-                            message.error(`验证失败，发现 ${result.errors.length} 个错误`);
-                          }
-                        } else {
-                          message.info('请选择一个会谈脚本文件');
-                        }
-                      }}
-                    >
-                      Validate Script
-                    </Button>
-                  </Space>
-                </div>
-              ) : (
-                <Text type="secondary">No file selected</Text>
-              )}
-            </div>
-          )}
-        </Sider>
+          onVersionHistoryClick={() => setVersionPanelVisible(true)}
+        />
 
         {/* 中间编辑区 */}
-        <Layout style={{ padding: '0', overflow: 'hidden' }}>
-          <Content
-            style={{
-              background: '#fff',
-              margin: 0,
-              minHeight: 280,
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            {selectedFile ? (
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                {/* 文件面包屑 */}
-                <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0f0f0' }}>
-                  <Space>
-                    {getFileIcon(selectedFile.fileType)}
-                    <Text strong>{selectedFile.fileName}</Text>
-                    <Text type="secondary" style={{ fontSize: '12px' }}>
-                      Last modified: {new Date(selectedFile.updatedAt).toLocaleString()}
-                    </Text>
-
-                    {/* 如果是会谈脚本，显示模式切换按钮 */}
-                    {selectedFile.fileType === 'session' && (
-                      <>
-                        <Divider type="vertical" />
-                        <Button.Group size="small">
-                          <Button
-                            icon={<CodeOutlined />}
-                            type={editMode === 'yaml' ? 'primary' : 'default'}
-                            onClick={() => {
-                              console.log('切换到 YAML 模式');
-                              setEditMode('yaml');
-                            }}
-                          >
-                            YAML Mode
-                          </Button>
-                          <Button
-                            icon={<AppstoreOutlined />}
-                            type={editMode === 'visual' ? 'primary' : 'default'}
-                            onClick={() => {
-                              console.log('切换到可视化编辑模式');
-                              console.log('当前 Phases 数量:', currentPhases.length);
-                              console.log('解析的脚本:', parsedScript);
-
-                              // 切换到可视化模式时，重新解析 YAML 内容以确保数据同步
-                              if (fileContent) {
-                                parseYamlToScript(fileContent);
-                              }
-                              setEditMode('visual');
-                            }}
-                          >
-                            Visual Editor
-                          </Button>
-                        </Button.Group>
-                        <Text type="secondary" style={{ fontSize: '12px', marginLeft: '8px' }}>
-                          {editMode === 'visual' &&
-                            `(${currentPhases.reduce(
-                              (total, phase) =>
-                                total +
-                                phase.topics.reduce((t, topic) => t + topic.actions.length, 0),
-                              0
-                            )} nodes)`}
-                        </Text>
-                      </>
-                    )}
-                  </Space>
-                </div>
-
-                {/* 编辑器内容 */}
-                {editMode === 'yaml' ? (
-                  // YAML 编辑器
-                  <div style={{ flex: 1, padding: '16px 24px', overflow: 'auto', minHeight: 0 }}>
-                    {/* 验证错误面板 */}
-                    {validationResult && !validationResult.valid && showValidationErrors && (
-                      <ValidationErrorPanel
-                        errors={validationResult.errors}
-                        onClose={() => setShowValidationErrors(false)}
-                      />
-                    )}
-
-                    <TextArea
-                      value={fileContent}
-                      onChange={handleContentChange}
-                      placeholder="Edit YAML content..."
-                      style={{
-                        width: '100%',
-                        minHeight: '600px',
-                        fontFamily: 'Monaco, Consolas, monospace',
-                        fontSize: '14px',
-                      }}
-                    />
-                  </div>
-                ) : (
-                  // 可视化节点编辑
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                    {/* 验证错误摘要（Visual Editor 模式） */}
-                    {validationResult && !validationResult.valid && showValidationErrors && (
-                      <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
-                        <Alert
-                          message={`发现 ${validationResult.errors.length} 个脚本验证错误`}
-                          description="请检查并修复错误后保存。点击有错误的 Action 查看详情。"
-                          type="error"
-                          showIcon
-                          closable
-                          onClose={() => setShowValidationErrors(false)}
-                        />
-                      </div>
-                    )}
-
-                    <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-                      {/* 左侧：Action 节点列表 */}
-                      <div
-                        style={{
-                          width: '50%',
-                          borderRight: '1px solid #f0f0f0',
-                          overflow: 'auto',
-                          minHeight: 0,
-                        }}
-                      >
-                        <ActionNodeList
-                          ref={actionNodeListRef}
-                          phases={currentPhases}
-                          selectedActionPath={selectedActionPath}
-                          selectedPhasePath={selectedPhasePath}
-                          selectedTopicPath={selectedTopicPath}
-                          onSelectAction={handleSelectAction}
-                          onSelectPhase={handleSelectPhase}
-                          onSelectTopic={handleSelectTopic}
-                          onAddPhase={handleAddPhase}
-                          onAddTopic={handleAddTopic}
-                          onAddAction={handleAddAction}
-                          onDeletePhase={handleDeletePhase}
-                          onDeleteTopic={handleDeleteTopic}
-                          onDeleteAction={handleDeleteAction}
-                          onMovePhase={handleMovePhase}
-                          onMoveTopic={handleMoveTopic}
-                          onMoveAction={handleMoveAction}
-                        />
-                      </div>
-
-                      {/* 右侧：属性编辑面板 */}
-                      <div
-                        style={{
-                          width: '50%',
-                          overflow: 'auto',
-                          minHeight: 0,
-                        }}
-                      >
-                        {editingType === 'phase' && selectedPhasePath !== null && (
-                          <PhaseTopicPropertyPanel
-                            type="phase"
-                            data={{
-                              id: currentPhases[selectedPhasePath.phaseIndex].phase_id,
-                              name: currentPhases[selectedPhasePath.phaseIndex].phase_name,
-                              description: currentPhases[selectedPhasePath.phaseIndex].description,
-                            }}
-                            onSave={handlePhaseSave}
-                          />
-                        )}
-
-                        {editingType === 'topic' && selectedTopicPath !== null && (
-                          <PhaseTopicPropertyPanel
-                            type="topic"
-                            data={{
-                              id: currentPhases[selectedTopicPath.phaseIndex].topics[
-                                selectedTopicPath.topicIndex
-                              ].topic_id,
-                              name: currentPhases[selectedTopicPath.phaseIndex].topics[
-                                selectedTopicPath.topicIndex
-                              ].topic_name,
-                              description:
-                                currentPhases[selectedTopicPath.phaseIndex].topics[
-                                  selectedTopicPath.topicIndex
-                                ].description,
-                              localVariables:
-                                currentPhases[selectedTopicPath.phaseIndex].topics[
-                                  selectedTopicPath.topicIndex
-                                ].localVariables,
-                            }}
-                            onSave={handleTopicSave}
-                          />
-                        )}
-
-                        {editingType === 'action' && selectedActionPath !== null && (
-                          <ActionPropertyPanel
-                            action={
-                              currentPhases[selectedActionPath.phaseIndex]?.topics[
-                                selectedActionPath.topicIndex
-                              ]?.actions[selectedActionPath.actionIndex] ?? null
-                            }
-                            actionIndex={selectedActionPath.actionIndex}
-                            onSave={handleActionSave}
-                            validationErrors={
-                              validationResult?.errors.filter((error) =>
-                                isErrorForAction(
-                                  error.path,
-                                  selectedActionPath.phaseIndex,
-                                  selectedActionPath.topicIndex,
-                                  selectedActionPath.actionIndex
-                                )
-                              ) ?? []
-                            }
-                          />
-                        )}
-
-                        {editingType === null && (
-                          <div style={{ padding: '24px', textAlign: 'center' }}>
-                            <Text type="secondary">
-                              Please select a Phase, Topic, or Action on the left
-                            </Text>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  height: '100%',
-                }}
-              >
-                <Text type="secondary">Please select a file on the left to edit</Text>
-              </div>
-            )}
-          </Content>
-        </Layout>
+        <EditorContent
+          editMode={editMode}
+          selectedFile={selectedFile}
+          fileContent={fileContent}
+          currentPhases={currentPhases}
+          parsedScript={parsedScript}
+          validationResult={validationResult}
+          showValidationErrors={showValidationErrors}
+          selectedActionPath={selectedActionPath}
+          selectedPhasePath={selectedPhasePath}
+          selectedTopicPath={selectedTopicPath}
+          editingType={editingType}
+          actionNodeListRef={actionNodeListRef}
+          onContentChange={handleContentChange}
+          onModeChange={setEditMode}
+          onCloseValidationErrors={() => setShowValidationErrors(false)}
+          onSelectAction={handleSelectAction}
+          onSelectPhase={handleSelectPhase}
+          onSelectTopic={handleSelectTopic}
+          onAddPhase={handleAddPhase}
+          onAddTopic={handleAddTopic}
+          onAddAction={handleAddAction}
+          onDeletePhase={handleDeletePhase}
+          onDeleteTopic={handleDeleteTopic}
+          onDeleteAction={handleDeleteAction}
+          onMovePhase={handleMovePhase}
+          onMoveTopic={handleMoveTopic}
+          onMoveAction={handleMoveAction}
+          onActionSave={handleActionSave}
+          onPhaseSave={handlePhaseSave}
+          onTopicSave={handleTopicSave}
+          parseYamlToScript={parseYamlToScript}
+        />
       </Layout>
 
       {/* 发布版本对话框 */}

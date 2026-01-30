@@ -36,6 +36,12 @@ export class SchemaValidator {
    * 验证 Technique 脚本（使用 topic schema）
    */
   public validateTechnique(data: unknown): ValidationResult {
+    // Technique 脚本的顶层结构包含 topic 字段
+    // 需要提取 topic 字段进行验证
+    if (typeof data === 'object' && data !== null && 'topic' in data) {
+      return this.validate((data as Record<string, unknown>).topic, 'topic');
+    }
+    // 如果直接传入的就是 topic 对象，则直接验证
     return this.validate(data, 'topic');
   }
 

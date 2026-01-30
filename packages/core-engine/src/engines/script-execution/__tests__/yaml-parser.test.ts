@@ -48,7 +48,9 @@ session:
                   {
                     action_type: 'ai_say',
                     action_id: 'action1',
-                    config: {},
+                    config: {
+                      content: 'Hello, this is a test message.',
+                    },
                   },
                 ],
               },
@@ -74,14 +76,18 @@ session:
 
   it('should validate technique script schema', () => {
     const validData = {
-      topic_id: 'technique_1',
-      actions: [
-        {
-          action_type: 'ai_ask',
-          action_id: 'question1',
-          config: {},
-        },
-      ],
+      topic: {
+        topic_id: 'technique_1',
+        actions: [
+          {
+            action_type: 'ai_ask',
+            action_id: 'question1',
+            config: {
+              content: 'What is your question?',
+            },
+          },
+        ],
+      },
     };
 
     expect(() => parser.validateTechniqueScript(validData)).not.toThrow();
