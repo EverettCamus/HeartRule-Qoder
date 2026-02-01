@@ -91,17 +91,17 @@
 
 **详细需求**:
 
-- 在`engines/prompt-template`下为每种Action类型创建默认模板
+- 在`engines/prompt-template`下为每种 Action 类型创建默认模板
 - 模板包含:输出格式定义、上下文引用规则、安全边界说明
 - 脚本中只需编写业务目标,系统自动组装完整提示词
-- 支持脚本局部覆盖默认模板
+- 支持在 session 中指定数据库脚本工程中 custom 目录下的模板方案(`template_scheme`)
 
 **验收标准**:
 
 - [ ] ai_ask/ai_say/ai_think都有默认模板
 - [ ] 默认模板包含角色定义、输出格式、安全规范
 - [ ] 脚本只写业务提示词即可运行
-- [ ] 可通过config.override_template覆盖默认
+- [ ] 支持两层模板方案机制(default + custom),可通过 session 节点的 `template_scheme` 字段指定使用的方案
 - [ ] 单元测试覆盖模板渲染逻辑
 
 **优先级**: P0 - 高  
