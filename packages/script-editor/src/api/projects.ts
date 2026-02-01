@@ -9,7 +9,7 @@ export interface Project {
   engineVersion: string;
   engineVersionMin: string;
   currentVersionId?: string;
-  status: 'draft' | 'published' | 'archived';
+  status: 'draft' | 'published' | 'archived' | 'deprecated';
   author: string;
   tags: string[];
   metadata: Record<string, any>;
@@ -57,10 +57,11 @@ export const projectsApi = {
     status?: string;
     search?: string;
     author?: string;
+    includeDeprecated?: boolean;
   }) {
     const response = await axios.get<{ success: boolean; data: Project[] }>(
       `${API_BASE_URL}/projects`,
-      { params }
+      { params: { ...params, includeDeprecated: params?.includeDeprecated?.toString() } }
     );
     return response.data;
   },
@@ -82,6 +83,11 @@ export const projectsApi = {
     engineVersionMin?: string;
     author: string;
     tags?: string[];
+    // 工程初始化配置
+    template?: 'blank' | 'cbt-assessment' | 'cbt-counseling';
+    domain?: string;
+    scenario?: string;
+    language?: string;
   }) {
     const response = await axios.post<{ success: boolean; data: Project }>(
       `${API_BASE_URL}/projects`,
@@ -116,6 +122,24 @@ export const projectsApi = {
     return response.data;
   },
 
+  // 作废工程（软删除）
+  async deprecateProject(id: string, data?: { operator?: string; reason?: string }) {
+    const response = await axios.post<{ success: boolean; data: Project }>(
+      `${API_BASE_URL}/projects/${id}/deprecate`,
+      data || {}
+    );
+    return response.data;
+  },
+
+  // 恢复已作废工程
+  async restoreProject(id: string, data?: { operator?: string }) {
+    const response = await axios.post<{ success: boolean; data: Project }>(
+      `${API_BASE_URL}/projects/${id}/restore`,
+      data || {}
+    );
+    return response.data;
+  },
+
   // 复制工程
   async copyProject(id: string, author: string) {
     const response = await axios.post<{ success: boolean; data: Project }>(
@@ -142,7 +166,10 @@ export const projectsApi = {
   },
 
   // 创建文件
-  async createFile(projectId: string, data: { fileType: string; fileName: string; fileContent: any }) {
+  async createFile(
+    projectId: string,
+    data: { fileType: string; fileName: string; fileContent: any }
+  ) {
     const response = await axios.post<{ success: boolean; data: ScriptFile }>(
       `${API_BASE_URL}/projects/${projectId}/files`,
       data

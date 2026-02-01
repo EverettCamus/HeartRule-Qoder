@@ -40,10 +40,23 @@
 
 .project-card {
   transition: all 0.3s;
+  position: relative;
 }
 
 .project-card:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 已作废工程样式 */
+.project-card.deprecated {
+  opacity: 0.7;
+  border: 2px dashed #ff4d4f;
+  background: #fff1f0;
+}
+
+.project-card.deprecated .project-header h5 {
+  text-decoration: line-through;
+  color: #999;
 }
 
 .project-header {

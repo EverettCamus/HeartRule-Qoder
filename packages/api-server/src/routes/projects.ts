@@ -1,9 +1,12 @@
-import { eq, and, desc, like, or, SQL } from 'drizzle-orm';
+import path from 'path';
+
+import { eq, and, desc, like, or, ne, SQL } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
 import { db } from '../db/index.js';
 import { projects, projectDrafts, scriptFiles, projectVersions } from '../db/schema.js';
+import { ProjectInitializer } from '../services/project-initializer.js';
 
 // Schema定义
 const createProjectSchema = z.object({
@@ -13,6 +16,11 @@ const createProjectSchema = z.object({
   engineVersionMin: z.string().default('1.0.0'),
   author: z.string(),
   tags: z.array(z.string()).default([]),
+  // 新增工程初始化配置
+  template: z.enum(['blank', 'cbt-assessment', 'cbt-counseling']).default('blank'),
+  domain: z.string().optional(),
+  scenario: z.string().optional(),
+  language: z.string().default('zh-CN'),
 });
 
 const updateProjectSchema = z.object({
@@ -27,17 +35,24 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
   // 获取工程列表
   fastify.get('/projects', async (request, reply) => {
     try {
-      const { status, search, author } = request.query as {
+      const { status, search, author, includeDeprecated } = request.query as {
         status?: string;
         search?: string;
         author?: string;
+        includeDeprecated?: string;
       };
 
       // 构建查询条件
       const conditions: SQL[] = [];
+
+      // 状态过滤：默认不包含 deprecated 状态
       if (status && status !== 'all') {
         conditions.push(eq(projects.status, status as any));
+      } else if (includeDeprecated !== 'true') {
+        // 默认过滤掉 deprecated 状态
+        conditions.push(ne(projects.status, 'deprecated'));
       }
+
       if (author) {
         conditions.push(eq(projects.author, author));
       }
@@ -172,6 +187,59 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         validationStatus: 'unknown',
       });
 
+      // 初始化工程目录结构和模板文件
+      try {
+        // 使用绝对路径，默认为api-server包下的workspace/projects
+        const workspacePath =
+          process.env.PROJECTS_WORKSPACE || path.resolve(process.cwd(), 'workspace', 'projects');
+        const initializer = new ProjectInitializer(workspacePath);
+
+        const initResult = await initializer.initializeProject({
+          projectId: newProject.id,
+          projectName: body.projectName,
+          template: body.template,
+          domain: body.domain,
+          scenario: body.scenario,
+          language: body.language,
+          author: body.author,
+        });
+
+        console.log(`[API] ✅ Project directory initialized: ${newProject.id}`);
+
+        // 将生成的示例脚本导入到数据库
+        if (initResult.generatedScripts.length > 0) {
+          console.log(
+            `[API] Importing ${initResult.generatedScripts.length} sample scripts to database`
+          );
+
+          for (const script of initResult.generatedScripts) {
+            try {
+              // 解析YAML内容为JSON
+              const yaml = await import('js-yaml');
+              const parsedContent = yaml.load(script.content);
+
+              await db.insert(scriptFiles).values({
+                projectId: newProject.id,
+                fileType: script.fileType,
+                fileName: script.fileName,
+                fileContent: parsedContent,
+                yamlContent: script.content,
+              });
+
+              console.log(`[API]   ✅ Imported: ${script.fileName}`);
+            } catch (parseError: any) {
+              console.error(`[API]   ⚠️ Failed to import ${script.fileName}:`, parseError.message);
+            }
+          }
+        }
+      } catch (initError: any) {
+        // 工程目录初始化失败不影响数据库记录创建
+        console.error(`[API] ⚠️ Project directory initialization failed:`, initError);
+        fastify.log.warn(
+          `Project directory initialization failed for ${newProject.id}: ${initError.message}`
+        );
+      }
+
       return reply.status(201).send({
         success: true,
         data: newProject,
@@ -264,6 +332,126 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(500).send({
         success: false,
         error: 'Failed to archive project',
+      });
+    }
+  });
+
+  // 作废工程（软删除）
+  fastify.post('/projects/:id/deprecate', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const { operator, reason } = request.body as { operator?: string; reason?: string };
+
+      // 获取当前工程
+      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+
+      if (!project) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Project not found',
+        });
+      }
+
+      // 记录作废信息到 metadata
+      const currentMetadata = (project.metadata as Record<string, any>) || {};
+      const deprecationHistory = [
+        ...(currentMetadata.deprecationHistory || []),
+        {
+          action: 'deprecate',
+          timestamp: new Date().toISOString(),
+          operator: operator || 'unknown',
+          reason: reason || '',
+        },
+      ];
+
+      const [deprecated] = await db
+        .update(projects)
+        .set({
+          status: 'deprecated',
+          metadata: {
+            ...currentMetadata,
+            deprecationHistory,
+            deprecatedAt: new Date().toISOString(),
+            deprecatedBy: operator || 'unknown',
+            deprecationReason: reason || '',
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(projects.id, id))
+        .returning();
+
+      return reply.send({
+        success: true,
+        data: deprecated,
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to deprecate project',
+      });
+    }
+  });
+
+  // 恢复已作废工程
+  fastify.post('/projects/:id/restore', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const { operator } = request.body as { operator?: string };
+
+      // 获取当前工程
+      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+
+      if (!project) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Project not found',
+        });
+      }
+
+      // 检查是否是已作废状态
+      if (project.status !== 'deprecated') {
+        return reply.status(400).send({
+          success: false,
+          error: 'Only deprecated projects can be restored',
+        });
+      }
+
+      // 记录恢复信息到 metadata
+      const currentMetadata = (project.metadata as Record<string, any>) || {};
+      const deprecationHistory = [
+        ...(currentMetadata.deprecationHistory || []),
+        {
+          action: 'restore',
+          timestamp: new Date().toISOString(),
+          operator: operator || 'unknown',
+        },
+      ];
+
+      const [restored] = await db
+        .update(projects)
+        .set({
+          status: 'draft', // 恢复为草稿状态
+          metadata: {
+            ...currentMetadata,
+            deprecationHistory,
+            restoredAt: new Date().toISOString(),
+            restoredBy: operator || 'unknown',
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(projects.id, id))
+        .returning();
+
+      return reply.send({
+        success: true,
+        data: restored,
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to restore project',
       });
     }
   });

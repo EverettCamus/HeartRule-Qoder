@@ -8,6 +8,8 @@ import {
   FolderOpenOutlined,
   CopyOutlined,
   DeleteOutlined,
+  RollbackOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import {
   Layout,
@@ -48,7 +50,7 @@ const ProjectList: React.FC = () => {
   // 加载项目列表
   useEffect(() => {
     loadProjects();
-  }, []);
+  }, [statusFilter, searchText]); // 添加依赖项，当筛选条件变化时重新加载
 
   const loadProjects = async () => {
     setLoading(true);
@@ -82,6 +84,9 @@ const ProjectList: React.FC = () => {
         engineVersionMin: '1.0.0',
         author: 'LEO', // TODO: 从用户信息获取
         tags: values.tags || [],
+        // 添加工程初始化配置
+        template: values.template || 'blank',
+        language: values.language || 'zh-CN',
       });
 
       if (response.success) {
@@ -112,71 +117,154 @@ const ProjectList: React.FC = () => {
     }
   };
 
-  const handleArchiveProject = async (project: Project) => {
-    try {
-      // TODO: 调用API归档项目
-      message.success(`Project "${project.projectName}" has been archived`);
-      loadProjects();
-    } catch (error) {
-      message.error('Failed to archive project');
-    }
+  // 暂时不使用的归档功能
+  // const handleArchiveProject = async (project: Project) => {
+  //   try {
+  //     // TODO: 调用API归档项目
+  //     message.success(`Project "${project.projectName}" has been archived`);
+  //     loadProjects();
+  //   } catch (error) {
+  //     message.error('Failed to archive project');
+  //   }
+  // };
+
+  const handleDeprecateProject = (project: Project) => {
+    Modal.confirm({
+      title: '⚠️ Confirm Deprecation',
+      icon: <ExclamationCircleOutlined />,
+      content: (
+        <div>
+          <p>
+            Are you sure you want to move project <strong>"{project.projectName}"</strong> to trash?
+          </p>
+          <p style={{ color: '#666', marginTop: '12px', fontSize: '13px' }}>
+            • The project will be hidden from the normal list
+            <br />
+            • All files and configurations will be preserved
+            <br />• You can restore it anytime from the "Deprecated" filter
+          </p>
+        </div>
+      ),
+      okText: 'Move to Trash',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await projectsApi.deprecateProject(project.id, {
+            operator: 'LEO', // TODO: 从用户信息获取
+          });
+          message.success('Project moved to trash');
+          loadProjects();
+        } catch (error) {
+          message.error('Failed to deprecate project');
+        }
+      },
+    });
   };
 
-  const getProjectMenuItems = (project: Project): MenuProps['items'] => [
-    {
-      key: 'edit',
-      icon: <EditOutlined />,
-      label: 'Edit',
-      onClick: () => handleEditProject(project.id),
-    },
-    {
-      key: 'files',
-      icon: <FolderOpenOutlined />,
-      label: 'View Files',
-      onClick: () => navigate(`/projects/${project.id}/files`),
-    },
-    {
-      key: 'copy',
-      icon: <CopyOutlined />,
-      label: 'Duplicate',
-      onClick: () => handleCopyProject(project),
-    },
-    {
-      type: 'divider',
-    },
-    {
-      key: 'archive',
-      icon: <DeleteOutlined />,
-      label: 'Archive',
-      danger: true,
-      onClick: () => {
-        Modal.confirm({
-          title: 'Confirm Archive',
-          content: `Are you sure you want to archive project "${project.projectName}"?`,
-          onOk: () => handleArchiveProject(project),
-        });
+  const handleRestoreProject = (project: Project) => {
+    Modal.confirm({
+      title: '♻️ Confirm Restore',
+      icon: <RollbackOutlined />,
+      content: (
+        <div>
+          <p>
+            Restore project <strong>"{project.projectName}"</strong> as Draft?
+          </p>
+          <p style={{ color: '#666', marginTop: '12px', fontSize: '13px' }}>
+            The project will be restored to Draft status and appear in the normal list.
+          </p>
+        </div>
+      ),
+      okText: 'Restore',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await projectsApi.restoreProject(project.id, {
+            operator: 'LEO', // TODO: 从用户信息获取
+          });
+          message.success('Project restored successfully');
+          loadProjects();
+        } catch (error) {
+          message.error('Failed to restore project');
+        }
       },
-    },
-  ];
+    });
+  };
+
+  const getProjectMenuItems = (project: Project): MenuProps['items'] => {
+    const items: MenuProps['items'] = [];
+
+    if (project.status !== 'deprecated') {
+      // 正常状态的操作
+      items.push(
+        {
+          key: 'edit',
+          icon: <EditOutlined />,
+          label: 'Edit',
+          onClick: () => handleEditProject(project.id),
+        },
+        {
+          key: 'files',
+          icon: <FolderOpenOutlined />,
+          label: 'View Files',
+          onClick: () => navigate(`/projects/${project.id}/files`),
+        },
+        {
+          key: 'copy',
+          icon: <CopyOutlined />,
+          label: 'Duplicate',
+          onClick: () => handleCopyProject(project),
+        },
+        {
+          type: 'divider',
+        },
+        {
+          key: 'deprecate',
+          icon: <DeleteOutlined />,
+          label: 'Move to Trash',
+          danger: true,
+          onClick: () => handleDeprecateProject(project),
+        }
+      );
+    } else {
+      // 已作废状态的操作
+      items.push(
+        {
+          key: 'restore',
+          icon: <RollbackOutlined />,
+          label: 'Restore',
+          onClick: () => handleRestoreProject(project),
+        },
+        {
+          type: 'divider',
+        },
+        {
+          key: 'view-only',
+          icon: <FolderOpenOutlined />,
+          label: 'View Only',
+          onClick: () => navigate(`/projects/${project.id}/files`),
+        }
+      );
+    }
+
+    return items;
+  };
 
   const getStatusTag = (status: string) => {
     const statusMap: Record<string, { color: string; text: string }> = {
       draft: { color: 'default', text: 'Draft' },
       published: { color: 'success', text: 'Published' },
       archived: { color: 'error', text: 'Archived' },
+      deprecated: { color: 'error', text: '🗑️ Deprecated' },
     };
     const config = statusMap[status] || statusMap.draft;
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
-  const filteredProjects = projects.filter((project) => {
-    const matchesSearch =
-      searchText === '' ||
-      project.projectName.toLowerCase().includes(searchText.toLowerCase()) ||
-      project.description.toLowerCase().includes(searchText.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || project.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  // 直接使用 API 返回的数据，不需要前端再次过滤
+  // API 已经根据 status 和 search 参数过滤了数据
+  const filteredProjects = projects;
 
   return (
     <Layout className="project-list-layout">
@@ -208,11 +296,12 @@ const ProjectList: React.FC = () => {
               style={{ width: 300 }}
               allowClear
             />
-            <Select value={statusFilter} onChange={setStatusFilter} style={{ width: 120 }}>
-              <Option value="all">All statuses</Option>
+            <Select value={statusFilter} onChange={setStatusFilter} style={{ width: 150 }}>
+              <Option value="all">All (Active)</Option>
               <Option value="draft">Draft</Option>
               <Option value="published">Published</Option>
               <Option value="archived">Archived</Option>
+              <Option value="deprecated">🗑️ Deprecated</Option>
             </Select>
           </Space>
         </div>
@@ -222,9 +311,9 @@ const ProjectList: React.FC = () => {
             {filteredProjects.map((project) => (
               <Card
                 key={project.id}
-                className="project-card"
-                hoverable
-                onClick={() => handleEditProject(project.id)}
+                className={`project-card ${project.status === 'deprecated' ? 'deprecated' : ''}`}
+                hoverable={project.status !== 'deprecated'}
+                onClick={() => project.status !== 'deprecated' && handleEditProject(project.id)}
                 extra={
                   <div onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                     <Dropdown menu={{ items: getProjectMenuItems(project) }} trigger={['click']}>
@@ -335,6 +424,26 @@ const ProjectList: React.FC = () => {
               <Option value="1.1.0">v1.1.0</Option>
               <Option value="1.2.0">v1.2.0 (Latest stable)</Option>
               <Option value="1.3.0">v1.3.0 (Beta)</Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="Project Template"
+            name="template"
+            initialValue="blank"
+            tooltip="Choose a template to initialize project with sample scripts and templates"
+          >
+            <Select>
+              <Option value="blank">Blank Project (空白工程)</Option>
+              <Option value="cbt-assessment">CBT Assessment (CBT评估会谈)</Option>
+              <Option value="cbt-counseling">CBT Counseling (CBT咨询会谈)</Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item label="Language" name="language" initialValue="zh-CN">
+            <Select>
+              <Option value="zh-CN">中文(简体)</Option>
+              <Option value="en-US">English</Option>
             </Select>
           </Form.Item>
 
