@@ -301,16 +301,37 @@ export class AiAskAction extends BaseAction {
     console.log('[AiAskAction] 📄 Loading template with config:', {
       template_scheme: sessionConfig.template_scheme,
       projectId: context.metadata?.projectId,
+      hasTemplateProvider: !!context.metadata?.templateProvider,
     });
 
-    // 2. 初始化 TemplateResolver（延迟初始化）
+    // 2. 🎯 WI-3: 从 context 中提取 projectId 和 templateProvider
+    const projectId = context.metadata?.projectId;
+    const templateProvider = context.metadata?.templateProvider;
+
+    // 3. 初始化 TemplateResolver（延迟初始化）
     if (!this.templateResolver) {
+      // 💉 使用 projectId 初始化，如果有 templateProvider 则注入
       const projectRoot = this.resolveProjectRoot(context);
       console.log('[AiAskAction] 📂 Using project root:', projectRoot);
-      this.templateResolver = new TemplateResolver(projectRoot);
+
+      if (projectId && templateProvider) {
+        console.log('[AiAskAction] 💉 Initializing TemplateResolver with projectId and provider');
+        this.templateResolver = new TemplateResolver(projectId, templateProvider);
+      } else {
+        console.log(
+          '[AiAskAction] 📂 Initializing TemplateResolver with project path (fallback mode)'
+        );
+        this.templateResolver = new TemplateResolver(projectRoot);
+      }
     }
 
-    // 3. 解析模板路径（使用两层解析）
+    // 💉 如果 TemplateManager 未初始化 provider，重新初始化
+    if (projectId && templateProvider && !this.templateManager['templateProvider']) {
+      console.log('[AiAskAction] 💉 Re-initializing TemplateManager with projectId and provider');
+      this.templateManager = new PromptTemplateManager(projectId, templateProvider);
+    }
+
+    // 4. 解析模板路径（使用两层解析）
     const resolution = await this.templateResolver.resolveTemplatePath(
       'ai_ask', // 注意：模板文件名为 ai_ask_v1.md
       sessionConfig
@@ -323,13 +344,21 @@ export class AiAskAction extends BaseAction {
       exists: resolution.exists,
     });
 
-    // 4. 使用项目根目录加载模板
-    const projectRoot = this.resolveProjectRoot(context);
-    const fullPath = path.join(projectRoot, resolution.path);
-
-    console.log(`[AiAskAction] 📂 Loading template from full path:`, fullPath);
-
-    const template = await this.templateManager.loadTemplate(fullPath);
+    // 5. 加载模板
+    //    - 数据库模式：直接使用相对路径（resolution.path）
+    //    - 文件系统模式：拼接完整路径
+    let template;
+    if (projectId && templateProvider) {
+      // 数据库模式：TemplateManager 会使用 templateProvider.getTemplate()
+      console.log(`[AiAskAction] 📂 Loading template from database:`, resolution.path);
+      template = await this.templateManager.loadTemplate(resolution.path);
+    } else {
+      // 文件系统模式：需要拼接项目根目录
+      const projectRoot = this.resolveProjectRoot(context);
+      const fullPath = path.join(projectRoot, resolution.path);
+      console.log(`[AiAskAction] 📂 Loading template from filesystem:`, fullPath);
+      template = await this.templateManager.loadTemplate(fullPath);
+    }
 
     // 5. 准备变量
     const scriptVariables = this.extractScriptVariables(context);

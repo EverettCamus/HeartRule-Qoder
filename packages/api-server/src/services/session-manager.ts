@@ -7,8 +7,12 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import { ScriptExecutor, ExecutionStatus } from '@heartrule/core-engine';
-import type { ExecutionState } from '@heartrule/core-engine';
+import {
+  ScriptExecutor,
+  ExecutionStatus,
+  type TemplateProvider,
+  ExecutionState,
+} from '@heartrule/core-engine';
 import type { DetailedApiError } from '@heartrule/shared-types';
 import { VariableScope } from '@heartrule/shared-types';
 import { eq, and } from 'drizzle-orm';
@@ -25,6 +29,8 @@ import {
   type NewVariable,
 } from '../db/schema.js';
 import { buildDetailedError } from '../utils/error-handler.js';
+
+import { DatabaseTemplateProvider } from './database-template-provider.js';
 
 // 类型定义
 interface SessionData {
@@ -77,9 +83,11 @@ interface SessionResponse {
  */
 export class SessionManager {
   private scriptExecutor: ScriptExecutor;
+  private templateProvider: TemplateProvider;
 
   constructor() {
     this.scriptExecutor = new ScriptExecutor();
+    this.templateProvider = new DatabaseTemplateProvider();
   }
 
   /**
@@ -369,11 +377,14 @@ export class SessionManager {
     const logPrefix = userInput === null ? 'initialization' : 'with user input';
     console.log(`[SessionManager] ⏳ Executing script (${logPrefix})...`);
 
+    // 🎯 WI-2: 传递 projectId 和 templateProvider 到 ScriptExecutor
     const updatedState = await this.scriptExecutor.executeSession(
       scriptJson,
       sessionId,
       executionState,
-      userInput
+      userInput,
+      script.projectId, // 传递 projectId
+      this.templateProvider // 传递 templateProvider
     );
 
     console.log('[SessionManager] ✅ Script execution completed:', {
@@ -677,10 +688,16 @@ export class SessionManager {
       await fs.mkdir(dirPath, { recursive: true });
 
       // fileContent 可能是字符串或对象，确保转换为字符串
-      const content =
-        typeof file.fileContent === 'string'
-          ? file.fileContent
-          : JSON.stringify(file.fileContent, null, 2);
+      let content: string;
+      if (typeof file.fileContent === 'string') {
+        content = file.fileContent;
+      } else if (file.fileContent && typeof file.fileContent === 'object') {
+        // 如果是对象，提取 content 字段（针对模板文件）
+        const contentObj = file.fileContent as { content?: string };
+        content = contentObj.content || JSON.stringify(file.fileContent, null, 2);
+      } else {
+        content = '';
+      }
 
       await fs.writeFile(fullPath, content, 'utf-8');
 

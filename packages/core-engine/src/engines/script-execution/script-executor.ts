@@ -1,17 +1,17 @@
 /**
- * 脚本执行引擎核心执行�?
+ * 鑴氭湰鎵ц�寮曟搸鏍稿績鎵ц�鍣?
  *
- * 参照: legacy-python/src/engines/script_execution/executor.py
- * MVP 简化版本：支持 ai_say �?ai_ask
- * 
- * 【DDD 视角 - 重构进行中�?
- * ExecutionState 是执行器的临时运行时结构，用于驱动脚本执行流程�?
- * Session 领域模型才是持久化的状态承载者�?
- * 
- * 重构方向�?
- * - ExecutionState 简化为纯粹的执行视图（当前位置 + 临时上下文）
- * - 状态变更逻辑收敛�?Session 聚合�?
- * - 执行器从 Session 读取/更新状态，而非自行维护副本
+ * 鍙傜収: legacy-python/src/engines/script_execution/executor.py
+ * MVP 绠€鍖栫増鏈�細鏀�寔 ai_say 鍜?ai_ask
+ *
+ * 銆怐DD 瑙嗚� - 閲嶆瀯杩涜�涓�€?
+ * ExecutionState 鏄�墽琛屽櫒鐨勪复鏃惰繍琛屾椂缁撴瀯锛岀敤浜庨┍鍔ㄨ剼鏈�墽琛屾祦绋嬨€?
+ * Session 棰嗗煙妯″瀷鎵嶆槸鎸佷箙鍖栫殑鐘舵€佹壙杞借€呫€?
+ *
+ * 閲嶆瀯鏂瑰悜锛?
+ * - ExecutionState 绠€鍖栦负绾�补鐨勬墽琛岃�鍥撅紙褰撳墠浣嶇疆 + 涓存椂涓婁笅鏂囷級
+ * - 鐘舵€佸彉鏇撮€昏緫鏀舵暃鍒?Session 鑱氬悎鏍?
+ * - 鎵ц�鍣ㄤ粠 Session 璇诲彇/鏇存柊鐘舵€侊紝鑰岄潪鑷��缁存姢鍓�湰
  */
 
 import type { VariableStore } from '@heartrule/shared-types';
@@ -23,21 +23,22 @@ import type { BaseAction, ActionContext, ActionResult } from '../../actions/base
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
 import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.js';
+import type { TemplateProvider } from '../prompt-template/template-provider.js';
 import { VariableScopeResolver } from '../variable-scope/variable-scope-resolver.js';
 
 /**
- * 执行状�?
+ * 鎵ц�鐘舵€?
  */
 export enum ExecutionStatus {
   RUNNING = 'running',
-  WAITING_INPUT = 'waiting_input', // 等待用户输入
+  WAITING_INPUT = 'waiting_input', // 络夊緟鐢ㄦ埛杈撳叆
   PAUSED = 'paused',
   COMPLETED = 'completed',
   ERROR = 'error',
 }
 
 /**
- * 执行位置
+ * 鎵ц�浣嶇疆
  */
 export interface ExecutionPosition {
   phaseIndex: number;
@@ -46,14 +47,14 @@ export interface ExecutionPosition {
 }
 
 /**
- * 执行状�?
- * 
- * 【临时结构】用于在脚本执行过程中传递状态，不直接持久化�?
- * 该结构将在重构第二阶段进一步简化，状态维护职责转移到 Session 领域模型�?
- * 
- * 未来方向�?
- * - 简化为执行视图：currentPosition + context + tempCache
- * - 移除�?Session 重复的字段（status, variables, conversationHistory 等）
+ * 鎵ц�鐘舵€?
+ *
+ * 銆愪复鏃剁粨鏋勩€戠敤浜庡湪鑴氭湰鎵ц�杩囩▼涓�紶閫掔姸鎬侊紝涓嶇洿鎺ユ寔涔呭寲銆?
+ * 璇ョ粨鏋勫皢鍦ㄩ噸鏋勭�浜岄樁娈佃繘涓€姝ョ畝鍖栵紝鐘舵€佺淮鎶よ亴璐ｈ浆绉诲埌 Session 棰嗗煙妯″瀷銆?
+ *
+ * 鏈�瑰悜锛?
+ * - 绠€鍖栦负鎵ц�瑙嗗浘锛歝urrentPosition + context + tempCache
+ * - 绉婚櫎涓?Session 閲嶅�鐨勫瓧娈碉紙status, variables, conversationHistory 络夛級
  */
 export interface ExecutionState {
   status: ExecutionStatus;
@@ -62,7 +63,7 @@ export interface ExecutionState {
   currentActionIdx: number;
   currentAction: BaseAction | null;
   variables: Record<string, any>;
-  // 新增：分层变量存储结�?
+  // 鏂板�锛氬バー灞傚彉閲忓瓨鍌ㄧ粨鏋?
   variableStore?: VariableStore;
   conversationHistory: Array<{
     role: string;
@@ -72,24 +73,24 @@ export interface ExecutionState {
   }>;
   metadata: Record<string, any>;
   lastAiMessage: string | null;
-  // 扩展位置信息
+  // 鎵╁睍浣嶇疆淇℃伅
   currentPhaseId?: string;
   currentTopicId?: string;
   currentActionId?: string;
   currentActionType?: string;
-  // LLM调试信息（最近一次LLM调用�?
+  // LLM璋冭瘯淇℃伅锛堟渶杩戜竴娆�LM璋冪敤锛?
   lastLLMDebugInfo?: LLMDebugInfo;
 }
 
 /**
- * 脚本执行�?
+ * 鑴氭湰鎵ц�鍣?
  */
 export class ScriptExecutor {
   private llmOrchestrator: LLMOrchestrator;
 
   constructor() {
-    // 初始�?LLM 编排�?
-    // 从环境变量读取配置（兼容 VOLCANO �?VOLCENGINE 前缀�?
+    // 鍒濆�鍖?LLM 缂栨帓鍣?
+    // 浠庣幆澧冨彉閲忚�鍙栭厤缃�紙鍏煎� VOLCANO 鍜?VOLCENGINE 鍓嶇紑锛?
     const apiKey =
       process.env.VOLCENGINE_API_KEY ||
       process.env.VOLCANO_API_KEY ||
@@ -102,7 +103,7 @@ export class ScriptExecutor {
       process.env.VOLCANO_BASE_URL ||
       'https://ark.cn-beijing.volces.com/api/v3';
 
-    // 创建火山引擎 DeepSeek Provider
+    // 鍒涘缓鐏�北寮曟搸 DeepSeek Provider
     const provider = new VolcanoDeepSeekProvider(
       {
         model: endpointId,
@@ -114,10 +115,10 @@ export class ScriptExecutor {
       baseUrl
     );
 
-    // 创建 LLM Orchestrator
+    // 鍒涘缓 LLM Orchestrator
     this.llmOrchestrator = new LLMOrchestrator(provider, 'volcano');
 
-    console.log('[ScriptExecutor] 🤖 LLM Orchestrator initialized:', {
+    console.log('[ScriptExecutor] 馃� LLM Orchestrator initialized:', {
       provider: 'volcano',
       endpointId,
       hasApiKey: !!apiKey,
@@ -125,18 +126,20 @@ export class ScriptExecutor {
     });
   }
   /**
-   * 执行会谈流程脚本
+   * 鎵ц�浼氳皥娴佺▼鑴氭湰
    */
   async executeSession(
     scriptContent: string,
     sessionId: string,
     executionState: ExecutionState,
-    userInput?: string | null
+    userInput?: string | null,
+    projectId?: string,
+    templateProvider?: TemplateProvider
   ): Promise<ExecutionState> {
     try {
-      // 渐进式迁移：如果没有 variableStore，从 variables 迁移数据
+      // 娓愯繘寮忚縼绉伙細濡傛灉娌℃湁 variableStore锛屼粠 variables 杩佺Щ鏁版嵁
       if (!executionState.variableStore && executionState.variables) {
-        console.log('[ScriptExecutor] 🔄 Migrating variables to variableStore');
+        console.log('[ScriptExecutor] 馃攧 Migrating variables to variableStore');
         executionState.variableStore = {
           global: {},
           session: {},
@@ -144,7 +147,7 @@ export class ScriptExecutor {
           topic: {},
         };
 
-        // 将旧数据迁移�?session 作用�?
+        // 灏嗘棫鏁版嵁杩佺Щ鍒?session 浣滅敤鍩?
         for (const [key, value] of Object.entries(executionState.variables)) {
           executionState.variableStore.session[key] = {
             value,
@@ -155,18 +158,18 @@ export class ScriptExecutor {
         }
 
         console.log(
-          '[ScriptExecutor] �?Migrated',
+          '[ScriptExecutor] 鉁?Migrated',
           Object.keys(executionState.variables).length,
           'variables to session scope'
         );
       }
 
-      // 解析脚本
+      // 瑙ｆ瀽鑴氭湰
       const parsed = JSON.parse(scriptContent);
       const sessionData = parsed.session;
       const phases = sessionData.phases;
 
-      // ?? ��ȡ session ����(���� template_scheme)�����浽 metadata
+      // ?? 提取 session 配置(包括 template_scheme)并保存到 metadata
       if (!executionState.metadata.sessionConfig) {
         executionState.metadata.sessionConfig = {
           template_scheme: sessionData.template_scheme,
@@ -176,9 +179,19 @@ export class ScriptExecutor {
         });
       }
 
-      // 如果 metadata 中有保存�?Action 状态，恢复�?
+      // 💉 将 projectId 和 templateProvider 注入到 metadata (WI-2)
+      if (projectId) {
+        executionState.metadata.projectId = projectId;
+        console.log('[ScriptExecutor] 💉 Injected projectId to metadata:', projectId);
+      }
+      if (templateProvider) {
+        executionState.metadata.templateProvider = templateProvider;
+        console.log('[ScriptExecutor] 💉 Injected templateProvider to metadata');
+      }
+
+      // 濡傛灉 metadata 涓�湁淇濆瓨鐨?Action 鐘舵€侊紝鎭㈠�瀹?
       if (executionState.metadata.actionState && !executionState.currentAction) {
-        console.log('[ScriptExecutor] 🔄 Deserializing action state:', {
+        console.log('[ScriptExecutor] 馃攧 Deserializing action state:', {
           actionId: executionState.metadata.actionState.actionId,
           actionType: executionState.metadata.actionState.actionType,
           currentRound: executionState.metadata.actionState.currentRound,
@@ -189,14 +202,14 @@ export class ScriptExecutor {
         );
       } else {
         console.log(
-          '[ScriptExecutor] 🔵 No action state to restore, currentActionIdx:',
+          '[ScriptExecutor] 馃數 No action state to restore, currentActionIdx:',
           executionState.currentActionIdx
         );
       }
 
-      // 如果有当前Action正在执行，继续执�?
+      // 濡傛灉鏈夊綋鍓岮ction姝ｅ湪鎵ц�锛岀户缁�墽琛?
       if (executionState.currentAction) {
-        // 恢复位置 ID 信息
+        // 鎭㈠�浣嶇疆 ID 淇℃伅
         const resumedPhase = phases[executionState.currentPhaseIdx];
         if (resumedPhase) {
           executionState.currentPhaseId = resumedPhase.phase_id;
@@ -211,7 +224,7 @@ export class ScriptExecutor {
           }
         }
 
-        console.log('[ScriptExecutor] 🔄 Continuing current action:', {
+        console.log('[ScriptExecutor] 馃攧 Continuing current action:', {
           actionId: executionState.currentAction.actionId,
           actionIdx: executionState.currentActionIdx,
           phaseId: executionState.currentPhaseId,
@@ -225,18 +238,18 @@ export class ScriptExecutor {
         );
 
         if (!result.completed) {
-          // Action未完成，继续等待
+          // Action鏈�畬鎴愶紝缁х画绛夊緟
           executionState.status = ExecutionStatus.WAITING_INPUT;
 
-          // ⚠️ 关键修复：即使Action未完成，也要处理已提取的变量
+          // 鈿狅笍 鍏抽敭淇��锛氬嵆浣緼ction鏈�畬鎴愶紝涔�悊宸叉彁鍙栫殑鍙橀噺
           if (result.extractedVariables) {
-            // 向后兼容：继续更新旧�?variables
+            // 鍚戝悗鍏煎�锛氱户缁�洿鏂版棫鐨?variables
             executionState.variables = {
               ...executionState.variables,
               ...result.extractedVariables,
             };
-          
-            // 新逻辑：使�?VariableScopeResolver 写入分层变量
+
+            // 鏂伴€昏緫锛氫娇鐢?VariableScopeResolver 鍐欏叆鍒嗗眰鍙橀噺
             if (executionState.variableStore) {
               const scopeResolver = new VariableScopeResolver(executionState.variableStore);
               const position = {
@@ -244,39 +257,47 @@ export class ScriptExecutor {
                 topicId: executionState.currentTopicId,
                 actionId: executionState.currentAction.actionId,
               };
-          
+
               for (const [varName, varValue] of Object.entries(result.extractedVariables)) {
-                // 确定目标作用�?
+                // 纭�畾鐩�爣浣滅敤鍩?
                 const targetScope = scopeResolver.determineScope(varName);
-                          
-                // 写入变量
-                scopeResolver.setVariable(varName, varValue, targetScope, position, executionState.currentAction.actionId);
+
+                // 鍐欏叆鍙橀噺
+                scopeResolver.setVariable(
+                  varName,
+                  varValue,
+                  targetScope,
+                  position,
+                  executionState.currentAction.actionId
+                );
               }
             }
           }
 
-          // Action未完成，但可能有 AI 消息（如 ai_ask 的问题或 ai_say 的下一轮对话内容）
+          // Action鏈�畬鎴愶紝浣嗗彲鑳芥湁 AI 娑堟伅锛堝� ai_ask 鐨勯棶棰樻垨 ai_say 鐨勪笅涓€杞��璇濆唴瀹癸級
           if (result.aiMessage) {
             executionState.lastAiMessage = result.aiMessage;
-            // 也添加到对话历史
+            // 涔熸坊鍔犲埌瀵硅瘽鍘嗗彶
             executionState.conversationHistory.push({
               role: 'assistant',
               content: result.aiMessage,
               actionId: executionState.currentAction.actionId,
               metadata: result.metadata,
             });
-            console.log('[ScriptExecutor] 📥 Saved intermediate AI message from continued action');
-          }
-
-          // 保存LLM调试信息（如果有�?
-          if (result.debugInfo) {
-            executionState.lastLLMDebugInfo = result.debugInfo;
             console.log(
-              '[ScriptExecutor] 💾 Saved intermediate LLM debug info from continued action'
+              '[ScriptExecutor] 馃摜 Saved intermediate AI message from continued action'
             );
           }
 
-          // 保存回合数信息（�?result.metadata 提取�?
+          // 淇濆瓨LLM璋冭瘯淇℃伅锛堝�鏋滄湁锛?
+          if (result.debugInfo) {
+            executionState.lastLLMDebugInfo = result.debugInfo;
+            console.log(
+              '[ScriptExecutor] 馃捑 Saved intermediate LLM debug info from continued action'
+            );
+          }
+
+          // 淇濆瓨鍥炲悎鏁颁俊鎭�紙浠?result.metadata 鎻愬彇锛?
           if (
             result.metadata?.currentRound !== undefined ||
             result.metadata?.maxRounds !== undefined
@@ -288,12 +309,12 @@ export class ScriptExecutor {
               exitDecision: result.metadata.exitDecision,
             };
             console.log(
-              '[ScriptExecutor] 🔄 Saved intermediate action round info:',
+              '[ScriptExecutor] 馃攧 Saved intermediate action round info:',
               executionState.metadata.lastActionRoundInfo
             );
           }
 
-          // 记录退出决策到历史（如果有�?
+          // 璁板綍閫€鍑哄喅绛栧埌鍘嗗彶锛堝�鏋滄湁锛?
           if (result.metadata?.exitDecision) {
             if (!executionState.metadata.exitHistory) {
               executionState.metadata.exitHistory = [];
@@ -305,42 +326,45 @@ export class ScriptExecutor {
               timestamp: new Date().toISOString(),
             });
             console.log(
-              '[ScriptExecutor] 📊 Recorded exit decision to history:',
+              '[ScriptExecutor] 馃搳 Recorded exit decision to history:',
               result.metadata.exitDecision
             );
           }
 
-          // 保存 Action 内部状�?
+          // 淇濆瓨 Action 鍐呴鐘舵€?
           executionState.metadata.actionState = this.serializeActionState(
             executionState.currentAction
           );
-          console.log('[ScriptExecutor] ⏸️ Action still not completed, waiting for more input');
+          console.log('[ScriptExecutor] 鈴革笍 Action still not completed, waiting for more input');
           return executionState;
         }
 
-        // Action完成，处理结�?
-        console.log('[ScriptExecutor] �?Action completed via continue:', {
+        // Action瀹屾垚锛屽�鐞嗙粨鏋?
+        console.log('[ScriptExecutor] 鉁?Action completed via continue:', {
           actionId: executionState.currentAction.actionId,
           hasAiMessage: !!result.aiMessage,
         });
         if (result.success) {
-          // 更新变量：使�?VariableScopeResolver 写入到正确的作用�?
+          // 鏇存柊鍙橀噺锛氫娇鐢?VariableScopeResolver 鍐欏叆鍒版�纭�殑浣滅敤鍩?
           if (result.extractedVariables) {
-            // 向后兼容：继续更新旧�?variables
+            // 鍚戝悗鍏煎�锛氱户缁�洿鏂版棫鐨?variables
             executionState.variables = {
               ...executionState.variables,
               ...result.extractedVariables,
             };
 
-            // 新逻辑：使�?VariableScopeResolver 写入分层变量
+            // 鏂伴€昏緫锛氫娇鐢?VariableScopeResolver 鍐欏叆鍒嗗眰鍙橀噺
             if (executionState.variableStore) {
-              console.log(`[ScriptExecutor] 🔍 Processing extracted variables (continueAction):`, result.extractedVariables);
-              console.log(`[ScriptExecutor] 🔍 Current position:`, { 
+              console.log(
+                `[ScriptExecutor] 馃攳 Processing extracted variables (continueAction):`,
+                result.extractedVariables
+              );
+              console.log(`[ScriptExecutor] 馃攳 Current position:`, {
                 phaseId: executionState.currentPhaseId,
                 topicId: executionState.currentTopicId,
-                actionId: executionState.currentAction.actionId 
+                actionId: executionState.currentAction.actionId,
               });
-              
+
               const scopeResolver = new VariableScopeResolver(executionState.variableStore);
               const position = {
                 phaseId: executionState.currentPhaseId,
@@ -349,39 +373,64 @@ export class ScriptExecutor {
               };
 
               for (const [varName, varValue] of Object.entries(result.extractedVariables)) {
-                console.log(`[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`, varValue);
-                
-                // 确定目标作用�?
+                console.log(
+                  `[ScriptExecutor] 馃攳 Processing variable "${varName}" with value:`,
+                  varValue
+                );
+
+                // 纭�畾鐩�爣浣滅敤鍩?
                 const targetScope = scopeResolver.determineScope(varName);
-                console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
-                
-                // 写入变量
-                scopeResolver.setVariable(varName, varValue, targetScope, position, executionState.currentAction.actionId);
-                console.log(`[ScriptExecutor] �?Set variable "${varName}" to ${targetScope} scope`);
+                console.log(`[ScriptExecutor] 馃搵 Target scope for "${varName}":`, targetScope);
+
+                // 鍐欏叆鍙橀噺
+                scopeResolver.setVariable(
+                  varName,
+                  varValue,
+                  targetScope,
+                  position,
+                  executionState.currentAction.actionId
+                );
+                console.log(
+                  `[ScriptExecutor] 鉁?Set variable "${varName}" to ${targetScope} scope`
+                );
               }
-              
-              // 验证变量是否真的写入成功
-              console.log(`[ScriptExecutor] 🔍 Verifying variableStore after writing (continueAction):`);
-              console.log(`[ScriptExecutor] - Global:`, Object.keys(executionState.variableStore.global));
-              console.log(`[ScriptExecutor] - Session:`, Object.keys(executionState.variableStore.session));
+
+              // 楠岃瘉鍙橀噺鏄�惁鐪熺殑鍐欏叆鎴愬姛
+              console.log(
+                `[ScriptExecutor] 馃攳 Verifying variableStore after writing (continueAction):`
+              );
+              console.log(
+                `[ScriptExecutor] - Global:`,
+                Object.keys(executionState.variableStore.global)
+              );
+              console.log(
+                `[ScriptExecutor] - Session:`,
+                Object.keys(executionState.variableStore.session)
+              );
               if (executionState.currentPhaseId) {
-                console.log(`[ScriptExecutor] - Phase[${executionState.currentPhaseId}]:`, 
-                  executionState.variableStore.phase[executionState.currentPhaseId] 
-                    ? Object.keys(executionState.variableStore.phase[executionState.currentPhaseId]) 
-                    : 'undefined');
+                console.log(
+                  `[ScriptExecutor] - Phase[${executionState.currentPhaseId}]:`,
+                  executionState.variableStore.phase[executionState.currentPhaseId]
+                    ? Object.keys(executionState.variableStore.phase[executionState.currentPhaseId])
+                    : 'undefined'
+                );
               }
               if (executionState.currentTopicId) {
-                console.log(`[ScriptExecutor] - Topic[${executionState.currentTopicId}]:`, 
-                  executionState.variableStore.topic[executionState.currentTopicId] 
-                    ? Object.keys(executionState.variableStore.topic[executionState.currentTopicId]) 
-                    : 'undefined');
+                console.log(
+                  `[ScriptExecutor] - Topic[${executionState.currentTopicId}]:`,
+                  executionState.variableStore.topic[executionState.currentTopicId]
+                    ? Object.keys(executionState.variableStore.topic[executionState.currentTopicId])
+                    : 'undefined'
+                );
               }
             } else {
-              console.warn(`[ScriptExecutor] ⚠️ variableStore is not initialized, cannot write variables to scopes`);
+              console.warn(
+                `[ScriptExecutor] 鈿狅笍 variableStore is not initialized, cannot write variables to scopes`
+              );
             }
           }
 
-          // 添加AI消息到对话历�?
+          // 娣诲姞AI娑堟伅鍒板�璇濆巻鍙?
           if (result.aiMessage) {
             executionState.conversationHistory.push({
               role: 'assistant',
@@ -392,29 +441,29 @@ export class ScriptExecutor {
             executionState.lastAiMessage = result.aiMessage;
           }
 
-          // 保存LLM调试信息（如果有�?
+          // 淇濆瓨LLM璋冭瘯淇℃伅锛堝�鏋滄湁锛?
           if (result.debugInfo) {
             executionState.lastLLMDebugInfo = result.debugInfo;
           }
         } else {
-          // Action执行失败
+          // Action鎵ц�澶辫触
           executionState.status = ExecutionStatus.ERROR;
           executionState.metadata.error = result.error;
           return executionState;
         }
 
-        // 继续下一�?
+        // 缁х画涓嬩竴涓?
         executionState.currentAction = null;
         executionState.currentActionIdx += 1;
-        // 清除保存�?Action 状�?
+        // 娓呴櫎淇濆瓨鐨?Action 鐘舵€?
         delete executionState.metadata.actionState;
 
         console.log(
-          '[ScriptExecutor] ➡️ Action completed via continueAction, moved to next index:',
+          '[ScriptExecutor] 鉃★笍 Action completed via continueAction, moved to next index:',
           executionState.currentActionIdx
         );
 
-        // 预设置下一�?Action �?ID（如果存在）
+        // 棰勮�缃�笅涓€涓?Action 鐨?ID锛堝�鏋滃瓨鍦�級
         const currentPhase = phases[executionState.currentPhaseIdx];
         if (currentPhase) {
           const currentTopic = currentPhase.topics[executionState.currentTopicIdx];
@@ -423,7 +472,7 @@ export class ScriptExecutor {
             executionState.currentActionId = nextActionConfig.action_id;
             executionState.currentActionType = nextActionConfig.action_type;
             console.log(
-              `[ScriptExecutor] ➡️ Continue: moving to next action: ${nextActionConfig.action_id}`
+              `[ScriptExecutor] 鉃★笍 Continue: moving to next action: ${nextActionConfig.action_id}`
             );
           } else {
             executionState.currentActionId = undefined;
@@ -431,30 +480,30 @@ export class ScriptExecutor {
           }
         }
 
-        // ⚠️ Action完成后继续执行后续流�?
-        // 这样 ai_say 确认后可以立即执行下一�?action
-        // 注意：不�?return，让代码继续执行下面�?executePhase
-        console.log('[ScriptExecutor] �?Action completed, continuing to execute next actions');
+        // 鈿狅笍 Action瀹屾垚鍚庣户缁�墽琛屼笅涓€涓?action
+        // 杩欐牱 ai_say 纭��鍚庡彲浠ョ鍗虫墽琛屼笅涓€涓?action
+        // 娉ㄦ剰锛氫笉瑕?return锛岃�浠ｇ爜缁х画鎵ц�涓嬮潰鐨?executePhase
+        console.log('[ScriptExecutor] 鉁?Action completed, continuing to execute next actions');
       }
 
-      // 执行脚本流程
+      // 鎵ц�鑴氭湰娴佺▼
       while (executionState.currentPhaseIdx < phases.length) {
         const phase = phases[executionState.currentPhaseIdx];
         executionState.currentPhaseId = phase.phase_id;
 
-        // 执行Phase
+        // 鎵ц�Phase
         await this.executePhase(phase, sessionId, executionState, userInput);
 
         if (executionState.status === ExecutionStatus.WAITING_INPUT) {
           return executionState;
         }
 
-        // Phase完成，进入下一�?
+        // Phase瀹屾垚锛岃繘鍏ヤ笅涓€涓?
         executionState.currentPhaseIdx += 1;
         executionState.currentTopicIdx = 0;
         executionState.currentActionIdx = 0;
 
-        // 预设置下一�?Phase 的第一�?Topic 的第一�?Action ID（如果存在）
+        // 棰勮�缃�笅涓€涓?Phase 鐨勭�涓€涓?Topic 鐨勭�涓€涓?Action ID锛堝�鏋滃瓨鍦�級
         if (executionState.currentPhaseIdx < phases.length) {
           const nextPhase = phases[executionState.currentPhaseIdx];
           executionState.currentPhaseId = nextPhase.phase_id;
@@ -466,7 +515,7 @@ export class ScriptExecutor {
               executionState.currentActionId = firstActionConfig.action_id;
               executionState.currentActionType = firstActionConfig.action_type;
               console.log(
-                `[ScriptExecutor] ➡️ Moving to next phase: ${nextPhase.phase_id}, first action: ${firstActionConfig.action_id}`
+                `[ScriptExecutor] 鉃★笍 Moving to next phase: ${nextPhase.phase_id}, first action: ${firstActionConfig.action_id}`
               );
             } else {
               executionState.currentActionId = undefined;
@@ -485,7 +534,7 @@ export class ScriptExecutor {
         }
       }
 
-      // 所有Phase执行完成
+      // 鎵€鏈塒hase鎵ц�瀹屾垚
       executionState.status = ExecutionStatus.COMPLETED;
       return executionState;
     } catch (e: any) {
@@ -496,7 +545,7 @@ export class ScriptExecutor {
   }
 
   /**
-   * 执行Phase
+   * 鎵ц�Phase
    */
   private async executePhase(
     phase: any,
@@ -507,7 +556,7 @@ export class ScriptExecutor {
     const phaseId = phase.phase_id;
     const topics = phase.topics;
 
-    // 执行Topics
+    // 鎵ц�Topics
     while (executionState.currentTopicIdx < topics.length) {
       const topic = topics[executionState.currentTopicIdx];
       executionState.currentTopicId = topic.topic_id;
@@ -518,11 +567,11 @@ export class ScriptExecutor {
         return;
       }
 
-      // Topic完成，进入下一�?
+      // Topic瀹屾垚锛岃繘鍏ヤ笅涓€涓?
       executionState.currentTopicIdx += 1;
       executionState.currentActionIdx = 0;
 
-      // 预设置下一�?Topic 的第一�?Action ID（如果存在）
+      // 棰勮�缃�笅涓€涓?Topic 鐨勭�涓€涓?Action ID锛堝�鏋滃瓨鍦�級
       if (executionState.currentTopicIdx < topics.length) {
         const nextTopic = topics[executionState.currentTopicIdx];
         executionState.currentTopicId = nextTopic.topic_id;
@@ -531,7 +580,7 @@ export class ScriptExecutor {
           executionState.currentActionId = firstActionConfig.action_id;
           executionState.currentActionType = firstActionConfig.action_type;
           console.log(
-            `[ScriptExecutor] ➡️ Moving to next topic: ${nextTopic.topic_id}, first action: ${firstActionConfig.action_id}`
+            `[ScriptExecutor] 鉃★笍 Moving to next topic: ${nextTopic.topic_id}, first action: ${firstActionConfig.action_id}`
           );
         } else {
           executionState.currentActionId = undefined;
@@ -546,7 +595,7 @@ export class ScriptExecutor {
   }
 
   /**
-   * 执行Topic
+   * 鎵ц�Topic
    */
   private async executeTopic(
     topic: any,
@@ -558,28 +607,28 @@ export class ScriptExecutor {
     const topicId = topic.topic_id;
     const actions = topic.actions;
     console.log(
-      `[ScriptExecutor] 🔵 Executing topic: ${topicId}, actions count: ${actions.length}, currentActionIdx: ${executionState.currentActionIdx}`
+      `[ScriptExecutor] 馃數 Executing topic: ${topicId}, actions count: ${actions.length}, currentActionIdx: ${executionState.currentActionIdx}`
     );
 
-    // 执行Actions
+    // 鎵ц�Actions
     while (executionState.currentActionIdx < actions.length) {
       const actionConfig = actions[executionState.currentActionIdx];
       console.log(
-        `[ScriptExecutor] 🎯 Executing action [${executionState.currentActionIdx}]: ${actionConfig.action_id} (${actionConfig.action_type})`
+        `[ScriptExecutor] 馃幆 Executing action [${executionState.currentActionIdx}]: ${actionConfig.action_id} (${actionConfig.action_type})`
       );
 
-      // 创建或获取Action实例
+      // 鍒涘缓鎴栬幏鍙朅ction瀹炰緥
       if (!executionState.currentAction) {
         const action = this.createAction(actionConfig);
         executionState.currentAction = action;
         executionState.currentActionId = actionConfig.action_id;
         executionState.currentActionType = actionConfig.action_type;
-        console.log(`[ScriptExecutor] �?Created action instance: ${action.actionId}`);
+        console.log(`[ScriptExecutor] 鉁?Created action instance: ${action.actionId}`);
       }
 
       const action = executionState.currentAction;
 
-      // 执行Action
+      // 鎵ц�Action
       const result = await this.executeAction(
         action,
         phaseId,
@@ -588,7 +637,7 @@ export class ScriptExecutor {
         executionState,
         userInput
       );
-      console.log(`[ScriptExecutor] �?Action result:`, {
+      console.log(`[ScriptExecutor] 鉁?Action result:`, {
         actionId: action.actionId,
         completed: result.completed,
         success: result.success,
@@ -596,16 +645,16 @@ export class ScriptExecutor {
         aiMessage: result.aiMessage?.substring(0, 50),
       });
 
-      // user_input 只用一�?
+      // user_input 鍙�敤涓€娆?
       userInput = null;
 
-      // 处理执行结果
+      // 澶勭悊鎵ц�缁撴灉
       if (!result.completed) {
-        console.log(`[ScriptExecutor] ⏸️ Action not completed, waiting for input`);
-        // Action未完成，但可能有 AI 消息（如 ai_ask 的问题）
+        console.log(`[ScriptExecutor] 鈴革笍 Action not completed, waiting for input`);
+        // Action鏈�畬鎴愶紝浣嗗彲鑳芥湁 AI 娑堟伅锛堝� ai_ask 鐨勯棶棰橈級
         if (result.aiMessage) {
           executionState.lastAiMessage = result.aiMessage;
-          // 也添加到对话历史
+          // 涔熸坊鍔犲埌瀵硅瘽鍘嗗彶
           executionState.conversationHistory.push({
             role: 'assistant',
             content: result.aiMessage,
@@ -613,38 +662,45 @@ export class ScriptExecutor {
             metadata: result.metadata,
           });
         }
-        // 保存LLM调试信息（即使Action未完成）
+        // 淇濆瓨LLM璋冭瘯淇℃伅锛堝嵆浣緼ction鏈�畬鎴愶級
         if (result.debugInfo) {
           executionState.lastLLMDebugInfo = result.debugInfo;
-          console.log('[ScriptExecutor] 💾 Saved LLM debug info (action not completed):', {
+          console.log('[ScriptExecutor] 馃捑 Saved LLM debug info (action not completed):', {
             hasPrompt: !!result.debugInfo.prompt,
             hasResponse: !!result.debugInfo.response,
           });
         }
-        // 需要等待用户输�?
+        // 闇€瑕佺瓑寰呯敤鎴疯緭鍏?
         executionState.status = ExecutionStatus.WAITING_INPUT;
-        // 保存 Action 内部状�?
+        // 淇濆瓨 Action 鍐呴鐘舵€?
         executionState.metadata.actionState = this.serializeActionState(action);
-        console.log(`[ScriptExecutor] 🔴 Returning to wait for user input`);
+        console.log(`[ScriptExecutor] 馃敶 Returning to wait for user input`);
         return;
       }
 
-      // Action完成，处理结�?
-      console.log(`[ScriptExecutor] �?Action completed successfully`);
+      // Action瀹屾垚锛屽�鐞嗙粨鏋?
+      console.log(`[ScriptExecutor] 鉁?Action completed successfully`);
       if (result.success) {
-        // 更新变量：使�?VariableScopeResolver 写入到正确的作用�?
+        // 鏇存柊鍙橀噺锛氫娇鐢?VariableScopeResolver 鍐欏叆鍒版�纭�殑浣滅敤鍩?
         if (result.extractedVariables) {
-          // 向后兼容：继续更新旧�?variables
+          // 鍚戝悗鍏煎�锛氱户缁�洿鏂版棫鐨?variables
           executionState.variables = {
             ...executionState.variables,
             ...result.extractedVariables,
           };
 
-          // 新逻辑：使�?VariableScopeResolver 写入分层变量
+          // 鏂伴€昏緫锛氫娇鐢?VariableScopeResolver 鍐欏叆鍒嗗眰鍙橀噺
           if (executionState.variableStore) {
-            console.log(`[ScriptExecutor] 🔍 Processing extracted variables:`, result.extractedVariables);
-            console.log(`[ScriptExecutor] 🔍 Current position:`, { phaseId, topicId, actionId: action.actionId });
-            
+            console.log(
+              `[ScriptExecutor] 馃攳 Processing extracted variables:`,
+              result.extractedVariables
+            );
+            console.log(`[ScriptExecutor] 馃攳 Current position:`, {
+              phaseId,
+              topicId,
+              actionId: action.actionId,
+            });
+
             const scopeResolver = new VariableScopeResolver(executionState.variableStore);
             const position = {
               phaseId,
@@ -653,29 +709,50 @@ export class ScriptExecutor {
             };
 
             for (const [varName, varValue] of Object.entries(result.extractedVariables)) {
-              console.log(`[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`, varValue);
-              
-              // 确定目标作用�?
+              console.log(
+                `[ScriptExecutor] 馃攳 Processing variable "${varName}" with value:`,
+                varValue
+              );
+
+              // 纭�畾鐩�爣浣滅敤鍩?
               const targetScope = scopeResolver.determineScope(varName);
-              console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
-              
-              // 写入变量
+              console.log(`[ScriptExecutor] 馃搵 Target scope for "${varName}":`, targetScope);
+
+              // 鍐欏叆鍙橀噺
               scopeResolver.setVariable(varName, varValue, targetScope, position, action.actionId);
-              console.log(`[ScriptExecutor] �?Set variable "${varName}" to ${targetScope} scope`);
+              console.log(`[ScriptExecutor] 鉁?Set variable "${varName}" to ${targetScope} scope`);
             }
-            
-            // 验证变量是否真的写入成功
-            console.log(`[ScriptExecutor] 🔍 Verifying variableStore after writing:`);
-            console.log(`[ScriptExecutor] - Global:`, Object.keys(executionState.variableStore.global));
-            console.log(`[ScriptExecutor] - Session:`, Object.keys(executionState.variableStore.session));
-            console.log(`[ScriptExecutor] - Phase[${phaseId}]:`, executionState.variableStore.phase[phaseId] ? Object.keys(executionState.variableStore.phase[phaseId]) : 'undefined');
-            console.log(`[ScriptExecutor] - Topic[${topicId}]:`, executionState.variableStore.topic[topicId] ? Object.keys(executionState.variableStore.topic[topicId]) : 'undefined');
+
+            // 楠岃瘉鍙橀噺鏄�惁鐪熺殑鍐欏叆鎴愬姛
+            console.log(`[ScriptExecutor] 馃攳 Verifying variableStore after writing:`);
+            console.log(
+              `[ScriptExecutor] - Global:`,
+              Object.keys(executionState.variableStore.global)
+            );
+            console.log(
+              `[ScriptExecutor] - Session:`,
+              Object.keys(executionState.variableStore.session)
+            );
+            console.log(
+              `[ScriptExecutor] - Phase[${phaseId}]:`,
+              executionState.variableStore.phase[phaseId]
+                ? Object.keys(executionState.variableStore.phase[phaseId])
+                : 'undefined'
+            );
+            console.log(
+              `[ScriptExecutor] - Topic[${topicId}]:`,
+              executionState.variableStore.topic[topicId]
+                ? Object.keys(executionState.variableStore.topic[topicId])
+                : 'undefined'
+            );
           } else {
-            console.warn(`[ScriptExecutor] ⚠️ variableStore is not initialized, cannot write variables to scopes`);
+            console.warn(
+              `[ScriptExecutor] 鈿狅笍 variableStore is not initialized, cannot write variables to scopes`
+            );
           }
         }
 
-        // 添加到对话历�?
+        // 娣诲姞鍒板�璇濆巻鍙?
         if (result.aiMessage) {
           executionState.conversationHistory.push({
             role: 'assistant',
@@ -686,17 +763,17 @@ export class ScriptExecutor {
           executionState.lastAiMessage = result.aiMessage;
         }
 
-        // 保存LLM调试信息（如果有�?
+        // 淇濆瓨LLM璋冭瘯淇℃伅锛堝�鏋滄湁锛?
         if (result.debugInfo) {
           executionState.lastLLMDebugInfo = result.debugInfo;
-          console.log('[ScriptExecutor] 💾 Saved LLM debug info:', {
+          console.log('[ScriptExecutor] 馃捑 Saved LLM debug info:', {
             hasPrompt: !!result.debugInfo.prompt,
             hasResponse: !!result.debugInfo.response,
             model: result.debugInfo.model,
           });
         }
 
-        // 保存回合数信息（�?result.metadata 提取�?
+        // 淇濆瓨鍥炲悎鏁颁俊鎭�紙浠?result.metadata 鎻愬彇锛?
         if (
           result.metadata?.currentRound !== undefined ||
           result.metadata?.maxRounds !== undefined
@@ -706,46 +783,46 @@ export class ScriptExecutor {
             maxRounds: result.metadata.maxRounds,
           };
           console.log(
-            '[ScriptExecutor] 🔄 Saved action round info:',
+            '[ScriptExecutor] 馃攧 Saved action round info:',
             executionState.metadata.lastActionRoundInfo
           );
         }
       } else {
-        // Action执行失败
+        // Action鎵ц�澶辫触
         executionState.status = ExecutionStatus.ERROR;
         executionState.metadata.error = result.error;
         return;
       }
 
-      // 移动到下一个Action
+      // 绉诲姩鍒颁笅涓€涓ction
       executionState.currentAction = null;
       executionState.currentActionIdx += 1;
-      // 清除保存�?Action 状�?
+      // 娓呴櫎淇濆瓨鐨?Action 鐘舵€?
       delete executionState.metadata.actionState;
 
-      // 预设置下一�?Action �?ID（如果存在）
+      // 棰勮�缃�笅涓€涓?Action 鐨?ID锛堝�鏋滃瓨鍦�級
       if (executionState.currentActionIdx < actions.length) {
         const nextActionConfig = actions[executionState.currentActionIdx];
         executionState.currentActionId = nextActionConfig.action_id;
         executionState.currentActionType = nextActionConfig.action_type;
         console.log(
-          `[ScriptExecutor] ➡️ Moving to next action: ${nextActionConfig.action_id} (${nextActionConfig.action_type})`
+          `[ScriptExecutor] 鉃★笍 Moving to next action: ${nextActionConfig.action_id} (${nextActionConfig.action_type})`
         );
       } else {
-        // Topic 中没有更�?Action �?
+        // Topic 涓�病鏈夋洿澶?Action 浜?
         executionState.currentActionId = undefined;
         executionState.currentActionType = undefined;
-        console.log(`[ScriptExecutor] ➡️ No more actions in this topic`);
+        console.log(`[ScriptExecutor] 鉃★笍 No more actions in this topic`);
       }
     }
 
-    // Topic 所�?Actions 已执行完�?
-    console.log(`[ScriptExecutor] �?Topic completed: ${topicId}`);
+    // Topic 鎵€鏈?Actions 宸叉墽琛屽畬鎴?
+    console.log(`[ScriptExecutor] 鉁?Topic completed: ${topicId}`);
     executionState.status = ExecutionStatus.RUNNING;
   }
 
   /**
-   * 执行Action
+   * 鎵ц�Action
    */
   private async executeAction(
     action: BaseAction,
@@ -755,13 +832,13 @@ export class ScriptExecutor {
     executionState: ExecutionState,
     userInput?: string | null
   ): Promise<ActionResult> {
-    // 创建作用域解析器
+    // 鍒涘缓浣滅敤鍩�В鏋愬櫒
     let scopeResolver: VariableScopeResolver | undefined;
     if (executionState.variableStore) {
       scopeResolver = new VariableScopeResolver(executionState.variableStore);
     }
 
-    // 构建执行上下�?
+    // 鏋勫缓鎵ц�涓婁笅鏂?
     const context: ActionContext = {
       sessionId,
       phaseId,
@@ -774,12 +851,12 @@ export class ScriptExecutor {
       metadata: { ...executionState.metadata },
     };
 
-    // 执行Action
+    // 鎵ц�Action
     return await action.execute(context, userInput);
   }
 
   /**
-   * 继续执行未完成的Action
+   * 缁х画鎵ц�鏈�畬鎴愮殑Action
    */
   private async continueAction(
     action: BaseAction,
@@ -787,7 +864,7 @@ export class ScriptExecutor {
     sessionId: string,
     userInput?: string | null
   ): Promise<ActionResult> {
-    // 更新对话历史（用户输入）
+    // 鏇存柊瀵硅瘽鍘嗗彶锛堢敤鎴疯緭鍏ワ級
     if (userInput) {
       executionState.conversationHistory.push({
         role: 'user',
@@ -796,13 +873,13 @@ export class ScriptExecutor {
       });
     }
 
-    // 创建作用域解析器
+    // 鍒涘缓浣滅敤鍩�В鏋愬櫒
     let scopeResolver: VariableScopeResolver | undefined;
     if (executionState.variableStore) {
       scopeResolver = new VariableScopeResolver(executionState.variableStore);
     }
 
-    // 构建执行上下�?
+    // 鏋勫缓鎵ц�涓婁笅鏂?
     const context: ActionContext = {
       sessionId,
       phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
@@ -815,20 +892,27 @@ export class ScriptExecutor {
       metadata: { ...executionState.metadata },
     };
 
-    // 继续执行
+    // 缁х画鎵ц�
     return await action.execute(context, userInput);
   }
 
   /**
-   * 创建 Action 实例
+   * 鍒涘缓 Action 瀹炰緥
    */
   private createAction(actionConfig: any): BaseAction {
     const actionType = actionConfig.action_type;
     const actionId = actionConfig.action_id;
-    const config = actionConfig.config || {};
 
-    // 🔵 调试日志
-    console.log(`[ScriptExecutor] 🛠�?Creating action:`, {
+    // 馃帾 淇℃伅锛氬皢鏁翠釜 actionConfig 浣滀负 config锛岃€屼笉鍙槸 actionConfig.config
+    // 杩欐牱 max_rounds銆乵ode銆乼emplate 绞夊瓧娈甸兘鑳借 Action 璇诲彇
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { action_id, action_type, ...restConfig } = actionConfig;
+    const config = actionConfig.config
+      ? { ...restConfig, ...actionConfig.config } // 如果有 config 字段，合并
+      : restConfig; // 否则使用所有其他字段
+
+    // 馃數 璋冭瘯鏃ュ織
+    console.log(`[ScriptExecutor] 馃洿锔?Creating action:`, {
       actionType,
       actionId,
       config,
@@ -836,7 +920,7 @@ export class ScriptExecutor {
       configKeys: Object.keys(config),
     });
 
-    // 对于 ai_say �?ai_ask Action，传�?LLMOrchestrator
+    // 瀵逛簬 ai_say 鍜?ai_ask Action锛屼紶閫?LLMOrchestrator
     if (actionType === 'ai_say') {
       return new AiSayAction(actionId, config, this.llmOrchestrator);
     }
@@ -845,12 +929,12 @@ export class ScriptExecutor {
       return new AiAskAction(actionId, config, this.llmOrchestrator);
     }
 
-    // 其他 Action 类型使用默认创建方式
+    // 鍏朵粬 Action 绫诲瀷浣跨敤榛樿�鍒涘缓鏂瑰紡
     return createAction(actionType, actionId, config);
   }
 
   /**
-   * 创建初始执行状�?
+   * 鍒涘缓鍒濆�鎵ц�鐘舵€?
    */
   static createInitialState(): ExecutionState {
     return {
@@ -860,7 +944,8 @@ export class ScriptExecutor {
       currentActionIdx: 0,
       currentAction: null,
       variables: {},
-      variableStore: { // 🔧 初始�?variableStore
+      variableStore: {
+        // 馃敡 鍒濆�鍖?variableStore
         global: {},
         session: {},
         phase: {},
@@ -873,7 +958,7 @@ export class ScriptExecutor {
   }
 
   /**
-   * 序列�?Action 状态（保存 currentRound 等内部状态）
+   * 搴忓垪鍖?Action 鐘舵€侊紙淇濆瓨 currentRound 络夊唴閮ㄧ姸鎬侊級
    */
   private serializeActionState(action: BaseAction): any {
     return {
@@ -886,24 +971,24 @@ export class ScriptExecutor {
   }
 
   /**
-   * 从保存的状态恢�?Action 实例
+   * 浠庝繚瀛樼殑鐘舵€佹仮澶?Action 瀹炰緥
    */
   private deserializeActionState(actionState: any): BaseAction {
-    // 使用 this.createAction 而不�?createAction，确�?ai_say 能获�?LLMOrchestrator
+    // 浣跨敤 this.createAction 鑰屼笉鏄?createAction锛岀‘淇?ai_say 鑳借幏寰?LLMOrchestrator
     const action = this.createAction({
       action_type: actionState.actionType,
       action_id: actionState.actionId,
       config: actionState.config,
     });
-    // 恢复内部状�?
-    console.log('[ScriptExecutor] 🔵 Before restoring state:', {
+    // 鎭㈠�鍐呴鐘舵€?
+    console.log('[ScriptExecutor] 馃數 Before restoring state:', {
       actionId: action.actionId,
       currentRound: action.currentRound,
       maxRounds: action.maxRounds,
     });
     action.currentRound = actionState.currentRound || 0;
     action.maxRounds = actionState.maxRounds || 3;
-    console.log('[ScriptExecutor] �?After restoring state:', {
+    console.log('[ScriptExecutor] 鉁?After restoring state:', {
       actionId: action.actionId,
       currentRound: action.currentRound,
       maxRounds: action.maxRounds,
@@ -913,7 +998,7 @@ export class ScriptExecutor {
   }
 
   /**
-   * 推断值的类型
+   * 鎺ㄦ柇鍊肩殑绫诲瀷
    */
   private inferType(value: any): string {
     if (value === null) return 'null';
@@ -922,4 +1007,3 @@ export class ScriptExecutor {
     return typeof value;
   }
 }
-

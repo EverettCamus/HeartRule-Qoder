@@ -35,6 +35,7 @@ packages/api-server/test-*.json
 
 # 工程工作空间（运行时数据）
 packages/api-server/workspace/
+workspace/projects/
 
 # IDE
 .vscode/*
