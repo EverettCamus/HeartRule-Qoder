@@ -25,7 +25,10 @@ export class PromptTemplateManager {
 
   constructor(templateBasePathOrProjectId?: string, templateProvider?: TemplateProvider) {
     // 兼容旧版本：如果传入的是路径（包含 / 或 \），则作为templateBasePath
-    if (templateBasePathOrProjectId && (templateBasePathOrProjectId.includes('/') || templateBasePathOrProjectId.includes('\\'))) {
+    if (
+      templateBasePathOrProjectId &&
+      (templateBasePathOrProjectId.includes('/') || templateBasePathOrProjectId.includes('\\'))
+    ) {
       this.templateBasePath = templateBasePathOrProjectId;
     } else {
       this.projectId = templateBasePathOrProjectId;
@@ -49,7 +52,7 @@ export class PromptTemplateManager {
     if (this.templateProvider && this.projectId) {
       return await this.loadTemplateFromDatabase(templatePath, templateId);
     }
-    
+
     // 否则使用文件系统模式（兼容旧版本）
     return await this.loadTemplateFromFilesystem(templatePath, templateId);
   }
@@ -57,14 +60,17 @@ export class PromptTemplateManager {
   /**
    * 从数据库加载模板
    */
-  private async loadTemplateFromDatabase(templatePath: string, templateId: string): Promise<PromptTemplate> {
+  private async loadTemplateFromDatabase(
+    templatePath: string,
+    templateId: string
+  ): Promise<PromptTemplate> {
     if (!this.templateProvider || !this.projectId) {
       throw new Error('[TemplateManager] Template provider or project ID not configured');
     }
 
     try {
       const templateData = await this.templateProvider.getTemplate(this.projectId, templatePath);
-      
+
       if (!templateData) {
         throw new Error(`Template not found in database: ${templatePath}`);
       }
@@ -76,10 +82,16 @@ export class PromptTemplateManager {
       if (process.env.NODE_ENV === 'development') {
         const validation = this.validateTemplate(content, templatePath);
         if (!validation.valid) {
-          console.error(`[TemplateManager] ❌ Template validation failed for ${templatePath}:`, validation.errors);
+          console.error(
+            `[TemplateManager] ❌ Template validation failed for ${templatePath}:`,
+            validation.errors
+          );
         }
         if (validation.warnings.length > 0) {
-          console.warn(`[TemplateManager] ⚠️ Template validation warnings for ${templatePath}:`, validation.warnings);
+          console.warn(
+            `[TemplateManager] ⚠️ Template validation warnings for ${templatePath}:`,
+            validation.warnings
+          );
         }
       }
 
@@ -100,11 +112,20 @@ export class PromptTemplateManager {
   /**
    * 从文件系统加载模板（兼容旧版本）
    */
-  private async loadTemplateFromFilesystem(templatePath: string, templateId: string): Promise<PromptTemplate> {
+  private async loadTemplateFromFilesystem(
+    templatePath: string,
+    templateId: string
+  ): Promise<PromptTemplate> {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const basePath = this.templateBasePath || path.join(process.cwd(), 'config', 'prompts');
-    const fullPath = path.join(basePath, templatePath);
+
+    // 如果 templatePath 是绝对路径，直接使用；否则拼接 basePath
+    const fullPath = path.isAbsolute(templatePath)
+      ? templatePath
+      : path.join(
+          this.templateBasePath || path.join(process.cwd(), 'config', 'prompts'),
+          templatePath
+        );
 
     try {
       const content = await fs.readFile(fullPath, 'utf-8');
@@ -114,10 +135,16 @@ export class PromptTemplateManager {
       if (process.env.NODE_ENV === 'development') {
         const validation = this.validateTemplate(content, templatePath);
         if (!validation.valid) {
-          console.error(`[TemplateManager] ❌ Template validation failed for ${templatePath}:`, validation.errors);
+          console.error(
+            `[TemplateManager] ❌ Template validation failed for ${templatePath}:`,
+            validation.errors
+          );
         }
         if (validation.warnings.length > 0) {
-          console.warn(`[TemplateManager] ⚠️ Template validation warnings for ${templatePath}:`, validation.warnings);
+          console.warn(
+            `[TemplateManager] ⚠️ Template validation warnings for ${templatePath}:`,
+            validation.warnings
+          );
         }
       }
 
@@ -269,7 +296,7 @@ export class PromptTemplateManager {
 
   /**
    * 验证模板内容（增强版，符合 T8 要求）
-   * 
+   *
    * 验证规则：
    * 1. 模板是否为空
    * 2. 安全边界声明检查（ai-ask/ai-say 模板）
@@ -277,7 +304,7 @@ export class PromptTemplateManager {
    * 4. 未闭合的变量占位符检查
    * 5. 输出格式说明检查（结构化输出模板）
    * 6. JSON 输出格式检查（新安全机制）
-   * 
+   *
    * @param templateContent 模板内容
    * @param templatePath 模板路径（用于错误提示）
    * @param requiredSystemVars 必需的系统变量列表（可选）
@@ -308,25 +335,31 @@ export class PromptTemplateManager {
     }
 
     // 2. 检查安全边界声明（仅对 ai-ask 和 ai-say 模板）
-    const isConsultingTemplate = templatePath.includes('ai_ask') || templatePath.includes('ai_say') ||
-      templatePath.includes('ai-ask/') || templatePath.includes('ai-say/');
-    
+    const isConsultingTemplate =
+      templatePath.includes('ai_ask') ||
+      templatePath.includes('ai_say') ||
+      templatePath.includes('ai-ask/') ||
+      templatePath.includes('ai-say/');
+
     if (isConsultingTemplate) {
-      const hasSafetyBoundary = templateContent.includes('【安全边界与伦理规范】') ||
+      const hasSafetyBoundary =
+        templateContent.includes('【安全边界与伦理规范】') ||
         templateContent.includes('安全边界') ||
         templateContent.includes('Safety Boundary');
-      
+
       if (!hasSafetyBoundary) {
         warnings.push(
           `Template missing safety boundary declaration: ${templatePath}. ` +
-          `Consider adding 【安全边界与伦理规范】 section.`
+            `Consider adding 【安全边界与伦理规范】 section.`
         );
       }
 
       // 检查是否包含关键安全规范
       const criticalKeywords = ['诊断禁止', '处方禁止', '保证禁止', '危机识别'];
-      const missingKeywords = criticalKeywords.filter(keyword => !templateContent.includes(keyword));
-      
+      const missingKeywords = criticalKeywords.filter(
+        (keyword) => !templateContent.includes(keyword)
+      );
+
       if (missingKeywords.length > 0) {
         warnings.push(
           `Template missing critical safety keywords in ${templatePath}: ${missingKeywords.join(', ')}`
@@ -335,24 +368,24 @@ export class PromptTemplateManager {
 
       // T8 新增：检查 JSON 输出格式中是否包含 safety_risk 字段
       if (templateContent.includes('JSON') || templateContent.includes('输出格式')) {
-        const hasSafetyRiskField = templateContent.includes('safety_risk') || 
-          templateContent.includes('"safety_risk"');
-        
+        const hasSafetyRiskField =
+          templateContent.includes('safety_risk') || templateContent.includes('"safety_risk"');
+
         if (!hasSafetyRiskField) {
           warnings.push(
             `Template ${templatePath} uses JSON output but missing 'safety_risk' field. ` +
-            `This is required for the new safety detection mechanism.`
+              `This is required for the new safety detection mechanism.`
           );
         }
 
         // 检查是否包含 crisis_signal 字段
-        const hasCrisisSignal = templateContent.includes('crisis_signal') || 
-          templateContent.includes('"crisis_signal"');
-        
+        const hasCrisisSignal =
+          templateContent.includes('crisis_signal') || templateContent.includes('"crisis_signal"');
+
         if (!hasCrisisSignal) {
           warnings.push(
             `Template ${templatePath} missing 'crisis_signal' field in metadata. ` +
-            `This is recommended for crisis detection.`
+              `This is recommended for crisis detection.`
           );
         }
       }
@@ -362,18 +395,18 @@ export class PromptTemplateManager {
     // 检测非标准的变量格式（如只有单个花括号的变量）
     const singleBracePattern = /(?<!\{)\{([^{}]+?)\}(?!\})/g;
     const singleBraceMatches = templateContent.match(singleBracePattern);
-    
+
     if (singleBraceMatches && singleBraceMatches.length > 0) {
       // 过滤掉 JSON 示例中的花括号（通常在代码块中）
       const codeBlockPattern = /```[\s\S]*?```/g;
       const contentWithoutCodeBlocks = templateContent.replace(codeBlockPattern, '');
       const validMatches = contentWithoutCodeBlocks.match(singleBracePattern);
-      
+
       if (validMatches && validMatches.length > 0) {
         warnings.push(
           `Template may contain non-standard variable format in ${templatePath}. ` +
-          `Found single-brace variables: ${validMatches.slice(0, 3).join(', ')}... ` +
-          `Consider using double braces {{var}} for consistency.`
+            `Found single-brace variables: ${validMatches.slice(0, 3).join(', ')}... ` +
+            `Consider using double braces {{var}} for consistency.`
         );
       }
     }
@@ -386,14 +419,15 @@ export class PromptTemplateManager {
 
     // 5. 检查是否包含必要的输出格式说明（仅对需要结构化输出的模板）
     if (templatePath.includes('multi-round-ask') || templatePath.includes('mainline')) {
-      const hasOutputFormat = templateContent.includes('JSON') || 
+      const hasOutputFormat =
+        templateContent.includes('JSON') ||
         templateContent.includes('输出格式') ||
         templateContent.includes('Output Format');
-      
+
       if (!hasOutputFormat) {
         warnings.push(
           `Template ${templatePath} may be missing output format specification. ` +
-          `Structured output templates should include JSON format examples.`
+            `Structured output templates should include JSON format examples.`
         );
       }
     }
@@ -406,9 +440,9 @@ export class PromptTemplateManager {
           `\\{${this.escapeRegex(varName)}\\}`,
           `\\$\\{${this.escapeRegex(varName)}\\}`,
         ];
-        
-        const found = patterns.some(pattern => new RegExp(pattern).test(templateContent));
-        
+
+        const found = patterns.some((pattern) => new RegExp(pattern).test(templateContent));
+
         if (!found) {
           missing_system_vars.push(varName);
         }
@@ -428,9 +462,9 @@ export class PromptTemplateManager {
           `\\{${this.escapeRegex(varName)}\\}`,
           `\\$\\{${this.escapeRegex(varName)}\\}`,
         ];
-        
-        const found = patterns.some(pattern => new RegExp(pattern).test(templateContent));
-        
+
+        const found = patterns.some((pattern) => new RegExp(pattern).test(templateContent));
+
         if (!found) {
           missing_script_vars.push(varName);
         }

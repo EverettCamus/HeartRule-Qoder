@@ -202,9 +202,37 @@ export abstract class BaseLLMProvider implements LLMProvider {
 
       clearTimeout(timeoutId);
 
+      // 提取实际发送给 LLM 的 prompt
+      // Vercel AI SDK 会将 prompt 字符串包装成 messages 数组
+      // 我们尝试提取 result.request.body 中的实际内容，如果失败则使用原始 prompt
+      let actualPrompt = prompt;
+      try {
+        // 检查 result.request 是否存在
+        if (result.request && result.request.body) {
+          const requestBody =
+            typeof result.request.body === 'string'
+              ? JSON.parse(result.request.body)
+              : result.request.body;
+
+          // 如果是 messages格式，提取最后一条user消息的content
+          if (requestBody.messages && Array.isArray(requestBody.messages)) {
+            const userMessage = requestBody.messages.find((m: any) => m.role === 'user');
+            if (userMessage && userMessage.content) {
+              actualPrompt = userMessage.content;
+            }
+          }
+          // 如果是prompt字段，直接使用
+          else if (requestBody.prompt) {
+            actualPrompt = requestBody.prompt;
+          }
+        }
+      } catch (e) {
+        // 解析失败，使用原始 prompt
+      }
+
       // 构建调试信息
       const debugInfo: LLMDebugInfo = {
-        prompt,
+        prompt: actualPrompt, // 使用实际发送的 prompt
         response: {
           text: result.text,
           finishReason: result.finishReason,

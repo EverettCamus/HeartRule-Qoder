@@ -17,6 +17,8 @@
  * - 退出决策顺序：max_rounds > exit_criteria > llm_suggestion
  */
 
+import path from 'path';
+
 import { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager, TemplateResolver } from '../engines/prompt-template/index.js';
 
@@ -47,7 +49,7 @@ interface MainLineOutput {
       reasoning: string;
     };
   };
-  
+
   // 旧格式字段（向后兼容）
   assessment?: {
     understanding_level: number;
@@ -191,9 +193,7 @@ export class AiSayAction extends BaseAction {
 
     // 提取 AI 消息：优先使用 content 字段（新格式），兼容旧格式
     const aiRole = this.getConfig('ai_role', '咨询师');
-    const aiMessage = llmOutput.content || 
-                      (llmOutput.response && llmOutput.response[aiRole]) || 
-                      '';
+    const aiMessage = llmOutput.content || (llmOutput.response && llmOutput.response[aiRole]) || '';
 
     // 提取安全风险信息
     const safetyRisk = llmOutput.safety_risk || {
@@ -212,13 +212,13 @@ export class AiSayAction extends BaseAction {
     if (isLastRound) {
       console.log(`[AiSayAction] 🏁 Reached max_rounds (${this.maxRounds}), finishing action`);
     }
-    
+
     // 修正：ai_say 在第一次输出时应该等待用户确认，而不是直接完成
     const shouldWaitForAcknowledgment = aiMessage && this.currentRound === 1;
-    
+
     return {
       success: true,
-      completed: shouldWaitForAcknowledgment ? false : (exitDecision.should_exit || isLastRound),
+      completed: shouldWaitForAcknowledgment ? false : exitDecision.should_exit || isLastRound,
       aiMessage,
       debugInfo: llmResult.debugInfo, // ✅ 添加 debugInfo
       metadata: {
@@ -345,28 +345,40 @@ export class AiSayAction extends BaseAction {
     const sessionConfig = {
       template_scheme: context.metadata?.sessionConfig?.template_scheme,
     };
-    
+
+    console.log('[AiSayAction] 📄 Loading template with config:', {
+      template_scheme: sessionConfig.template_scheme,
+      projectId: context.metadata?.projectId,
+    });
+
     // 2. 初始化 TemplateResolver（延迟初始化）
     if (!this.templateResolver) {
       const projectRoot = this.resolveProjectRoot(context);
+      console.log('[AiSayAction] 📂 Using project root:', projectRoot);
       this.templateResolver = new TemplateResolver(projectRoot);
     }
-    
+
     // 3. 解析模板路径（使用两层解析）
     const resolution = await this.templateResolver.resolveTemplatePath(
       'ai_say', // 注意：模板文件名为 ai_say_v1.md
       sessionConfig
     );
-    
+
     console.log(`[AiSayAction] 📝 Template resolved:`, {
       path: resolution.path,
       layer: resolution.layer,
       scheme: resolution.scheme,
       exists: resolution.exists,
     });
-    
-    const template = await this.templateManager.loadTemplate(resolution.path);
-    
+
+    // 4. 使用项目根目录加载模板
+    const projectRoot = this.resolveProjectRoot(context);
+    const fullPath = path.join(projectRoot, resolution.path);
+
+    console.log(`[AiSayAction] 📂 Loading template from full path:`, fullPath);
+
+    const template = await this.templateManager.loadTemplate(fullPath);
+
     return {
       template,
       resolution,

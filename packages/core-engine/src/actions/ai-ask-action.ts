@@ -3,21 +3,23 @@
  *
  * 【DDD 视角】应用层服务 - Action 执行器
  * 负责将脚本中的 ai_ask 动作定义转化为实际执行过程
- * 
+ *
  * 核心能力：
  * 1. 多轮追问：支持根据 exit 条件进行智能追问，直到收集足够信息
  * 2. 变量提取：从用户回答中提取结构化信息并写入合适作用域
  * 3. 提示词模板：支持两种模板（simple-ask / multi-round-ask）
  * 4. 退出决策：LLM 自动判断是否满足 exit 条件
  * 5. 作用域自动注册：自动将 output 变量注册到 topic 作用域
- * 
+ *
  * 业务规则：
  * - 模板选择：有 exit 或 output 时使用 multi-round-ask，否则使用 simple-ask
  * - 变量作用域：未明确声明的 output 变量默认注册到 topic 作用域
  * - 退出条件：LLM 判断 BRIEF 是否满足 exit 条件
- * 
+ *
  * 参照: legacy-python/src/actions/ai_ask.py
  */
+
+import path from 'path';
 
 import { VariableScope } from '@heartrule/shared-types';
 
@@ -42,7 +44,7 @@ interface AskLLMOutput {
     emotional_tone?: string;
     crisis_signal?: boolean;
   };
-  
+
   // 兼容旧格式：支持动态的 ai_role 字段
   [key: string]: any;
 }
@@ -187,15 +189,15 @@ export class AiAskAction extends BaseAction {
 
     // 调用 LLM 生成下一轮问题或决定退出
     const llmResult = await this.generateQuestionFromTemplate(context, AskTemplateType.MULTI_ROUND);
-    
+
     // 提取 LLM 输出的原始数据
-    const llmOutput = llmResult.metadata?.llmRawOutput ? 
-      JSON.parse(this.cleanJsonOutput(llmResult.metadata.llmRawOutput)) : 
-      {};
+    const llmOutput = llmResult.metadata?.llmRawOutput
+      ? JSON.parse(this.cleanJsonOutput(llmResult.metadata.llmRawOutput))
+      : {};
 
     // 使用统一的退出决策方法
     const exitDecision = this.evaluateExitCondition(context, llmOutput);
-    
+
     console.log(`[AiAskAction] 🎯 Exit decision:`, exitDecision);
 
     if (exitDecision.should_exit) {
@@ -295,28 +297,39 @@ export class AiAskAction extends BaseAction {
     const sessionConfig = {
       template_scheme: context.metadata?.sessionConfig?.template_scheme,
     };
-    
+
+    console.log('[AiAskAction] 📄 Loading template with config:', {
+      template_scheme: sessionConfig.template_scheme,
+      projectId: context.metadata?.projectId,
+    });
+
     // 2. 初始化 TemplateResolver（延迟初始化）
     if (!this.templateResolver) {
       const projectRoot = this.resolveProjectRoot(context);
+      console.log('[AiAskAction] 📂 Using project root:', projectRoot);
       this.templateResolver = new TemplateResolver(projectRoot);
     }
-    
+
     // 3. 解析模板路径（使用两层解析）
     const resolution = await this.templateResolver.resolveTemplatePath(
       'ai_ask', // 注意：模板文件名为 ai_ask_v1.md
       sessionConfig
     );
-    
+
     console.log(`[AiAskAction] 📝 Template resolved:`, {
       path: resolution.path,
       layer: resolution.layer,
       scheme: resolution.scheme,
       exists: resolution.exists,
     });
-    
-    // 4. 加载模板
-    const template = await this.templateManager.loadTemplate(resolution.path);
+
+    // 4. 使用项目根目录加载模板
+    const projectRoot = this.resolveProjectRoot(context);
+    const fullPath = path.join(projectRoot, resolution.path);
+
+    console.log(`[AiAskAction] 📂 Loading template from full path:`, fullPath);
+
+    const template = await this.templateManager.loadTemplate(fullPath);
 
     // 5. 准备变量
     const scriptVariables = this.extractScriptVariables(context);
