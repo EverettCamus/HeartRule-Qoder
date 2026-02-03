@@ -83,6 +83,38 @@ export interface ActionResult {
 }
 
 /**
+ * 结构化 Action 输出（新安全机制）
+ * 
+ * 所有咨询 Action（ai_ask, ai_say）的统一 JSON 输出格式
+ * 包含安全风险检测字段和元数据
+ */
+export interface StructuredActionOutput {
+  content: string;
+  safety_risk: {
+    detected: boolean;
+    risk_type: 'diagnosis' | 'prescription' | 'guarantee' | 'inappropriate_advice' | null;
+    confidence: 'high' | 'medium' | 'low';
+    reason: string | null;
+  };
+  metadata: {
+    emotional_tone?: string;
+    crisis_signal: boolean;
+  };
+}
+
+/**
+ * 安全违规二次确认结果
+ * 
+ * 当主 LLM 检测到潜在安全风险时，二次 LLM 确认的返回结果
+ */
+export interface SafetyConfirmationResult {
+  violation_confirmed: boolean;
+  risk_level: 'critical' | 'high' | 'medium' | 'low';
+  detailed_reason: string;
+  suggested_action: 'block' | 'warn' | 'allow';
+}
+
+/**
  * Action 基类
  *
  * 【DDD 视角】应用层抽象基类
@@ -230,6 +262,31 @@ export abstract class BaseAction {
       }
     }
     return templateBasePath;
+  }
+
+  /**
+   * 解析项目根目录（用于 TemplateResolver）
+   */
+  protected resolveProjectRoot(context?: ActionContext): string {
+    // 从 context.metadata 中读取 projectId
+    const projectId = context?.metadata?.projectId;
+    
+    if (projectId) {
+      // 如果有 projectId，使用项目工作区路径
+      const workspacePath = process.env.PROJECTS_WORKSPACE || path.resolve(process.cwd(), 'workspace', 'projects');
+      const projectPath = path.join(workspacePath, projectId);
+      console.log(`[BaseAction] 📁 Using project path: ${projectPath}`);
+      return projectPath;
+    }
+    
+    // 如果没有 projectId，回退到默认行为（monorepo 结构）
+    const cwd = process.cwd();
+    // 检测运行目录：适配 monorepo 结构
+    if (cwd.includes('packages/api-server') || cwd.includes('packages\\api-server')) {
+      return path.resolve(cwd, '../..');
+    } else {
+      return cwd;
+    }
   }
 
   /**
@@ -394,8 +451,9 @@ export abstract class BaseAction {
 
     // 检查理解度阈值
     if (this.exitCriteria.understanding_threshold !== undefined && llmOutput) {
-      const understandingLevel =
-        llmOutput.assessment?.understanding_level || llmOutput.understanding_level || 0;
+      // 支持新格式（metadata.assessment）和旧格式（assessment）
+      const assessment = llmOutput.metadata?.assessment || llmOutput.assessment;
+      const understandingLevel = assessment?.understanding_level || 0;
 
       if (understandingLevel >= this.exitCriteria.understanding_threshold) {
         conditions.push(
@@ -412,7 +470,9 @@ export abstract class BaseAction {
 
     // 检查是否允许有疑问时退出
     if (this.exitCriteria.has_questions !== undefined && llmOutput) {
-      const hasQuestions = llmOutput.assessment?.has_questions || llmOutput.has_questions || false;
+      // 支持新格式（metadata.assessment）和旧格式（assessment）
+      const assessment = llmOutput.metadata?.assessment || llmOutput.assessment;
+      const hasQuestions = assessment?.has_questions || false;
 
       if (!this.exitCriteria.has_questions && hasQuestions) {
         return {
@@ -497,5 +557,261 @@ export abstract class BaseAction {
       default:
         return false;
     }
+  }
+
+  /**
+   * 安全边界检测（已弃用，保留用于向后兼容）
+   * 
+   * @deprecated 使用新的基于 LLM 的安全边界检测机制（parseStructuredOutput + confirmSafetyViolation）
+   * 对 AI 生成的消息进行关键词扫描，检测潜在的安全边界违反。
+   * 这是事后检测机制，作为 LLM 指令跟随的兜底手段。
+   * 
+   * 注意：关键词检测有误报风险，仅作辅助手段，不直接阻断 Action 执行。
+   * 
+   * @param aiMessage AI 生成的消息
+   * @returns 安全检查结果
+   */
+  protected checkSafetyBoundary(aiMessage: string): {
+    passed: boolean;
+    violations: Array<{
+      category: 'diagnosis' | 'prescription' | 'guarantee' | 'crisis';
+      matched_pattern: string;
+      severity: 'warning' | 'critical';
+    }>;
+  } {
+    const violations: Array<{
+      category: 'diagnosis' | 'prescription' | 'guarantee' | 'crisis';
+      matched_pattern: string;
+      severity: 'warning' | 'critical';
+    }> = [];
+
+    // 诊断禁止检测
+    const diagnosisPatterns = [
+      /你有.{0,5}(抑郁|焦虑|抑郁症|焦虑症|强迫症|双相障碍)/,
+      /这是.{0,10}(症|疾病|障碍)的.{0,5}表现/,
+      /诊断为/,
+      /患有/,
+      /符合.{0,5}(症|疾病|障碍)的标准/,
+    ];
+
+    for (const pattern of diagnosisPatterns) {
+      if (pattern.test(aiMessage)) {
+        violations.push({
+          category: 'diagnosis',
+          matched_pattern: pattern.source,
+          severity: 'warning',
+        });
+        break; // 同一类别只记录一次
+      }
+    }
+
+    // 处方禁止检测
+    const prescriptionPatterns = [
+      /建议服用/,
+      /吃.{0,5}药/,
+      /剂量/,
+      /药物治疗/,
+      /可以尝试.{0,5}(药|保健品)/,
+    ];
+
+    for (const pattern of prescriptionPatterns) {
+      if (pattern.test(aiMessage)) {
+        violations.push({
+          category: 'prescription',
+          matched_pattern: pattern.source,
+          severity: 'warning',
+        });
+        break;
+      }
+    }
+
+    // 保证禁止检测
+    const guaranteePatterns = [
+      /一定会.{0,5}(好转|改善|恢复)/,
+      /保证.{0,5}(效果|治愈)/,
+      /肯定能.{0,5}(治好|解决)/,
+    ];
+
+    for (const pattern of guaranteePatterns) {
+      if (pattern.test(aiMessage)) {
+        violations.push({
+          category: 'guarantee',
+          matched_pattern: pattern.source,
+          severity: 'warning',
+        });
+        break;
+      }
+    }
+
+    // 危机信号检测（通过 crisis_detected 字段，由 LLM 输出）
+    if (aiMessage.includes('crisis_detected: true') || aiMessage.includes('"crisis_detected":true')) {
+      violations.push({
+        category: 'crisis',
+        matched_pattern: 'crisis_detected flag',
+        severity: 'critical',
+      });
+    }
+
+    return {
+      passed: violations.length === 0,
+      violations,
+    };
+  }
+
+  /**
+   * 解析 LLM 输出的结构化 JSON（新安全机制）
+   * 
+   * 从 LLM 输出的 JSON 中提取安全风险检测字段。
+   * 支持清理 Markdown 代码块标记。
+   * 
+   * @param aiMessage LLM 返回的原始文本（可能包含 ```json 标记）
+   * @returns 结构化输出对象
+   */
+  protected parseStructuredOutput(aiMessage: string): StructuredActionOutput {
+    const jsonText = this.cleanJsonOutput(aiMessage);
+    
+    try {
+      const parsed = JSON.parse(jsonText);
+      
+      // 兼容性处理：确保所有必需字段存在
+      return {
+        content: parsed.content || '',
+        safety_risk: {
+          detected: parsed.safety_risk?.detected ?? false,
+          risk_type: parsed.safety_risk?.risk_type ?? null,
+          confidence: parsed.safety_risk?.confidence ?? 'high',
+          reason: parsed.safety_risk?.reason ?? null,
+        },
+        metadata: {
+          emotional_tone: parsed.metadata?.emotional_tone,
+          crisis_signal: parsed.metadata?.crisis_signal ?? false,
+        },
+      };
+    } catch (error: any) {
+      console.error('[BaseAction] ❌ Failed to parse structured output:', error.message);
+      console.error('[BaseAction] Raw text:', aiMessage);
+      
+      // 兜底：返回安全的默认值
+      return {
+        content: aiMessage, // 直接使用原始文本
+        safety_risk: {
+          detected: false,
+          risk_type: null,
+          confidence: 'high',
+          reason: 'JSON parsing failed, using raw text',
+        },
+        metadata: {
+          crisis_signal: false,
+        },
+      };
+    }
+  }
+
+  /**
+   * 二次 LLM 确认安全违规
+   * 
+   * 当主 LLM 检测到潜在安全风险时，启动第二次 LLM 调用进行确认。
+   * 这个方法需要 LLMOrchestrator 实例，由子类注入。
+   * 
+   * @param originalResponse 原始回复内容
+   * @param riskType 风险类型
+   * @param reason 初步检测原因
+   * @param llmOrchestrator LLM 编排器（由子类提供）
+   * @returns 二次确认结果
+   */
+  protected async confirmSafetyViolation(
+    originalResponse: string,
+    riskType: string,
+    reason: string,
+    llmOrchestrator?: any
+  ): Promise<SafetyConfirmationResult> {
+    // 如果没有提供 LLM 编排器，直接确认违规（保守策略）
+    if (!llmOrchestrator) {
+      console.warn('[BaseAction] ⚠️ No LLM orchestrator provided, confirming violation by default');
+      return {
+        violation_confirmed: true,
+        risk_level: 'high',
+        detailed_reason: `Initial detection: ${reason}. No LLM orchestrator for confirmation.`,
+        suggested_action: 'block',
+      };
+    }
+
+    // 构建二次确认提示词
+    const confirmationPrompt = `你是一个心理咨询安全审查专家。请对以下 AI 咨询师的回复进行安全边界检查。
+
+【原始回复】
+${originalResponse}
+
+【初步检测结果】
+- 风险类型：${riskType}
+- 原因：${reason}
+
+【安全边界规范】
+1. 诊断禁止：不得对用户进行任何精神疾病诊断或症状判定
+2. 处方禁止：不得推荐药物、剂量或治疗方案
+3. 保证禁止：不得对疗效或改善做任何承诺或保证
+4. 不适当建议：不得给出可能导致心理伤害或误导的建议
+
+【你的任务】
+请仔细分析原始回复，判断是否真的违反了安全边界规范。
+
+输出 JSON 格式：
+\`\`\`json
+{
+  "violation_confirmed": false,
+  "risk_level": "low",
+  "detailed_reason": "详细说明为什么违反或不违反",
+  "suggested_action": "allow"
+}
+\`\`\`
+
+注意：
+- violation_confirmed: 是否确认违反（true/false）
+- risk_level: 风险等级（critical/high/medium/low）
+- suggested_action: 建议操作（block/warn/allow）`;
+
+    try {
+      // 调用 LLM
+      const result = await llmOrchestrator.generateText(confirmationPrompt, {
+        temperature: 0.3,
+        maxTokens: 500,
+      });
+
+      // 解析响应
+      const jsonText = this.cleanJsonOutput(result.text);
+      const confirmation = JSON.parse(jsonText);
+
+      return {
+        violation_confirmed: confirmation.violation_confirmed ?? true,
+        risk_level: confirmation.risk_level ?? 'high',
+        detailed_reason: confirmation.detailed_reason ?? 'No reason provided',
+        suggested_action: confirmation.suggested_action ?? 'block',
+      };
+    } catch (error: any) {
+      console.error('[BaseAction] ❌ Safety confirmation failed:', error.message);
+      
+      // 确认失败，保守策略：确认违规
+      return {
+        violation_confirmed: true,
+        risk_level: 'high',
+        detailed_reason: `Confirmation failed: ${error.message}`,
+        suggested_action: 'block',
+      };
+    }
+  }
+
+  /**
+   * 生成安全兜底回复
+   * 
+   * 当确认违反安全边界时，使用预定义的安全回复替代原始内容。
+   * 
+   * @returns 安全兜底回复文本
+   */
+  protected generateSafeFallbackResponse(): string {
+    return `抱歉，我刚才的回复可能不够准确。请注意，我是一个 AI 辅助工具，不能替代专业心理咨询师或医生。关于你的情况，建议咨询专业人士获取更准确的建议。
+
+如果你需要紧急帮助，请拨打：
+- 24小时心理危机干预热线：400-161-9995
+- 紧急医疗服务：120`;
   }
 }

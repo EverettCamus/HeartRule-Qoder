@@ -706,7 +706,7 @@ class YamlService {
   }
 
   /**
-   * 格式化YAML内容
+   * 格式YAML内容
    * 支持智能缩进修复
    */
   formatYaml(
@@ -726,13 +726,13 @@ class YamlService {
       quotingType: '"',
       forceQuotes: false,
     };
-
+  
     const finalOptions = { ...defaultOptions, ...options };
-
+  
     try {
       let contentToFormat = yamlContent;
       let autoFixed = false;
-
+  
       // 第一步：尝试智能修复缩进错误
       try {
         yaml.load(yamlContent);
@@ -740,7 +740,7 @@ class YamlService {
       } catch (parseError) {
         console.log('[FormatYAML] YAML 解析失败，尝试智能修复缩进...', parseError);
         contentToFormat = this.fixYamlIndentation(yamlContent);
-
+  
         // 验证修复后是否可以解析
         try {
           yaml.load(contentToFormat);
@@ -753,10 +753,10 @@ class YamlService {
           );
         }
       }
-
+  
       // 第二步：解析并重新格式化
       const parsedYaml = yaml.load(contentToFormat);
-
+  
       const formattedYaml = yaml.dump(parsedYaml, {
         indent: finalOptions.indent,
         lineWidth: finalOptions.lineWidth,
@@ -765,7 +765,7 @@ class YamlService {
         quotingType: finalOptions.quotingType,
         forceQuotes: finalOptions.forceQuotes,
       });
-
+  
       console.log('[FormatYAML] 格式化完成');
       return {
         formatted: formattedYaml,
@@ -779,6 +779,117 @@ class YamlService {
         success: false,
         error: error instanceof Error ? error.message : '未知错误',
       };
+    }
+  }
+  
+  /**
+   * 提取Session配置
+   * 支持新格式 (session) 和旧格式 (script)
+   */
+  extractSessionConfig(yamlContent: string): {
+    name: string;
+    description?: string;
+    version?: string;
+    template_scheme?: string;
+  } | null {
+    try {
+      const parsed = yaml.load(yamlContent) as any;
+        
+      // 新格式: session 字段
+      if (parsed?.session) {
+        return {
+          name: parsed.session.session_name || parsed.session.session_id || '',
+          description: parsed.session.description,
+          version: parsed.session.version,
+          template_scheme: parsed.session.template_scheme,
+        };
+      }
+        
+      // 旧格式: script 字段 (向后兼容)
+      if (parsed?.script) {
+        return {
+          name: parsed.script.name || '',
+          description: parsed.script.description,
+          version: parsed.script.version,
+          template_scheme: parsed.script.template_scheme,
+        };
+      }
+        
+      console.warn('无法提取Session配置：没有找到 session 或 script 字段');
+      return null;
+    } catch (error) {
+      console.error('提取Session配置失败:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * 更新Session配置
+   * 保留原有的phases等字段，只更新基本信息
+   */
+  updateSessionConfig(
+    yamlContent: string,
+    sessionConfig: {
+      name: string;
+      description?: string;
+      version?: string;
+      template_scheme?: string;
+    }
+  ): string {
+    try {
+      const parsed = yaml.load(yamlContent) as any;
+        
+      // 新格式: 更新 session 字段
+      if (parsed?.session) {
+        parsed.session.session_name = sessionConfig.name;
+        parsed.session.description = sessionConfig.description;
+        parsed.session.version = sessionConfig.version;
+          
+        // 处理 template_scheme
+        if (sessionConfig.template_scheme) {
+          parsed.session.template_scheme = sessionConfig.template_scheme;
+        } else {
+          // 如果为空，删除该字段
+          delete parsed.session.template_scheme;
+        }
+      }
+      // 旧格式: 更新 script 字段 (向后兼容)
+      else if (parsed?.script) {
+        parsed.script.name = sessionConfig.name;
+        parsed.script.description = sessionConfig.description;
+        parsed.script.version = sessionConfig.version;
+          
+        if (sessionConfig.template_scheme) {
+          parsed.script.template_scheme = sessionConfig.template_scheme;
+        } else {
+          delete parsed.script.template_scheme;
+        }
+      }
+      // 如果两者都不存在，创建新的 session 字段
+      else {
+        console.log('创建新的 session 字段');
+        parsed.session = {
+          session_id: sessionConfig.name.replace(/\s+/g, '_').toLowerCase(),
+          session_name: sessionConfig.name,
+          description: sessionConfig.description,
+          version: sessionConfig.version,
+          phases: parsed.phases || [],
+        };
+          
+        if (sessionConfig.template_scheme) {
+          parsed.session.template_scheme = sessionConfig.template_scheme;
+        }
+      }
+        
+      // 转回YAML
+      return yaml.dump(parsed, {
+        lineWidth: -1,
+        noRefs: true,
+        sortKeys: false,
+      });
+    } catch (error) {
+      console.error('更新Session配置失败:', error);
+      throw error;
     }
   }
 }

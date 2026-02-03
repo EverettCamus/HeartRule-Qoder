@@ -1,0 +1,90 @@
+# 测试两层模板机制的示例脚本
+# 展示如何使用 template_scheme 配置自定义模板方案
+
+metadata:
+  name: "模板方案测试脚本"
+  version: "1.0"
+  author: "HeartRule Team"
+  description: "演示两层模板机制的使用方法"
+  target_audience: "开发者"
+  estimated_duration: "5分钟"
+
+# 会谈结构
+session:
+  session_id: "test_template_scheme_v1"
+  session_name: "模板方案测试会谈"
+  
+  # ====== 模板方案配置 ======
+  # 如果不指定 template_scheme，将使用 default 层的系统默认模板
+  # 如果指定了 template_scheme，将优先查找 custom 层的自定义模板
+  # template_scheme: "crisis_intervention"  # 示例：使用危机干预专用模板方案
+  # template_scheme: "adolescent_friendly"  # 示例：使用青少年友好版模板方案
+  
+  phases:
+    # ===== 测试阶段 =====
+    - phase_id: "phase_1_test"
+      phase_name: "测试阶段"
+      phase_goal: "测试模板方案的加载和使用"
+      
+      topics:
+        # 话题1：测试 ai_say 动作
+        - topic_id: "topic_1_test_say"
+          topic_name: "测试 ai_say"
+          topic_goal: "验证 ai_say 动作使用正确的模板"
+          
+          actions:
+            - action_type: "ai_say"
+              action_id: "test_say"
+              config:
+                content_template: |
+                  这是一个测试消息，用于验证模板方案机制是否正常工作。
+                  当前使用的模板将根据 session 配置决定：
+                  - 如果 template_scheme 未配置，使用 default 层模板
+                  - 如果 template_scheme 配置了，优先使用 custom 层模板
+                say_goal: "测试 ai_say 模板加载"
+                require_acknowledgment: false
+                max_rounds: 1
+        
+        # 话题2：测试 ai_ask 动作
+        - topic_id: "topic_2_test_ask"
+          topic_name: "测试 ai_ask"
+          topic_goal: "验证 ai_ask 动作使用正确的模板"
+          
+          actions:
+            - action_type: "ai_ask"
+              action_id: "test_ask"
+              config:
+                target_variable: "test_response"
+                question_template: "这是一个测试提问，请随意回复任何内容。你想说什么呢？"
+                extraction_prompt: "提取用户的回复内容"
+                required: false
+                max_rounds: 1
+
+# ====== 使用说明 ======
+#
+# 1. 默认使用系统模板（default 层）
+#    - 不配置 template_scheme 字段
+#    - 模板路径：_system/config/default/ai_ask_v1.md, ai_say_v1.md
+#
+# 2. 使用自定义模板方案（custom 层）
+#    - 在 session 下配置 template_scheme: "your_scheme_name"
+#    - 创建自定义模板目录：_system/config/custom/your_scheme_name/
+#    - 复制并修改模板文件：ai_ask_v1.md, ai_say_v1.md
+#    - 系统将自动优先使用 custom 层模板
+#
+# 3. 回退机制
+#    - 如果 custom 层模板不存在，自动回退到 default 层
+#    - 如果 default 层模板也不存在，抛出错误
+#
+# 4. 创建自定义方案示例
+#    步骤1：创建目录
+#      mkdir _system/config/custom/crisis_intervention
+#    
+#    步骤2：复制默认模板
+#      cp _system/config/default/ai_ask_v1.md _system/config/custom/crisis_intervention/
+#      cp _system/config/default/ai_say_v1.md _system/config/custom/crisis_intervention/
+#    
+#    步骤3：修改模板内容（根据具体需求调整）
+#    
+#    步骤4：在 session 中配置
+#      template_scheme: "crisis_intervention"

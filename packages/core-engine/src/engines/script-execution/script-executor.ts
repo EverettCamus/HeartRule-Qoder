@@ -1,16 +1,16 @@
 /**
- * 脚本执行引擎核心执行器
+ * 脚本执行引擎核心执行�?
  *
  * 参照: legacy-python/src/engines/script_execution/executor.py
- * MVP 简化版本：支持 ai_say 和 ai_ask
+ * MVP 简化版本：支持 ai_say �?ai_ask
  * 
- * 【DDD 视角 - 重构进行中】
- * ExecutionState 是执行器的临时运行时结构，用于驱动脚本执行流程。
- * Session 领域模型才是持久化的状态承载者。
+ * 【DDD 视角 - 重构进行中�?
+ * ExecutionState 是执行器的临时运行时结构，用于驱动脚本执行流程�?
+ * Session 领域模型才是持久化的状态承载者�?
  * 
- * 重构方向：
+ * 重构方向�?
  * - ExecutionState 简化为纯粹的执行视图（当前位置 + 临时上下文）
- * - 状态变更逻辑收敛到 Session 聚合根
+ * - 状态变更逻辑收敛�?Session 聚合�?
  * - 执行器从 Session 读取/更新状态，而非自行维护副本
  */
 
@@ -26,7 +26,7 @@ import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.j
 import { VariableScopeResolver } from '../variable-scope/variable-scope-resolver.js';
 
 /**
- * 执行状态
+ * 执行状�?
  */
 export enum ExecutionStatus {
   RUNNING = 'running',
@@ -46,14 +46,14 @@ export interface ExecutionPosition {
 }
 
 /**
- * 执行状态
+ * 执行状�?
  * 
- * 【临时结构】用于在脚本执行过程中传递状态，不直接持久化。
- * 该结构将在重构第二阶段进一步简化，状态维护职责转移到 Session 领域模型。
+ * 【临时结构】用于在脚本执行过程中传递状态，不直接持久化�?
+ * 该结构将在重构第二阶段进一步简化，状态维护职责转移到 Session 领域模型�?
  * 
- * 未来方向：
+ * 未来方向�?
  * - 简化为执行视图：currentPosition + context + tempCache
- * - 移除与 Session 重复的字段（status, variables, conversationHistory 等）
+ * - 移除�?Session 重复的字段（status, variables, conversationHistory 等）
  */
 export interface ExecutionState {
   status: ExecutionStatus;
@@ -62,7 +62,7 @@ export interface ExecutionState {
   currentActionIdx: number;
   currentAction: BaseAction | null;
   variables: Record<string, any>;
-  // 新增：分层变量存储结构
+  // 新增：分层变量存储结�?
   variableStore?: VariableStore;
   conversationHistory: Array<{
     role: string;
@@ -77,19 +77,19 @@ export interface ExecutionState {
   currentTopicId?: string;
   currentActionId?: string;
   currentActionType?: string;
-  // LLM调试信息（最近一次LLM调用）
+  // LLM调试信息（最近一次LLM调用�?
   lastLLMDebugInfo?: LLMDebugInfo;
 }
 
 /**
- * 脚本执行器
+ * 脚本执行�?
  */
 export class ScriptExecutor {
   private llmOrchestrator: LLMOrchestrator;
 
   constructor() {
-    // 初始化 LLM 编排器
-    // 从环境变量读取配置（兼容 VOLCANO 和 VOLCENGINE 前缀）
+    // 初始�?LLM 编排�?
+    // 从环境变量读取配置（兼容 VOLCANO �?VOLCENGINE 前缀�?
     const apiKey =
       process.env.VOLCENGINE_API_KEY ||
       process.env.VOLCANO_API_KEY ||
@@ -144,7 +144,7 @@ export class ScriptExecutor {
           topic: {},
         };
 
-        // 将旧数据迁移到 session 作用域
+        // 将旧数据迁移�?session 作用�?
         for (const [key, value] of Object.entries(executionState.variables)) {
           executionState.variableStore.session[key] = {
             value,
@@ -155,7 +155,7 @@ export class ScriptExecutor {
         }
 
         console.log(
-          '[ScriptExecutor] ✅ Migrated',
+          '[ScriptExecutor] �?Migrated',
           Object.keys(executionState.variables).length,
           'variables to session scope'
         );
@@ -166,7 +166,17 @@ export class ScriptExecutor {
       const sessionData = parsed.session;
       const phases = sessionData.phases;
 
-      // 如果 metadata 中有保存的 Action 状态，恢复它
+      // ?? ��ȡ session ����(���� template_scheme)�����浽 metadata
+      if (!executionState.metadata.sessionConfig) {
+        executionState.metadata.sessionConfig = {
+          template_scheme: sessionData.template_scheme,
+        };
+        console.log('[ScriptExecutor] ?? Extracted session config:', {
+          template_scheme: sessionData.template_scheme,
+        });
+      }
+
+      // 如果 metadata 中有保存�?Action 状态，恢复�?
       if (executionState.metadata.actionState && !executionState.currentAction) {
         console.log('[ScriptExecutor] 🔄 Deserializing action state:', {
           actionId: executionState.metadata.actionState.actionId,
@@ -184,7 +194,7 @@ export class ScriptExecutor {
         );
       }
 
-      // 如果有当前Action正在执行，继续执行
+      // 如果有当前Action正在执行，继续执�?
       if (executionState.currentAction) {
         // 恢复位置 ID 信息
         const resumedPhase = phases[executionState.currentPhaseIdx];
@@ -220,13 +230,13 @@ export class ScriptExecutor {
 
           // ⚠️ 关键修复：即使Action未完成，也要处理已提取的变量
           if (result.extractedVariables) {
-            // 向后兼容：继续更新旧的 variables
+            // 向后兼容：继续更新旧�?variables
             executionState.variables = {
               ...executionState.variables,
               ...result.extractedVariables,
             };
           
-            // 新逻辑：使用 VariableScopeResolver 写入分层变量
+            // 新逻辑：使�?VariableScopeResolver 写入分层变量
             if (executionState.variableStore) {
               const scopeResolver = new VariableScopeResolver(executionState.variableStore);
               const position = {
@@ -236,7 +246,7 @@ export class ScriptExecutor {
               };
           
               for (const [varName, varValue] of Object.entries(result.extractedVariables)) {
-                // 确定目标作用域
+                // 确定目标作用�?
                 const targetScope = scopeResolver.determineScope(varName);
                           
                 // 写入变量
@@ -258,7 +268,7 @@ export class ScriptExecutor {
             console.log('[ScriptExecutor] 📥 Saved intermediate AI message from continued action');
           }
 
-          // 保存LLM调试信息（如果有）
+          // 保存LLM调试信息（如果有�?
           if (result.debugInfo) {
             executionState.lastLLMDebugInfo = result.debugInfo;
             console.log(
@@ -266,7 +276,7 @@ export class ScriptExecutor {
             );
           }
 
-          // 保存回合数信息（从 result.metadata 提取）
+          // 保存回合数信息（�?result.metadata 提取�?
           if (
             result.metadata?.currentRound !== undefined ||
             result.metadata?.maxRounds !== undefined
@@ -283,7 +293,7 @@ export class ScriptExecutor {
             );
           }
 
-          // 记录退出决策到历史（如果有）
+          // 记录退出决策到历史（如果有�?
           if (result.metadata?.exitDecision) {
             if (!executionState.metadata.exitHistory) {
               executionState.metadata.exitHistory = [];
@@ -300,7 +310,7 @@ export class ScriptExecutor {
             );
           }
 
-          // 保存 Action 内部状态
+          // 保存 Action 内部状�?
           executionState.metadata.actionState = this.serializeActionState(
             executionState.currentAction
           );
@@ -308,21 +318,21 @@ export class ScriptExecutor {
           return executionState;
         }
 
-        // Action完成，处理结果
-        console.log('[ScriptExecutor] ✅ Action completed via continue:', {
+        // Action完成，处理结�?
+        console.log('[ScriptExecutor] �?Action completed via continue:', {
           actionId: executionState.currentAction.actionId,
           hasAiMessage: !!result.aiMessage,
         });
         if (result.success) {
-          // 更新变量：使用 VariableScopeResolver 写入到正确的作用域
+          // 更新变量：使�?VariableScopeResolver 写入到正确的作用�?
           if (result.extractedVariables) {
-            // 向后兼容：继续更新旧的 variables
+            // 向后兼容：继续更新旧�?variables
             executionState.variables = {
               ...executionState.variables,
               ...result.extractedVariables,
             };
 
-            // 新逻辑：使用 VariableScopeResolver 写入分层变量
+            // 新逻辑：使�?VariableScopeResolver 写入分层变量
             if (executionState.variableStore) {
               console.log(`[ScriptExecutor] 🔍 Processing extracted variables (continueAction):`, result.extractedVariables);
               console.log(`[ScriptExecutor] 🔍 Current position:`, { 
@@ -341,13 +351,13 @@ export class ScriptExecutor {
               for (const [varName, varValue] of Object.entries(result.extractedVariables)) {
                 console.log(`[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`, varValue);
                 
-                // 确定目标作用域
+                // 确定目标作用�?
                 const targetScope = scopeResolver.determineScope(varName);
                 console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
                 
                 // 写入变量
                 scopeResolver.setVariable(varName, varValue, targetScope, position, executionState.currentAction.actionId);
-                console.log(`[ScriptExecutor] ✅ Set variable "${varName}" to ${targetScope} scope`);
+                console.log(`[ScriptExecutor] �?Set variable "${varName}" to ${targetScope} scope`);
               }
               
               // 验证变量是否真的写入成功
@@ -371,7 +381,7 @@ export class ScriptExecutor {
             }
           }
 
-          // 添加AI消息到对话历史
+          // 添加AI消息到对话历�?
           if (result.aiMessage) {
             executionState.conversationHistory.push({
               role: 'assistant',
@@ -382,7 +392,7 @@ export class ScriptExecutor {
             executionState.lastAiMessage = result.aiMessage;
           }
 
-          // 保存LLM调试信息（如果有）
+          // 保存LLM调试信息（如果有�?
           if (result.debugInfo) {
             executionState.lastLLMDebugInfo = result.debugInfo;
           }
@@ -393,10 +403,10 @@ export class ScriptExecutor {
           return executionState;
         }
 
-        // 继续下一个
+        // 继续下一�?
         executionState.currentAction = null;
         executionState.currentActionIdx += 1;
-        // 清除保存的 Action 状态
+        // 清除保存�?Action 状�?
         delete executionState.metadata.actionState;
 
         console.log(
@@ -404,7 +414,7 @@ export class ScriptExecutor {
           executionState.currentActionIdx
         );
 
-        // 预设置下一个 Action 的 ID（如果存在）
+        // 预设置下一�?Action �?ID（如果存在）
         const currentPhase = phases[executionState.currentPhaseIdx];
         if (currentPhase) {
           const currentTopic = currentPhase.topics[executionState.currentTopicIdx];
@@ -421,10 +431,10 @@ export class ScriptExecutor {
           }
         }
 
-        // ⚠️ Action完成后继续执行后续流程
-        // 这样 ai_say 确认后可以立即执行下一个 action
-        // 注意：不要 return，让代码继续执行下面的 executePhase
-        console.log('[ScriptExecutor] ✅ Action completed, continuing to execute next actions');
+        // ⚠️ Action完成后继续执行后续流�?
+        // 这样 ai_say 确认后可以立即执行下一�?action
+        // 注意：不�?return，让代码继续执行下面�?executePhase
+        console.log('[ScriptExecutor] �?Action completed, continuing to execute next actions');
       }
 
       // 执行脚本流程
@@ -439,12 +449,12 @@ export class ScriptExecutor {
           return executionState;
         }
 
-        // Phase完成，进入下一个
+        // Phase完成，进入下一�?
         executionState.currentPhaseIdx += 1;
         executionState.currentTopicIdx = 0;
         executionState.currentActionIdx = 0;
 
-        // 预设置下一个 Phase 的第一个 Topic 的第一个 Action ID（如果存在）
+        // 预设置下一�?Phase 的第一�?Topic 的第一�?Action ID（如果存在）
         if (executionState.currentPhaseIdx < phases.length) {
           const nextPhase = phases[executionState.currentPhaseIdx];
           executionState.currentPhaseId = nextPhase.phase_id;
@@ -508,11 +518,11 @@ export class ScriptExecutor {
         return;
       }
 
-      // Topic完成，进入下一个
+      // Topic完成，进入下一�?
       executionState.currentTopicIdx += 1;
       executionState.currentActionIdx = 0;
 
-      // 预设置下一个 Topic 的第一个 Action ID（如果存在）
+      // 预设置下一�?Topic 的第一�?Action ID（如果存在）
       if (executionState.currentTopicIdx < topics.length) {
         const nextTopic = topics[executionState.currentTopicIdx];
         executionState.currentTopicId = nextTopic.topic_id;
@@ -564,7 +574,7 @@ export class ScriptExecutor {
         executionState.currentAction = action;
         executionState.currentActionId = actionConfig.action_id;
         executionState.currentActionType = actionConfig.action_type;
-        console.log(`[ScriptExecutor] ✨ Created action instance: ${action.actionId}`);
+        console.log(`[ScriptExecutor] �?Created action instance: ${action.actionId}`);
       }
 
       const action = executionState.currentAction;
@@ -578,7 +588,7 @@ export class ScriptExecutor {
         executionState,
         userInput
       );
-      console.log(`[ScriptExecutor] ✅ Action result:`, {
+      console.log(`[ScriptExecutor] �?Action result:`, {
         actionId: action.actionId,
         completed: result.completed,
         success: result.success,
@@ -586,7 +596,7 @@ export class ScriptExecutor {
         aiMessage: result.aiMessage?.substring(0, 50),
       });
 
-      // user_input 只用一次
+      // user_input 只用一�?
       userInput = null;
 
       // 处理执行结果
@@ -611,26 +621,26 @@ export class ScriptExecutor {
             hasResponse: !!result.debugInfo.response,
           });
         }
-        // 需要等待用户输入
+        // 需要等待用户输�?
         executionState.status = ExecutionStatus.WAITING_INPUT;
-        // 保存 Action 内部状态
+        // 保存 Action 内部状�?
         executionState.metadata.actionState = this.serializeActionState(action);
         console.log(`[ScriptExecutor] 🔴 Returning to wait for user input`);
         return;
       }
 
-      // Action完成，处理结果
-      console.log(`[ScriptExecutor] ✅ Action completed successfully`);
+      // Action完成，处理结�?
+      console.log(`[ScriptExecutor] �?Action completed successfully`);
       if (result.success) {
-        // 更新变量：使用 VariableScopeResolver 写入到正确的作用域
+        // 更新变量：使�?VariableScopeResolver 写入到正确的作用�?
         if (result.extractedVariables) {
-          // 向后兼容：继续更新旧的 variables
+          // 向后兼容：继续更新旧�?variables
           executionState.variables = {
             ...executionState.variables,
             ...result.extractedVariables,
           };
 
-          // 新逻辑：使用 VariableScopeResolver 写入分层变量
+          // 新逻辑：使�?VariableScopeResolver 写入分层变量
           if (executionState.variableStore) {
             console.log(`[ScriptExecutor] 🔍 Processing extracted variables:`, result.extractedVariables);
             console.log(`[ScriptExecutor] 🔍 Current position:`, { phaseId, topicId, actionId: action.actionId });
@@ -645,13 +655,13 @@ export class ScriptExecutor {
             for (const [varName, varValue] of Object.entries(result.extractedVariables)) {
               console.log(`[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`, varValue);
               
-              // 确定目标作用域
+              // 确定目标作用�?
               const targetScope = scopeResolver.determineScope(varName);
               console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
               
               // 写入变量
               scopeResolver.setVariable(varName, varValue, targetScope, position, action.actionId);
-              console.log(`[ScriptExecutor] ✅ Set variable "${varName}" to ${targetScope} scope`);
+              console.log(`[ScriptExecutor] �?Set variable "${varName}" to ${targetScope} scope`);
             }
             
             // 验证变量是否真的写入成功
@@ -665,7 +675,7 @@ export class ScriptExecutor {
           }
         }
 
-        // 添加到对话历史
+        // 添加到对话历�?
         if (result.aiMessage) {
           executionState.conversationHistory.push({
             role: 'assistant',
@@ -676,7 +686,7 @@ export class ScriptExecutor {
           executionState.lastAiMessage = result.aiMessage;
         }
 
-        // 保存LLM调试信息（如果有）
+        // 保存LLM调试信息（如果有�?
         if (result.debugInfo) {
           executionState.lastLLMDebugInfo = result.debugInfo;
           console.log('[ScriptExecutor] 💾 Saved LLM debug info:', {
@@ -686,7 +696,7 @@ export class ScriptExecutor {
           });
         }
 
-        // 保存回合数信息（从 result.metadata 提取）
+        // 保存回合数信息（�?result.metadata 提取�?
         if (
           result.metadata?.currentRound !== undefined ||
           result.metadata?.maxRounds !== undefined
@@ -710,10 +720,10 @@ export class ScriptExecutor {
       // 移动到下一个Action
       executionState.currentAction = null;
       executionState.currentActionIdx += 1;
-      // 清除保存的 Action 状态
+      // 清除保存�?Action 状�?
       delete executionState.metadata.actionState;
 
-      // 预设置下一个 Action 的 ID（如果存在）
+      // 预设置下一�?Action �?ID（如果存在）
       if (executionState.currentActionIdx < actions.length) {
         const nextActionConfig = actions[executionState.currentActionIdx];
         executionState.currentActionId = nextActionConfig.action_id;
@@ -722,15 +732,15 @@ export class ScriptExecutor {
           `[ScriptExecutor] ➡️ Moving to next action: ${nextActionConfig.action_id} (${nextActionConfig.action_type})`
         );
       } else {
-        // Topic 中没有更多 Action 了
+        // Topic 中没有更�?Action �?
         executionState.currentActionId = undefined;
         executionState.currentActionType = undefined;
         console.log(`[ScriptExecutor] ➡️ No more actions in this topic`);
       }
     }
 
-    // Topic 所有 Actions 已执行完成
-    console.log(`[ScriptExecutor] ✅ Topic completed: ${topicId}`);
+    // Topic 所�?Actions 已执行完�?
+    console.log(`[ScriptExecutor] �?Topic completed: ${topicId}`);
     executionState.status = ExecutionStatus.RUNNING;
   }
 
@@ -751,7 +761,7 @@ export class ScriptExecutor {
       scopeResolver = new VariableScopeResolver(executionState.variableStore);
     }
 
-    // 构建执行上下文
+    // 构建执行上下�?
     const context: ActionContext = {
       sessionId,
       phaseId,
@@ -792,7 +802,7 @@ export class ScriptExecutor {
       scopeResolver = new VariableScopeResolver(executionState.variableStore);
     }
 
-    // 构建执行上下文
+    // 构建执行上下�?
     const context: ActionContext = {
       sessionId,
       phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
@@ -818,7 +828,7 @@ export class ScriptExecutor {
     const config = actionConfig.config || {};
 
     // 🔵 调试日志
-    console.log(`[ScriptExecutor] 🛠️ Creating action:`, {
+    console.log(`[ScriptExecutor] 🛠�?Creating action:`, {
       actionType,
       actionId,
       config,
@@ -826,7 +836,7 @@ export class ScriptExecutor {
       configKeys: Object.keys(config),
     });
 
-    // 对于 ai_say 和 ai_ask Action，传递 LLMOrchestrator
+    // 对于 ai_say �?ai_ask Action，传�?LLMOrchestrator
     if (actionType === 'ai_say') {
       return new AiSayAction(actionId, config, this.llmOrchestrator);
     }
@@ -840,7 +850,7 @@ export class ScriptExecutor {
   }
 
   /**
-   * 创建初始执行状态
+   * 创建初始执行状�?
    */
   static createInitialState(): ExecutionState {
     return {
@@ -850,7 +860,7 @@ export class ScriptExecutor {
       currentActionIdx: 0,
       currentAction: null,
       variables: {},
-      variableStore: { // 🔧 初始化 variableStore
+      variableStore: { // 🔧 初始�?variableStore
         global: {},
         session: {},
         phase: {},
@@ -863,7 +873,7 @@ export class ScriptExecutor {
   }
 
   /**
-   * 序列化 Action 状态（保存 currentRound 等内部状态）
+   * 序列�?Action 状态（保存 currentRound 等内部状态）
    */
   private serializeActionState(action: BaseAction): any {
     return {
@@ -876,16 +886,16 @@ export class ScriptExecutor {
   }
 
   /**
-   * 从保存的状态恢复 Action 实例
+   * 从保存的状态恢�?Action 实例
    */
   private deserializeActionState(actionState: any): BaseAction {
-    // 使用 this.createAction 而不是 createAction，确保 ai_say 能获得 LLMOrchestrator
+    // 使用 this.createAction 而不�?createAction，确�?ai_say 能获�?LLMOrchestrator
     const action = this.createAction({
       action_type: actionState.actionType,
       action_id: actionState.actionId,
       config: actionState.config,
     });
-    // 恢复内部状态
+    // 恢复内部状�?
     console.log('[ScriptExecutor] 🔵 Before restoring state:', {
       actionId: action.actionId,
       currentRound: action.currentRound,
@@ -893,7 +903,7 @@ export class ScriptExecutor {
     });
     action.currentRound = actionState.currentRound || 0;
     action.maxRounds = actionState.maxRounds || 3;
-    console.log('[ScriptExecutor] ✅ After restoring state:', {
+    console.log('[ScriptExecutor] �?After restoring state:', {
       actionId: action.actionId,
       currentRound: action.currentRound,
       maxRounds: action.maxRounds,
@@ -912,3 +922,4 @@ export class ScriptExecutor {
     return typeof value;
   }
 }
+

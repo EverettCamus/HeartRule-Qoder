@@ -182,12 +182,13 @@ export const debugApi = {
    * 导入脚本文件到数据库（辅助方法）
    * 用于将工程文件转换为可用的scriptId
    */
-  async importScript(yamlContent: string, scriptName: string) {
+  async importScript(yamlContent: string, scriptName: string, projectId?: string) {
     const response = await axios.post<{ success: boolean; data: { scriptId: string } }>(
       `${API_BASE_URL}/scripts/import`,
       {
         yamlContent,
         scriptName,
+        projectId, // 传递 projectId
       },
       {
         timeout: 30000,

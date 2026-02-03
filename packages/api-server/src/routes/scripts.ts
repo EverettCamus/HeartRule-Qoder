@@ -202,6 +202,7 @@ export async function registerScriptRoutes(app: FastifyInstance) {
             yamlContent: { type: 'string', minLength: 1 },
             scriptName: { type: 'string', minLength: 1 },
             description: { type: 'string' },
+            projectId: { type: 'string', format: 'uuid' }, // 添加 projectId
           },
         },
         response: {
@@ -221,10 +222,11 @@ export async function registerScriptRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { yamlContent, scriptName, description } = request.body as {
+      const { yamlContent, scriptName, description, projectId } = request.body as {
         yamlContent: string;
         scriptName: string;
         description?: string;
+        projectId?: string; // 添加 projectId
       };
 
       try {
@@ -280,7 +282,7 @@ export async function registerScriptRoutes(app: FastifyInstance) {
             })
             .where(eq(scripts.id, scriptId));
 
-          app.log.info({ scriptId, scriptName }, 'Script updated successfully');
+          app.log.info({ scriptId, scriptName, projectId }, 'Script updated successfully');
         } else {
           // 脚本不存在，插入新记录
           scriptId = uuidv4();
@@ -294,12 +296,12 @@ export async function registerScriptRoutes(app: FastifyInstance) {
             status: 'draft',
             author: 'debug_user',
             description: description || `Debug script: ${scriptName}`,
-            tags: ['debug'],
+            tags: projectId ? ['debug', `project:${projectId}`] : ['debug'], // 将projectId存在tags中
             createdAt: now,
             updatedAt: now,
           });
 
-          app.log.info({ scriptId, scriptName }, 'Script imported successfully');
+          app.log.info({ scriptId, scriptName, projectId }, 'Script imported successfully');
         }
 
         return {

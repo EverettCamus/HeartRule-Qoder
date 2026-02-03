@@ -1,0 +1,104 @@
+/* TemplateEditor 样式 */
+
+.template-editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 16px;
+}
+
+.template-editor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.template-editor-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.template-editor-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.template-editor-readonly-warning {
+  background-color: #fff7e6;
+  border: 1px solid #ffd591;
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: #fa8c16;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.template-editor-readonly-warning svg {
+  flex-shrink: 0;
+}
+
+.template-editor-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.template-editor-content .w-md-editor {
+  height: 100% !important;
+}
+
+.template-editor-content .w-md-editor-text-pre,
+.template-editor-content .w-md-editor-text-input {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.template-editor-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.template-editor-footer-left {
+  color: #8c8c8c;
+  font-size: 13px;
+}
+
+.template-editor-footer-right {
+  display: flex;
+  gap: 8px;
+}
+
+/* 响应式布局 */
+@media (max-width: 768px) {
+  .template-editor-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .template-editor-toolbar-left,
+  .template-editor-toolbar-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .template-editor-footer {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .template-editor-footer-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

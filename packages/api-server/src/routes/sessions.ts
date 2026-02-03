@@ -85,6 +85,13 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           });
         }
 
+        // 从 script.tags 中提取 projectId
+        const tags = (script.tags as string[]) || [];
+        const projectTag = tags.find(tag => tag.startsWith('project:'));
+        const projectId = projectTag ? projectTag.replace('project:', '') : undefined;
+        
+        app.log.info({ scriptId, projectId, tags }, 'Creating session with projectId');
+
         // 创建会话
         const sessionId = uuidv4();
         const now = new Date();
@@ -97,7 +104,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           executionStatus: 'running',
           position: { phaseIndex: 0, topicIndex: 0, actionIndex: 0 },
           variables: initialVariables || {},
-          metadata: {},
+          metadata: projectId ? { projectId } : {}, // 保存 projectId 到 metadata
           createdAt: now,
           updatedAt: now,
         });

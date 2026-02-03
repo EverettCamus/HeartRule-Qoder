@@ -22,6 +22,21 @@
           "maxLength": 200,
           "description": "会话显示名称"
         },
+        "template_scheme": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "模板方案配置"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "会话描述"
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "会话版本"
+        },
         "phases": {
           "type": "array",
           "minItems": 1,

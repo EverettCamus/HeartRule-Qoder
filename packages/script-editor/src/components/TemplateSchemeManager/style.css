@@ -1,0 +1,67 @@
+/* 模板方案管理器样式 */
+.template-scheme-manager {
+  padding: 16px 0;
+}
+
+.manager-header {
+  margin-bottom: 16px;
+}
+
+.manager-content {
+  display: flex;
+  gap: 16px;
+  min-height: 400px;
+}
+
+.scheme-list-container {
+  flex: 1;
+  width: 100%;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  overflow-y: auto;
+  max-height: 500px;
+}
+
+.scheme-item {
+  cursor: pointer;
+  transition: background-color 0.2s;
+  padding: 12px 16px;
+}
+
+.scheme-item:hover {
+  background-color: #f5f5f5;
+}
+
+.scheme-item.selected {
+  background-color: #e6f7ff;
+  border-left: 3px solid #1890ff;
+}
+
+.scheme-detail {
+  flex: 1;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.readonly-tip {
+  margin-top: 12px;
+  padding: 12px;
+  background-color: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 4px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  color: #999;
+}
+
+.empty-state p {
+  margin-top: 16px;
+  font-size: 14px;
+}

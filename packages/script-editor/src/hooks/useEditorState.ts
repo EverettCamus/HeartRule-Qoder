@@ -58,8 +58,8 @@ export interface EditorState {
   } | null;
   setSelectedTopicPath: (path: { phaseIndex: number; topicIndex: number } | null) => void;
 
-  editingType: 'phase' | 'topic' | 'action' | null;
-  setEditingType: (type: 'phase' | 'topic' | 'action' | null) => void;
+  editingType: 'phase' | 'topic' | 'action' | 'session' | null;
+  setEditingType: (type: 'phase' | 'topic' | 'action' | 'session' | null) => void;
 
   // YAML基线（用于同步）
   fileYamlBaseRef: React.MutableRefObject<Map<string, string>>;
@@ -99,7 +99,7 @@ export const useEditorState = (): EditorState => {
     topicIndex: number;
   } | null>(null);
 
-  const [editingType, setEditingType] = useState<'phase' | 'topic' | 'action' | null>(null);
+  const [editingType, setEditingType] = useState<'phase' | 'topic' | 'action' | 'session' | null>(null);
 
   // Refs
   const fileYamlBaseRef = useRef<Map<string, string>>(new Map());

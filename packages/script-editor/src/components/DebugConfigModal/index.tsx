@@ -191,8 +191,13 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
           contentPreview: scriptContent.substring(0, 100) + '...',
           debugTarget,
           versionId: selectedVersionId,
+          projectId: currentProject?.id, // 添加 projectId 日志
         });
-        const importResult = await debugApi.importScript(scriptContent, scriptFileName);
+        const importResult = await debugApi.importScript(
+          scriptContent,
+          scriptFileName,
+          currentProject?.id // 传递 projectId
+        );
         console.log('[DebugConfig] ✅ Import result:', importResult);
   
         if (!importResult.success || !importResult.data?.scriptId) {

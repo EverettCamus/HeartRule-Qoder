@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs/promises';
 
 import { eq, and, desc, like, or, ne, SQL } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
@@ -186,6 +187,34 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         updatedBy: body.author,
         validationStatus: 'unknown',
       });
+
+      // 初始化默认模板到数据库
+      try {
+        const projectRoot = path.resolve(process.cwd(), '../..');
+        const systemTemplatesPath = path.join(projectRoot, '_system', 'config', 'default');
+        
+        const templateFiles = await fs.readdir(systemTemplatesPath);
+        
+        for (const fileName of templateFiles) {
+          if (!fileName.endsWith('.md')) continue;
+          
+          const filePath = path.join(systemTemplatesPath, fileName);
+          const content = await fs.readFile(filePath, 'utf-8');
+          const virtualPath = `_system/config/default/${fileName}`;
+          
+          await db.insert(scriptFiles).values({
+            projectId: newProject.id,
+            fileType: 'template',
+            fileName: fileName,
+            filePath: virtualPath,
+            fileContent: { content },
+          });
+          
+          console.log(`[API]   ✅ Imported template: ${fileName}`);
+        }
+      } catch (templateError: any) {
+        console.warn(`[API]   ⚠️  System templates not found: ${templateError.message}`);
+      }
 
       // 初始化工程目录结构和模板文件
       try {
@@ -680,6 +709,284 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         success: false,
         error: 'Failed to delete file',
       });
+    }
+  });
+
+  // 获取模板方案列表
+  fastify.get('/projects/:id/template-schemes', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+
+      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      if (!project) {
+        return reply.status(404).send({ success: false, error: 'Project not found' });
+      }
+
+      // 查询模板文件，提取唯一的 filePath 层级
+      const templateFiles = await db.select()
+        .from(scriptFiles)
+        .where(
+          and(
+            eq(scriptFiles.projectId, id),
+            eq(scriptFiles.fileType, 'template')
+          )
+        );
+
+      // 解析 filePath 提取方案名
+      const schemeMap = new Map<string, { name: string; description: string; isDefault: boolean }>();
+
+      for (const file of templateFiles) {
+        if (!file.filePath) continue;
+        const parts = file.filePath.split('/');
+        // 格式: _system/config/default/xxx.md 或 _system/config/custom/scheme_name/xxx.md
+        if (parts.length >= 4 && parts[0] === '_system' && parts[1] === 'config') {
+          const layer = parts[2]; // 'default' or 'custom'
+          if (layer === 'default') {
+            if (!schemeMap.has('default')) {
+              schemeMap.set('default', {
+                name: 'default',
+                description: 'System default template scheme',
+                isDefault: true,
+              });
+            }
+          } else if (layer === 'custom' && parts.length >= 5) {
+            const schemeName = parts[3];
+            if (!schemeMap.has(schemeName)) {
+              schemeMap.set(schemeName, {
+                name: schemeName,
+                description: `Custom template scheme: ${schemeName}`,
+                isDefault: false,
+              });
+            }
+          }
+        }
+      }
+
+      const schemes = Array.from(schemeMap.values());
+      return reply.send(schemes);
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, error: 'Failed to get template schemes' });
+    }
+  });
+
+  // 获取模板方案的文件列表
+  fastify.get('/projects/:id/template-schemes/:schemeName/files', async (request, reply) => {
+    try {
+      const { id, schemeName } = request.params as { id: string; schemeName: string };
+
+      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      if (!project) {
+        return reply.status(404).send({ success: false, error: 'Project not found' });
+      }
+
+      const pathPattern = schemeName === 'default'
+        ? '_system/config/default/%'
+        : `_system/config/custom/${schemeName}/%`;
+
+      const templateFiles = await db.select()
+        .from(scriptFiles)
+        .where(
+          and(
+            eq(scriptFiles.projectId, id),
+            eq(scriptFiles.fileType, 'template'),
+            like(scriptFiles.filePath, pathPattern)
+          )
+        );
+
+      const files = templateFiles.map(file => ({
+        name: path.basename(file.filePath!),
+        path: file.filePath!,
+      }));
+
+      return reply.send({
+        success: true,
+        data: {
+          scheme: schemeName,
+          files,
+        },
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, error: 'Failed to get template files' });
+    }
+  });
+
+  // 获取模板内容
+  fastify.get('/projects/:id/templates/:schemeName/:templatePath', async (request, reply) => {
+    try {
+      const { id, schemeName, templatePath } = request.params as { id: string; schemeName: string; templatePath: string };
+
+      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      if (!project) {
+        return reply.status(404).send({ success: false, error: 'Project not found' });
+      }
+
+      const filePath = schemeName === 'default'
+        ? `_system/config/default/${templatePath}`
+        : `_system/config/custom/${schemeName}/${templatePath}`;
+
+      const [templateFile] = await db.select()
+        .from(scriptFiles)
+        .where(
+          and(
+            eq(scriptFiles.projectId, id),
+            eq(scriptFiles.fileType, 'template'),
+            eq(scriptFiles.filePath, filePath)
+          )
+        )
+        .limit(1);
+
+      if (!templateFile) {
+        return reply.status(404).send({ success: false, error: 'Template not found' });
+      }
+
+      const content = (templateFile.fileContent as { content?: string })?.content || '';
+
+      return reply.send({
+        success: true,
+        data: {
+          content,
+          fileName: path.basename(filePath),
+          filePath,
+        },
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, error: 'Failed to get template content' });
+    }
+  });
+
+  // 更新模板内容
+  fastify.put('/projects/:id/templates/:schemeName/:templatePath', async (request, reply) => {
+    try {
+      const { id, schemeName, templatePath } = request.params as { id: string; schemeName: string; templatePath: string };
+      const { content } = request.body as { content: string };
+
+      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      if (!project) {
+        return reply.status(404).send({ success: false, error: 'Project not found' });
+      }
+
+      const filePath = schemeName === 'default'
+        ? `_system/config/default/${templatePath}`
+        : `_system/config/custom/${schemeName}/${templatePath}`;
+
+      const [templateFile] = await db.select()
+        .from(scriptFiles)
+        .where(
+          and(
+            eq(scriptFiles.projectId, id),
+            eq(scriptFiles.fileType, 'template'),
+            eq(scriptFiles.filePath, filePath)
+          )
+        )
+        .limit(1);
+
+      if (!templateFile) {
+        return reply.status(404).send({ success: false, error: 'Template not found' });
+      }
+
+      await db.update(scriptFiles)
+        .set({
+          fileContent: { content },
+          updatedAt: new Date(),
+        })
+        .where(eq(scriptFiles.id, templateFile.id));
+
+      fastify.log.info(`Updated template: ${schemeName}/${templatePath}`);
+
+      return reply.send({
+        success: true,
+        data: {
+          fileName: path.basename(filePath),
+          filePath,
+        },
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, error: 'Failed to update template content' });
+    }
+  });
+
+  // 创建模板方案
+  fastify.post('/projects/:id/template-schemes', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const { name, description, copyFrom } = request.body as {
+        name: string;
+        description?: string;
+        copyFrom?: string;
+      };
+
+      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      if (!project) {
+        return reply.status(404).send({ success: false, error: 'Project not found' });
+      }
+
+      if (name === 'default') {
+        return reply.status(400).send({ success: false, error: 'Cannot use reserved name "default"' });
+      }
+
+      const existingFiles = await db.select()
+        .from(scriptFiles)
+        .where(
+          and(
+            eq(scriptFiles.projectId, id),
+            eq(scriptFiles.fileType, 'template'),
+            like(scriptFiles.filePath, `_system/config/custom/${name}/%`)
+          )
+        )
+        .limit(1);
+
+      if (existingFiles.length > 0) {
+        return reply.status(400).send({ success: false, error: `Scheme "${name}" already exists` });
+      }
+
+      const sourcePathPattern = copyFrom === 'default'
+        ? '_system/config/default/%'
+        : `_system/config/custom/${copyFrom}/%`;
+
+      const sourceFiles = await db.select()
+        .from(scriptFiles)
+        .where(
+          and(
+            eq(scriptFiles.projectId, id),
+            eq(scriptFiles.fileType, 'template'),
+            like(scriptFiles.filePath, sourcePathPattern)
+          )
+        );
+
+      if (sourceFiles.length === 0) {
+        return reply.status(404).send({ success: false, error: `Source scheme "${copyFrom}" not found` });
+      }
+
+      for (const sourceFile of sourceFiles) {
+        const fileName = path.basename(sourceFile.filePath!);
+        const newFilePath = `_system/config/custom/${name}/${fileName}`;
+
+        await db.insert(scriptFiles).values({
+          projectId: id,
+          fileType: 'template',
+          fileName: fileName,
+          filePath: newFilePath,
+          fileContent: sourceFile.fileContent,
+        });
+      }
+
+      fastify.log.info(`Created template scheme: ${name}`);
+
+      return reply.send({
+        success: true,
+        data: {
+          name,
+          description: description || `Custom template scheme: ${name}`,
+          isDefault: false,
+        },
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, error: 'Failed to create template scheme' });
     }
   });
 };

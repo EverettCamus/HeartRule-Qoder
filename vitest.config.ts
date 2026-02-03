@@ -10,6 +10,7 @@ export default defineConfig({
       '**/e2e/**',
       '**/*.spec.ts',
       '**/*.config.*',
+      'packages/script-editor/**',
     ],
     coverage: {
       provider: 'v8',

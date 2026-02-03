@@ -87,6 +87,7 @@ const ProjectList: React.FC = () => {
         // 添加工程初始化配置
         template: values.template || 'blank',
         language: values.language || 'zh-CN',
+        templateScheme: values.templateScheme,  // 模板方案（可选）
       });
 
       if (response.success) {
@@ -437,6 +438,17 @@ const ProjectList: React.FC = () => {
               <Option value="blank">Blank Project (空白工程)</Option>
               <Option value="cbt-assessment">CBT Assessment (CBT评估会谈)</Option>
               <Option value="cbt-counseling">CBT Counseling (CBT咨询会谈)</Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="Template Scheme"
+            name="templateScheme"
+            tooltip="Choose a preset template scheme for prompt templates (optional)"
+          >
+            <Select placeholder="Use default (可不选)" allowClear>
+              <Option value="crisis_intervention">Crisis Intervention (危机干预)</Option>
+              <Option value="cbt_counseling">CBT Counseling (认知行为疗法)</Option>
             </Select>
           </Form.Item>
 

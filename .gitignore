@@ -33,6 +33,9 @@ packages\script-editor\e2e\test-results
 # 测试用 JSON 文件
 packages/api-server/test-*.json
 
+# 工程工作空间（运行时数据）
+packages/api-server/workspace/
+
 # IDE
 .vscode/*
 !.vscode/settings.json

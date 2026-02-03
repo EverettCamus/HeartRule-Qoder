@@ -22,15 +22,29 @@
 import { VariableScope } from '@heartrule/shared-types';
 
 import type { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
-import { PromptTemplateManager } from '../engines/prompt-template/template-manager.js';
+import { PromptTemplateManager, TemplateResolver } from '../engines/prompt-template/index.js';
 
 import { BaseAction } from './base-action.js';
 import type { ActionContext, ActionResult } from './base-action.js';
 
 interface AskLLMOutput {
+  // 新格式字段
+  content?: string;
   EXIT: string;
-  [key: string]: any; // 支持动态的 ai_role 字段
   BRIEF?: string;
+  safety_risk?: {
+    detected: boolean;
+    risk_type: string | null;
+    confidence: 'high' | 'medium' | 'low';
+    reason: string | null;
+  };
+  metadata?: {
+    emotional_tone?: string;
+    crisis_signal?: boolean;
+  };
+  
+  // 兼容旧格式：支持动态的 ai_role 字段
+  [key: string]: any;
 }
 
 /**
@@ -45,6 +59,7 @@ export class AiAskAction extends BaseAction {
   static actionType = 'ai_ask';
   private llmOrchestrator?: LLMOrchestrator;
   private templateManager: PromptTemplateManager;
+  private templateResolver: TemplateResolver;
   private templateType: AskTemplateType;
 
   constructor(actionId: string, config: Record<string, any>, llmOrchestrator?: LLMOrchestrator) {
@@ -56,6 +71,8 @@ export class AiAskAction extends BaseAction {
     const templateBasePath = this.resolveTemplatePath();
     console.log(`[AiAskAction] 📁 Template path: ${templateBasePath}`);
     this.templateManager = new PromptTemplateManager(templateBasePath);
+    // TemplateResolver 需要项目根目录，但此时还没有context，暂不初始化
+    this.templateResolver = null as any; // 延迟初始化
 
     // 选择模板类型：有 exit 或 output 使用多轮追问模板，否则使用简单问答模板
     this.templateType =
@@ -268,22 +285,44 @@ export class AiAskAction extends BaseAction {
   }
 
   /**
-   * 使用模板生成问题
+   * 使用模板生成问题（两层方案机制）
    */
   private async generateQuestionFromTemplate(
     context: ActionContext,
     templateType: AskTemplateType
   ): Promise<ActionResult> {
-    // 1. 加载模板
-    const templatePath = `ai-ask/${templateType}.md`;
-    const template = await this.templateManager.loadTemplate(templatePath);
-    console.log(`[AiAskAction] 📝 Loading template: ${templatePath}`);
+    // 1. 从 session 配置读取 template_scheme
+    const sessionConfig = {
+      template_scheme: context.metadata?.sessionConfig?.template_scheme,
+    };
+    
+    // 2. 初始化 TemplateResolver（延迟初始化）
+    if (!this.templateResolver) {
+      const projectRoot = this.resolveProjectRoot(context);
+      this.templateResolver = new TemplateResolver(projectRoot);
+    }
+    
+    // 3. 解析模板路径（使用两层解析）
+    const resolution = await this.templateResolver.resolveTemplatePath(
+      'ai_ask', // 注意：模板文件名为 ai_ask_v1.md
+      sessionConfig
+    );
+    
+    console.log(`[AiAskAction] 📝 Template resolved:`, {
+      path: resolution.path,
+      layer: resolution.layer,
+      scheme: resolution.scheme,
+      exists: resolution.exists,
+    });
+    
+    // 4. 加载模板
+    const template = await this.templateManager.loadTemplate(resolution.path);
 
-    // 2. 准备变量
+    // 5. 准备变量
     const scriptVariables = this.extractScriptVariables(context);
     const systemVariables = this.buildSystemVariables(context);
 
-    // 3. 替换变量
+    // 4. 替换变量
     const prompt = this.templateManager.substituteVariables(
       template.content,
       scriptVariables,
@@ -292,23 +331,46 @@ export class AiAskAction extends BaseAction {
 
     console.log(`[AiAskAction] 📝 Prompt prepared (${prompt.length} chars)`);
 
-    // 4. 调用 LLM
+    // 5. 调用 LLM
     const llmResult = await this.llmOrchestrator!.generateText(prompt, {
       temperature: 0.7,
       maxTokens: 800,
     });
 
-    // 5. 解析响应
+    // 6. 安全边界检测
+    const safetyCheck = this.checkSafetyBoundary(llmResult.text);
+    if (!safetyCheck.passed) {
+      console.warn(`[AiAskAction] ⚠️ Safety boundary violations detected:`, safetyCheck.violations);
+    }
+
+    // 7. 解析响应
     if (templateType === AskTemplateType.SIMPLE) {
-      // 简单模式：直接返回问题文本
+      // 简单模式：解析 JSON 响应并提取 content 字段
+      const jsonText = this.cleanJsonOutput(llmResult.text);
+      let llmOutput: any;
+      try {
+        llmOutput = JSON.parse(jsonText);
+      } catch (error) {
+        // 如果解析失败，直接使用原始文本
+        console.warn(`[AiAskAction] ⚠️  Failed to parse simple-mode JSON, using raw text`);
+        llmOutput = { content: llmResult.text.trim() };
+      }
+
+      // 提取 content 字段
+      const aiMessage = llmOutput.content || llmResult.text.trim();
+
       return {
         success: true,
         completed: false,
-        aiMessage: llmResult.text.trim(),
+        aiMessage,
         debugInfo: llmResult.debugInfo,
         metadata: {
           actionType: AiAskAction.actionType,
           currentRound: this.currentRound,
+          template_path: resolution.path,
+          template_layer: resolution.layer,
+          template_scheme: resolution.scheme,
+          safety_check: safetyCheck,
         },
       };
     } else {
@@ -329,9 +391,20 @@ export class AiAskAction extends BaseAction {
       // 判断是否退出
       const shouldExit = llmOutput.EXIT === 'true';
 
-      // 提取 AI 消息
+      // 提取 AI 消息：优先使用 content 字段（新格式），兼容旧格式
       const aiRole = this.getConfig('ai_role', '咨询师');
-      const aiMessage = llmOutput[aiRole] || llmOutput.response || '';
+      const aiMessage = llmOutput.content || llmOutput[aiRole] || llmOutput.response || '';
+
+      // 提取安全风险信息
+      const safetyRisk = llmOutput.safety_risk || {
+        detected: false,
+        risk_type: null,
+        confidence: 'high',
+        reason: null,
+      };
+
+      // 提取元数据
+      const llmMetadata = llmOutput.metadata || {};
 
       return {
         success: true,
@@ -346,6 +419,12 @@ export class AiAskAction extends BaseAction {
           brief: llmOutput.BRIEF,
           currentRound: this.currentRound,
           llmRawOutput: jsonText,
+          template_path: resolution.path,
+          template_layer: resolution.layer,
+          template_scheme: resolution.scheme,
+          safety_check: safetyCheck,
+          safety_risk: safetyRisk,
+          llm_metadata: llmMetadata,
         },
       };
     }

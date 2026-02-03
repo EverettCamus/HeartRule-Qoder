@@ -19,9 +19,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { projectsApi, versionsApi } from '../../api/projects';
 import type { ScriptFile } from '../../api/projects';
 import type { ActionNodeListRef } from '../../components/ActionNodeList';
+import type { SessionData } from '../../components/SessionPropertyPanel';
 import DebugChatPanel from '../../components/DebugChatPanel';
 import DebugConfigModal from '../../components/DebugConfigModal';
 import VersionListPanel from '../../components/VersionListPanel';
+import TemplateSchemeManager from '../../components/TemplateSchemeManager';
+import TemplateEditor from '../../components/TemplateEditor';
 import { useEditorState } from '../../hooks/useEditorState';
 import { useFileTreeState } from '../../hooks/useFileTreeState';
 import { yamlService } from '../../services/YamlService';
@@ -107,10 +110,23 @@ const ProjectEditor: React.FC = () => {
     setLeftCollapsed,
   } = fileTreeState;
 
+  // 模板方案列表
+  const [templateSchemes, setTemplateSchemes] = useState<
+    Array<{ name: string; description: string; isDefault: boolean }>
+  >([]);
+
   // UI状态（未纳入Hook）
   const [publishModalVisible, setPublishModalVisible] = useState(false);
   const [versionNote, setVersionNote] = useState('');
   const [versionPanelVisible, setVersionPanelVisible] = useState(false);
+  
+  // 模板管理相关状态
+  const [templateManagerVisible, setTemplateManagerVisible] = useState(false);
+  const [templateEditorVisible, setTemplateEditorVisible] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<{
+    schemeName: string;
+    templatePath: string;
+  } | null>(null);
 
   // 调试功能相关状态
   const [debugConfigVisible, setDebugConfigVisible] = useState(false);
@@ -246,43 +262,139 @@ const ProjectEditor: React.FC = () => {
   };
 
   // 构建文件树
-  const buildFileTree = useCallback((fileList: ScriptFile[]): FileTreeNode[] => {
-    const sessionFiles = fileList.filter((f) => f.fileType === 'session');
-    const otherFiles = fileList.filter((f) => f.fileType !== 'session');
+  const buildFileTree = useCallback(
+    async (fileList: ScriptFile[], schemes: Array<{ name: string; description: string; isDefault: boolean }>): Promise<FileTreeNode[]> => {
+      const sessionFiles = fileList.filter((f) => f.fileType === 'session');
+      const otherFiles = fileList.filter((f) => f.fileType !== 'session' && f.fileType !== 'template'); // 排除模板文件
 
-    const nodes: FileTreeNode[] = [];
+      const nodes: FileTreeNode[] = [];
 
-    // 添加其他文件
-    otherFiles.forEach((file) => {
-      nodes.push({
-        key: file.id,
-        title: file.fileName,
-        icon: getFileIcon(file.fileType),
-        isLeaf: true,
-        fileId: file.id,
-        fileType: file.fileType,
-      });
-    });
-
-    // 添加会谈脚本文件夹
-    if (sessionFiles.length > 0) {
-      nodes.push({
-        key: 'sessions-folder',
-        title: `Session Scripts (${sessionFiles.length})`,
-        icon: <FolderOutlined style={{ color: '#faad14' }} />,
-        children: sessionFiles.map((file) => ({
+      // 添加其他文件
+      otherFiles.forEach((file) => {
+        nodes.push({
           key: file.id,
           title: file.fileName,
           icon: getFileIcon(file.fileType),
           isLeaf: true,
           fileId: file.id,
           fileType: file.fileType,
-        })),
+        });
       });
-    }
 
-    return nodes;
-  }, []);
+      // 添加会谈脚本文件夹
+      if (sessionFiles.length > 0) {
+        nodes.push({
+          key: 'sessions-folder',
+          title: `Session Scripts (${sessionFiles.length})`,
+          icon: <FolderOutlined style={{ color: '#faad14' }} />,
+          children: sessionFiles.map((file) => ({
+            key: file.id,
+            title: file.fileName,
+            icon: getFileIcon(file.fileType),
+            isLeaf: true,
+            fileId: file.id,
+            fileType: file.fileType,
+          })),
+        });
+      }
+
+      // 添加模板文件夹（Template Files）
+      if (schemes.length > 0 && projectId) {
+        const templateChildren: FileTreeNode[] = [];
+
+        // 添加 default 层（加载文件列表）
+        const defaultScheme = schemes.find((s) => s.isDefault);
+        if (defaultScheme) {
+          try {
+            console.log('[buildFileTree] 正在加载 default 方案的文件列表...');
+            const defaultFiles = await projectsApi.getTemplateSchemeFiles(projectId, 'default');
+            console.log('[buildFileTree] default 文件列表:', defaultFiles);
+            console.log('[buildFileTree] defaultFiles.files:', defaultFiles.files);
+            console.log('[buildFileTree] defaultFiles.files 长度:', defaultFiles.files?.length);
+            
+            const fileNodes: FileTreeNode[] = defaultFiles.files.map((file) => ({
+              key: `template-default-${file.name}`,
+              title: `📝 ${file.name}`,
+              icon: <FileTextOutlined style={{ color: '#52c41a' }} />,
+              isLeaf: true,
+              fileType: 'template',
+              filePath: `default/${file.name}`,
+            }));
+
+            console.log('[buildFileTree] 生成了', fileNodes.length, '个文件节点');
+            console.log('[buildFileTree] fileNodes:', fileNodes);
+
+            templateChildren.push({
+              key: 'template-default',
+              title: `📁 default (${defaultFiles.files.length} files)`,
+              icon: <FolderOutlined style={{ color: '#52c41a' }} />,
+              children: fileNodes, // 直接传递，不判断
+            });
+          } catch (error) {
+            console.error('[buildFileTree] Failed to load default template files:', error);
+            templateChildren.push({
+              key: 'template-default',
+              title: `📁 default (${defaultScheme.description})`,
+              icon: <FolderOutlined style={{ color: '#52c41a' }} />,
+              isLeaf: true,
+            });
+          }
+        }
+
+        // 添加 custom 层下的方案
+        const customSchemes = schemes.filter((s) => !s.isDefault);
+        if (customSchemes.length > 0) {
+          const customChildren: FileTreeNode[] = [];
+
+          for (const scheme of customSchemes) {
+            try {
+              const schemeFiles = await projectsApi.getTemplateSchemeFiles(projectId, scheme.name);
+              const fileNodes: FileTreeNode[] = schemeFiles.files.map((file) => ({
+                key: `template-custom-${scheme.name}-${file.name}`,
+                title: `📝 ${file.name}`,
+                icon: <FileTextOutlined style={{ color: '#722ed1' }} />,
+                isLeaf: true,
+                fileType: 'template',
+                filePath: `custom/${scheme.name}/${file.name}`,
+              }));
+
+              customChildren.push({
+                key: `template-custom-${scheme.name}`,
+                title: `📁 ${scheme.name} (${schemeFiles.files.length} files)`,
+                icon: <FolderOutlined style={{ color: '#722ed1' }} />,
+                children: fileNodes, // 直接传递
+              });
+            } catch (error) {
+              console.error(`Failed to load ${scheme.name} files:`, error);
+              customChildren.push({
+                key: `template-custom-${scheme.name}`,
+                title: `📁 ${scheme.name} - ${scheme.description}`,
+                icon: <FolderOutlined style={{ color: '#722ed1' }} />,
+                isLeaf: true,
+              });
+            }
+          }
+
+          templateChildren.push({
+            key: 'template-custom-folder',
+            title: `📁 custom (${customSchemes.length} schemes)`,
+            icon: <FolderOutlined style={{ color: '#1890ff' }} />,
+            children: customChildren,
+          });
+        }
+
+        nodes.push({
+          key: 'templates-folder',
+          title: `📦 Template Files`,
+          icon: <FileTextOutlined style={{ color: '#13c2c2' }} />,
+          children: templateChildren,
+        });
+      }
+
+      return nodes;
+    },
+    [projectId]
+  );
 
   // 加载工程和文件
   const loadProjectData = useCallback(async () => {
@@ -294,20 +406,24 @@ const ProjectEditor: React.FC = () => {
       // 注意：不在这里 clear，因为切换文件时也会触发 loadProjectData
       // clear 应该在 useEffect 中检测 projectId 变化时执行
 
-      const [projectRes, filesRes] = await Promise.all([
+      const [projectRes, filesRes, schemes] = await Promise.all([
         projectsApi.getProject(projectId),
         projectsApi.getProjectFiles(projectId),
+        projectsApi.getTemplateSchemes(projectId),
       ]);
 
       if (projectRes.success) {
         setProject(projectRes.data);
       }
 
+      // 保存模板方案列表
+      setTemplateSchemes(schemes || []);
+
       if (filesRes.success) {
         setFiles(filesRes.data);
-        const tree = buildFileTree(filesRes.data);
+        const tree = await buildFileTree(filesRes.data, schemes || []);
         setTreeData(tree);
-        setExpandedKeys(['sessions-folder']);
+        setExpandedKeys(['sessions-folder', 'templates-folder', 'template-default', 'template-custom-folder']);
 
         // 优先级：1. 当前选中的文件 2. URL中的fileId 3. 第一个文件
         let targetFile = null;
@@ -338,13 +454,46 @@ const ProjectEditor: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [projectId, fileId]);
+  }, [projectId, fileId, buildFileTree]);
 
   // 监听 projectId 变化，切换工程时清空历史栈
   useEffect(() => {
     if (projectId) {
       console.log(`[ProjectEditor] 🏠 工程 ID 变化: ${projectId}，清空历史栈`);
       globalHistoryManager.clear();
+    }
+  }, [projectId]);
+
+  // 加载模板文件内容
+  const loadTemplateFile = useCallback(async (templatePath: string) => {
+    if (!projectId) return;
+    
+    try {
+      console.log(`[loadTemplateFile] 开始加载模板: ${templatePath}`);
+      
+      // 解析路径：default/ai_ask_v1.md 或 custom/scheme/ai_ask_v1.md
+      const parts = templatePath.split('/');
+      const schemeName = parts[0] === 'custom' ? parts[1] : 'default';
+      const fileName = parts[parts.length - 1];
+      
+      // 调用API获取模板文件内容
+      const response = await projectsApi.getTemplateContent(projectId, schemeName, fileName);
+      
+      if (response.success && response.data) {
+        // 注意：不清空 selectedFile，保留模板文件对象用于 File Details 显示
+        // setSelectedFile(null); // 已删除
+        setFileContent(response.data.content);
+        setHasUnsavedChanges(false);
+        setEditMode('yaml'); // 模板文件只能用YAML模式
+        setParsedScript(null);
+        setCurrentPhases([]);
+        setValidationResult(null);
+        
+        message.success(`已加载模板: ${fileName}`);
+      }
+    } catch (error) {
+      console.error('[加载模板文件失败]:', error);
+      message.error('加载模板文件失败');
     }
   }, [projectId]);
 
@@ -404,27 +553,58 @@ const ProjectEditor: React.FC = () => {
 
   // 处理树节点选择
   const handleTreeSelect = useCallback(
-    (_selectedKeys: React.Key[], info: any) => {
-      if (info.node.isLeaf && info.node.fileId) {
-        const file = files.find((f) => f.id === info.node.fileId);
-        if (file) {
-          if (hasUnsavedChanges) {
-            Modal.confirm({
-              title: 'Unsaved Changes',
-              content: 'The current file has unsaved changes. Discard them?',
-              onOk: () => {
-                loadFile(file);
-                navigate(`/projects/${projectId}/files/${file.id}`);
-              },
-            });
-          } else {
-            loadFile(file);
-            navigate(`/projects/${projectId}/files/${file.id}`);
+    (selectedKeys: React.Key[], info: any) => {
+      // 更新选中状态
+      setSelectedKeys(selectedKeys);
+      
+      if (info.node.isLeaf) {
+        // 处理模板文件选择
+        if (info.node.fileType === 'template' && info.node.filePath) {
+          const templatePath = info.node.filePath;
+          console.log(`[handleTreeSelect] 选择模板文件: ${templatePath}`);
+          
+          // 创建虚拟文件对象用于File Details显示
+          const templateFile = {
+            id: `template-${templatePath}`,
+            projectId: projectId || '',
+            fileName: templatePath.split('/').pop() || templatePath,
+            fileType: 'template',
+            fileContent: '', // 模板文件内容，待加载
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          } as unknown as ScriptFile;
+          console.log('[handleTreeSelect] 创建模板文件对象:', templateFile);
+          console.log('[handleTreeSelect] 调用 setSelectedFile 前，当前 selectedFile:', selectedFile);
+          setSelectedFile(templateFile);
+          console.log('[handleTreeSelect] 调用 setSelectedFile 后');
+          
+          // 加载模板文件内容
+          loadTemplateFile(templatePath);
+          return;
+        }
+        
+        // 处理普通文件选择
+        if (info.node.fileId) {
+          const file = files.find((f) => f.id === info.node.fileId);
+          if (file) {
+            if (hasUnsavedChanges) {
+              Modal.confirm({
+                title: 'Unsaved Changes',
+                content: 'The current file has unsaved changes. Discard them?',
+                onOk: () => {
+                  loadFile(file);
+                  navigate(`/projects/${projectId}/files/${file.id}`);
+                },
+              });
+            } else {
+              loadFile(file);
+              navigate(`/projects/${projectId}/files/${file.id}`);
+            }
           }
         }
       }
     },
-    [files, hasUnsavedChanges, loadFile, navigate, projectId]
+    [files, hasUnsavedChanges, loadTemplateFile, loadFile, navigate, projectId, selectedFile, setSelectedFile, setSelectedKeys]
   );
 
   // 处理内容变化
@@ -457,6 +637,32 @@ const ProjectEditor: React.FC = () => {
     if (!selectedFile || !projectId) return;
 
     try {
+      // 检测是否是模板文件
+      if (selectedFile.id.startsWith('template-')) {
+        // 模板文件保存逻辑
+        const templatePath = selectedFile.id.replace('template-', '');
+        console.log('[handleSave] 保存模板文件:', templatePath);
+        
+        // 解析路径：default/ai_ask_v1.md 或 custom/test2/ai_ask_v1.md
+        const parts = templatePath.split('/');
+        const schemeName = parts[0] === 'custom' ? parts[1] : 'default';
+        const fileName = parts[parts.length - 1];
+        
+        // 检查是否是 default 层模板（只读）
+        if (parts[0] === 'default') {
+          message.warning('系统默认模板不允许修改，请复制到 custom 目录下进行编辑');
+          return;
+        }
+        
+        console.log('[handleSave] schemeName:', schemeName, 'fileName:', fileName);
+        
+        setSaving(true);
+        await projectsApi.updateTemplateContent(projectId, schemeName, fileName, fileContent);
+        message.success('模板保存成功');
+        setHasUnsavedChanges(false);
+        return;
+      }
+
       // 触发点 3: 保存前验证（阻塞式）
       if (selectedFile.fileType === 'session') {
         const result = await validationServiceRef.current.validateBeforeSave(fileContent);
@@ -481,6 +687,8 @@ const ProjectEditor: React.FC = () => {
       const filesRes = await projectsApi.getProjectFiles(projectId);
       if (filesRes.success) {
         setFiles(filesRes.data);
+        const tree = await buildFileTree(filesRes.data, templateSchemes);
+        setTreeData(tree);
         const updatedFile = filesRes.data.find((f) => f.id === selectedFile.id);
         if (updatedFile) {
           setSelectedFile(updatedFile);
@@ -492,7 +700,7 @@ const ProjectEditor: React.FC = () => {
     } finally {
       setSaving(false);
     }
-  }, [selectedFile, projectId, fileContent]);
+  }, [selectedFile, projectId, fileContent, buildFileTree, templateSchemes]);
 
   // 发布版本
   const handlePublish = useCallback(async () => {
@@ -1644,6 +1852,121 @@ const ProjectEditor: React.FC = () => {
   );
 
   /**
+   * 保存 Session 配置修改
+   */
+  const handleSessionSave = useCallback(
+    (updatedSessionData: SessionData) => {
+      console.log('[handleSessionSave] 保存 Session 配置:', updatedSessionData);
+
+      try {
+        // 获取当前脚本的深拷贝
+        const updatedScript = JSON.parse(JSON.stringify(parsedScript));
+
+        // 更新session信息
+        if (!updatedScript.session) {
+          updatedScript.session = {};
+        }
+
+        // 按顺序重建session对象，确保字段顺序
+        const orderedSession: any = {
+          session_id: updatedScript.session.session_id,
+          session_name: updatedSessionData.name,
+        };
+        
+        if (updatedSessionData.description) {
+          orderedSession.description = updatedSessionData.description;
+        }
+        if (updatedSessionData.version) {
+          orderedSession.version = updatedSessionData.version;
+        }
+        if (updatedSessionData.template_scheme) {
+          orderedSession.template_scheme = updatedSessionData.template_scheme;
+        }
+        
+        orderedSession.phases = updatedScript.session.phases;
+        updatedScript.session = orderedSession;
+
+        // 转换为YAML
+        const updatedYaml = yaml.dump(updatedScript, {
+          indent: 2,
+          lineWidth: 120,
+          noRefs: true,
+          sortKeys: false,
+        });
+
+        // 更新状态
+        setFileContent(updatedYaml);
+        setParsedScript(updatedScript);
+        setHasUnsavedChanges(true);
+
+        console.log('[handleSessionSave] Session 配置已更新');
+      } catch (error) {
+        console.error('[handleSessionSave] 保存失败:', error);
+        message.error('Session 配置保存失败');
+      }
+    },
+    [parsedScript]
+  );
+
+  /**
+   * 切换到 Session 配置编辑模式
+   */
+  const handleEditSessionConfig = useCallback(() => {
+    console.log('[handleEditSessionConfig] 打开 Session 配置面板');
+    setEditingType('session');
+    setSelectedActionPath(null);
+    setSelectedPhasePath(null);
+    setSelectedTopicPath(null);
+  }, []);
+
+  /**
+   * 打开模板方案管理器
+   */
+  const handleManageSchemes = useCallback(() => {
+    setTemplateManagerVisible(true);
+  }, []);
+
+  /**
+   * 查看模板方案详情（打开模板编辑器）
+   */
+  const handleViewSchemeDetails = useCallback((schemeName: string) => {
+    setEditingTemplate({
+      schemeName,
+      templatePath: 'ai_ask_v1',  // 默认打开 ai_ask_v1 模板
+    });
+    setTemplateEditorVisible(true);
+  }, []);
+
+  /**
+   * 模板方案列表变化回调（重新加载方案列表和文件树）
+   */
+  const handleSchemeChange = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const schemes = await projectsApi.getTemplateSchemes(projectId);
+      setTemplateSchemes(schemes);
+      // 重新加载文件列表（包含模板文件）
+      const filesRes = await projectsApi.getProjectFiles(projectId);
+      if (filesRes.success) {
+        setFiles(filesRes.data);
+      }
+      // 重新构建文件树（包含模板文件）
+      const tree = await buildFileTree(filesRes.success ? filesRes.data : files, schemes);
+      setTreeData(tree);
+    } catch (error) {
+      console.error('重新加载模板方案列表失败:', error);
+    }
+  }, [projectId, files, buildFileTree]);
+
+  /**
+   * 模板编辑器保存回调
+   */
+  const handleTemplateSaved = useCallback(() => {
+    message.success('模板已更新');
+    // 可以选择重新加载相关数据
+  }, []);
+
+  /**
    * 新增会谈脚本（需求2）
    */
   const handleCreateSession = useCallback(async () => {
@@ -1808,6 +2131,7 @@ const ProjectEditor: React.FC = () => {
           selectedKeys={selectedKeys}
           onCollapse={setLeftCollapsed}
           onTreeSelect={handleTreeSelect}
+          onTreeExpand={setExpandedKeys}  // 新增：传递展开/收起回调
           onCreateSession={handleCreateSession}
           onFormatYaml={handleFormatYAML}
           onValidate={() => {
@@ -1829,6 +2153,7 @@ const ProjectEditor: React.FC = () => {
 
         {/* 中间编辑区 */}
         <EditorContent
+          projectId={projectId || ''}
           editMode={editMode}
           selectedFile={selectedFile}
           fileContent={fileContent}
@@ -1859,7 +2184,11 @@ const ProjectEditor: React.FC = () => {
           onActionSave={handleActionSave}
           onPhaseSave={handlePhaseSave}
           onTopicSave={handleTopicSave}
+          onSessionSave={handleSessionSave}
+          onEditSessionConfig={handleEditSessionConfig}
           parseYamlToScript={parseYamlToScript}
+          onManageSchemes={handleManageSchemes}
+          onViewSchemeDetails={handleViewSchemeDetails}
         />
       </Layout>
 
@@ -1969,6 +2298,33 @@ const ProjectEditor: React.FC = () => {
             />
           </div>
         </div>
+      )}
+
+      {/* 模板方案管理器 */}
+      {templateManagerVisible && projectId && (
+        <TemplateSchemeManager
+          visible={templateManagerVisible}
+          projectId={projectId}
+          onClose={() => setTemplateManagerVisible(false)}
+          onSchemeChange={handleSchemeChange}
+        />
+      )}
+
+      {/* 模板编辑器 */}
+      {templateEditorVisible && editingTemplate && projectId && (
+        <TemplateEditor
+          visible={templateEditorVisible}
+          projectId={projectId}
+          schemeName={editingTemplate.schemeName}
+          templatePath={editingTemplate.templatePath}
+          requiredSystemVars={['who', 'chat']}
+          requiredScriptVars={['topic']}
+          onClose={() => {
+            setTemplateEditorVisible(false);
+            setEditingTemplate(null);
+          }}
+          onSaved={handleTemplateSaved}
+        />
       )}
     </Layout>
   );

@@ -21,10 +21,11 @@ export interface Project {
 export interface ScriptFile {
   id: string;
   projectId: string;
-  fileType: 'global' | 'roles' | 'skills' | 'forms' | 'rules' | 'session';
+  fileType: 'global' | 'roles' | 'skills' | 'forms' | 'rules' | 'session' | 'template';
   fileName: string;
   fileContent: any;
   yamlContent?: string;
+  filePath?: string; // 模板文件的虚拟路径
   createdAt: string;
   updatedAt: string;
 }
@@ -88,6 +89,7 @@ export const projectsApi = {
     domain?: string;
     scenario?: string;
     language?: string;
+    templateScheme?: string;  // 模板方案（可选）
   }) {
     const response = await axios.post<{ success: boolean; data: Project }>(
       `${API_BASE_URL}/projects`,
@@ -195,6 +197,118 @@ export const projectsApi = {
     const response = await axios.delete<{ success: boolean; data: ScriptFile }>(
       `${API_BASE_URL}/projects/${projectId}/files/${fileId}`
     );
+    return response.data;
+  },
+
+  // 获取模板方案列表
+  async getTemplateSchemes(projectId: string) {
+    const response = await axios.get<Array<{
+      name: string;
+      description: string;
+      isDefault: boolean;
+    }>>(`${API_BASE_URL}/projects/${projectId}/template-schemes`);
+    return response.data;
+  },
+
+  // 获取模板方案下的文件列表
+  async getTemplateSchemeFiles(projectId: string, schemeName: string) {
+    const response = await axios.get<{
+      success: boolean;
+      data: {
+        schemeName: string;
+        isDefault: boolean;
+        files: Array<{
+          name: string;
+          path: string;
+          size: number;
+          isReadonly: boolean;
+        }>;
+      };
+    }>(`${API_BASE_URL}/projects/${projectId}/template-schemes/${schemeName}/files`);
+    return response.data.data;
+  },
+
+  // 创建模板方案
+  async createTemplateScheme(
+    projectId: string,
+    data: {
+      name: string;
+      description?: string;
+      copyFrom?: string;
+    }
+  ) {
+    const response = await axios.post<{
+      success: boolean;
+      data: {
+        name: string;
+        description: string;
+        isDefault: boolean;
+      };
+    }>(`${API_BASE_URL}/projects/${projectId}/template-schemes`, data);
+    return response.data;
+  },
+
+  // 更新模板方案描述
+  async updateTemplateScheme(
+    projectId: string,
+    schemeName: string,
+    data: {
+      description: string;
+    }
+  ) {
+    const response = await axios.patch<{
+      success: boolean;
+      data: {
+        name: string;
+        description: string;
+        isDefault: boolean;
+      };
+    }>(`${API_BASE_URL}/projects/${projectId}/template-schemes/${schemeName}`, data);
+    return response.data;
+  },
+
+  // 删除模板方案
+  async deleteTemplateScheme(projectId: string, schemeName: string) {
+    const response = await axios.delete<{
+      success: boolean;
+      data: { message: string };
+    }>(`${API_BASE_URL}/projects/${projectId}/template-schemes/${schemeName}`);
+    return response.data;
+  },
+
+  // 获取模板内容
+  async getTemplateContent(
+    projectId: string,
+    schemeName: string,
+    templatePath: string
+  ) {
+    const response = await axios.get<{
+      success: boolean;
+      data: {
+        schemeName: string;
+        templatePath: string;
+        content: string;
+        isDefault: boolean;
+      };
+    }>(`${API_BASE_URL}/projects/${projectId}/templates/${schemeName}/${templatePath}`);
+    return response.data;
+  },
+
+  // 更新模板内容
+  async updateTemplateContent(
+    projectId: string,
+    schemeName: string,
+    templatePath: string,
+    content: string
+  ) {
+    const response = await axios.put<{
+      success: boolean;
+      data: {
+        schemeName: string;
+        templatePath: string;
+        message: string;
+      };
+    }>(`${API_BASE_URL}/projects/${projectId}/templates/${schemeName}/${templatePath}`, { content });
     return response.data;
   },
 };

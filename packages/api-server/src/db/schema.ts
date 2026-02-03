@@ -36,6 +36,7 @@ export const fileTypeEnum = pgEnum('file_type', [
   'forms',
   'rules',
   'session',
+  'template', // 模板文件类型
 ]);
 export const validationStatusEnum = pgEnum('validation_status', ['valid', 'invalid', 'unknown']);
 
@@ -153,6 +154,13 @@ export const projects = pgTable(
 
 /**
  * 脚本文件表（隶属于工程）
+ * 
+ * 对于模板文件（fileType='template'）：
+ * - fileName: 模板文件名（如 ai_say_v1.md）
+ * - fileContent: 存储模板的文本内容（包装为 {content: string}）
+ * - filePath: 虚拟路径，用于标识模板层级和方案
+ *   - default层：_system/config/default/ai_say_v1.md
+ *   - custom层：_system/config/custom/{scheme}/ai_say_v1.md
  */
 export const scriptFiles = pgTable(
   'script_files',
@@ -163,6 +171,7 @@ export const scriptFiles = pgTable(
       .references(() => projects.id, { onDelete: 'cascade' }),
     fileType: fileTypeEnum('file_type').notNull(),
     fileName: varchar('file_name', { length: 255 }).notNull(),
+    filePath: varchar('file_path', { length: 512 }), // 虚拟路径（用于模板文件）
     fileContent: jsonb('file_content').notNull(),
     yamlContent: text('yaml_content'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -172,6 +181,7 @@ export const scriptFiles = pgTable(
     return {
       projectIdIdx: index('script_files_project_id_idx').on(table.projectId),
       fileTypeIdx: index('script_files_file_type_idx').on(table.fileType),
+      filePathIdx: index('script_files_file_path_idx').on(table.filePath), // 索引虚拟路径
     };
   }
 );

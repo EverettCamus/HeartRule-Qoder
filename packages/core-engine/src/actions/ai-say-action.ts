@@ -18,32 +18,55 @@
  */
 
 import { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
-import { PromptTemplateManager } from '../engines/prompt-template/index.js';
+import { PromptTemplateManager, TemplateResolver } from '../engines/prompt-template/index.js';
 
 import { BaseAction } from './base-action.js';
 import type { ActionContext, ActionResult } from './base-action.js';
 
 /**
- * LLM 输出格式（主线 A）
+ * LLM 输出格式（支持新旧两种格式）
  */
 interface MainLineOutput {
-  assessment: {
-    understanding_level: number; // 0-100
+  // 新格式字段
+  content?: string;
+  EXIT?: string;
+  BRIEF?: string;
+  safety_risk?: {
+    detected: boolean;
+    risk_type: string | null;
+    confidence: 'high' | 'medium' | 'low';
+    reason: string | null;
+  };
+  metadata?: {
+    emotional_tone?: string;
+    crisis_signal?: boolean;
+    assessment?: {
+      understanding_level: number;
+      has_questions: boolean;
+      expressed_understanding: boolean;
+      reasoning: string;
+    };
+  };
+  
+  // 旧格式字段（向后兼容）
+  assessment?: {
+    understanding_level: number;
     has_questions: boolean;
     expressed_understanding: boolean;
     reasoning: string;
   };
-  response: {
-    咨询师: string;
+  response?: {
+    [key: string]: string; // 支持动态角色名
   };
-  should_exit: boolean;
-  exit_reason: string;
+  should_exit?: boolean;
+  exit_reason?: string;
 }
 
 export class AiSayAction extends BaseAction {
   static actionType = 'ai_say';
   private llmOrchestrator?: LLMOrchestrator;
   private templateManager: PromptTemplateManager;
+  private templateResolver: TemplateResolver;
   private useTemplateMode: boolean = false; // 是否使用模板模式
 
   constructor(actionId: string, config: Record<string, any>, llmOrchestrator?: LLMOrchestrator) {
@@ -54,6 +77,8 @@ export class AiSayAction extends BaseAction {
     console.log(`[AiSayAction] 📁 Template path: ${templateBasePath}`);
 
     this.templateManager = new PromptTemplateManager(templateBasePath);
+    // TemplateResolver 需要项目根目录，但此时还没有context，暂不初始化
+    this.templateResolver = null as any; // 延迟初始化
 
     // maxRounds 和 exitCriteria 已在 BaseAction 中设置
     // 判断是否使用模板模式：有 max_rounds 或 exit_criteria 配置
@@ -121,7 +146,7 @@ export class AiSayAction extends BaseAction {
     }
 
     // 1. 加载提示词模板
-    const template = await this.loadPromptTemplate();
+    const { template, resolution } = await this.loadPromptTemplate(context);
 
     // 2. 准备变量
     const scriptVariables = this.extractScriptVariables(context);
@@ -142,7 +167,13 @@ export class AiSayAction extends BaseAction {
       maxTokens: 1000,
     });
 
-    // 解析 LLM 响应（处理 markdown 代码块）
+    // 5. 安全边界检测
+    const safetyCheck = this.checkSafetyBoundary(llmResult.text);
+    if (!safetyCheck.passed) {
+      console.warn(`[AiSayAction] ⚠️ Safety boundary violations detected:`, safetyCheck.violations);
+    }
+
+    // 6. 解析 LLM 响应（处理 markdown 代码块）
     const jsonText = this.cleanJsonOutput(llmResult.text);
 
     let llmOutput: MainLineOutput;
@@ -153,28 +184,55 @@ export class AiSayAction extends BaseAction {
       throw new Error(`Failed to parse LLM output: ${error.message}`);
     }
 
-    // 5. 退出决策（使用统一的 evaluateExitCondition 方法）
+    // 7. 退出决策（使用统一的 evaluateExitCondition 方法）
     const exitDecision = this.evaluateExitCondition(context, llmOutput);
 
     console.log(`[AiSayAction] 🎯 Exit decision:`, exitDecision);
 
-    // 6. 返回结果（包含 debugInfo）
+    // 提取 AI 消息：优先使用 content 字段（新格式），兼容旧格式
+    const aiRole = this.getConfig('ai_role', '咨询师');
+    const aiMessage = llmOutput.content || 
+                      (llmOutput.response && llmOutput.response[aiRole]) || 
+                      '';
+
+    // 提取安全风险信息
+    const safetyRisk = llmOutput.safety_risk || {
+      detected: false,
+      risk_type: null,
+      confidence: 'high',
+      reason: null,
+    };
+
+    // 提取元数据
+    const llmMetadata = llmOutput.metadata || {};
+
+    // 8. 返回结果（包含 debugInfo 和模板解析信息）
     // 如果达到最大轮次，强制标记为已完成
     const isLastRound = this.currentRound >= this.maxRounds;
     if (isLastRound) {
       console.log(`[AiSayAction] 🏁 Reached max_rounds (${this.maxRounds}), finishing action`);
     }
-
+    
+    // 修正：ai_say 在第一次输出时应该等待用户确认，而不是直接完成
+    const shouldWaitForAcknowledgment = aiMessage && this.currentRound === 1;
+    
     return {
       success: true,
-      completed: exitDecision.should_exit || isLastRound,
-      aiMessage: llmOutput.response.咨询师,
+      completed: shouldWaitForAcknowledgment ? false : (exitDecision.should_exit || isLastRound),
+      aiMessage,
       debugInfo: llmResult.debugInfo, // ✅ 添加 debugInfo
       metadata: {
         actionType: AiSayAction.actionType,
         currentRound: this.currentRound,
         maxRounds: this.maxRounds,
-        assessment: llmOutput.assessment,
+        waitingFor: shouldWaitForAcknowledgment ? 'acknowledgment' : undefined,
+        assessment: llmOutput.assessment || llmMetadata.assessment,
+        template_path: resolution.path,
+        template_layer: resolution.layer,
+        template_scheme: resolution.scheme,
+        safety_check: safetyCheck,
+        safety_risk: safetyRisk,
+        llm_metadata: llmMetadata,
         exitDecision: isLastRound
           ? {
               should_exit: true,
@@ -280,11 +338,39 @@ export class AiSayAction extends BaseAction {
   }
 
   /**
-   * 加载提示词模板
+   * 加载提示词模板（两层方案机制）
    */
-  private async loadPromptTemplate() {
-    // 第一阶段固定使用 introduce_concept 模板
-    return await this.templateManager.loadTemplate('ai-say/mainline-a-introduce-concept.md');
+  private async loadPromptTemplate(context: ActionContext) {
+    // 1. 从 session 配置读取 template_scheme
+    const sessionConfig = {
+      template_scheme: context.metadata?.sessionConfig?.template_scheme,
+    };
+    
+    // 2. 初始化 TemplateResolver（延迟初始化）
+    if (!this.templateResolver) {
+      const projectRoot = this.resolveProjectRoot(context);
+      this.templateResolver = new TemplateResolver(projectRoot);
+    }
+    
+    // 3. 解析模板路径（使用两层解析）
+    const resolution = await this.templateResolver.resolveTemplatePath(
+      'ai_say', // 注意：模板文件名为 ai_say_v1.md
+      sessionConfig
+    );
+    
+    console.log(`[AiSayAction] 📝 Template resolved:`, {
+      path: resolution.path,
+      layer: resolution.layer,
+      scheme: resolution.scheme,
+      exists: resolution.exists,
+    });
+    
+    const template = await this.templateManager.loadTemplate(resolution.path);
+    
+    return {
+      template,
+      resolution,
+    };
   }
 
   /**
