@@ -201,8 +201,8 @@ export class SessionManager {
     }
 
     // 从 tags 中提取 projectId
-    const tags = script.tags as string[] || [];
-    const projectTag = tags.find(tag => tag.startsWith('project:'));
+    const tags = (script.tags as string[]) || [];
+    const projectTag = tags.find((tag) => tag.startsWith('project:'));
     const projectId = projectTag ? projectTag.replace('project:', '') : undefined;
 
     console.log('[SessionManager] ✅ Script found:', {
@@ -253,9 +253,18 @@ export class SessionManager {
       ...((sessionVariables as Record<string, unknown>) || {}),
     };
     executionState.conversationHistory = conversationHistory;
-    // 将 session.metadata 中的 projectId 传递到 executionState.metadata
-    if (sessionMetadata?.projectId) {
-      executionState.metadata.projectId = sessionMetadata.projectId;
+
+    // 将 session.metadata 中的数据传递到 executionState.metadata
+    if (sessionMetadata) {
+      // 传递 projectId
+      if (sessionMetadata.projectId) {
+        executionState.metadata.projectId = sessionMetadata.projectId;
+      }
+
+      // 传递 sessionConfig（包含 template_scheme）
+      if (sessionMetadata.sessionConfig) {
+        executionState.metadata.sessionConfig = sessionMetadata.sessionConfig;
+      }
     }
 
     console.log('[SessionManager] 📋 Initial execution state:', {
@@ -265,6 +274,7 @@ export class SessionManager {
       actionIdx: executionState.currentActionIdx,
       variables: executionState.variables,
       projectId: executionState.metadata.projectId,
+      sessionConfig: executionState.metadata.sessionConfig,
     });
 
     return executionState;
@@ -656,6 +666,25 @@ export class SessionManager {
       // 5. 执行脚本
       const prevHistoryLength = executionState.conversationHistory.length;
       executionState = await this.executeScript(script, sessionId, executionState, null);
+
+      // 5.1 如果 ScriptExecutor 提取了 sessionConfig，保存到 session.metadata
+      if (executionState.metadata.sessionConfig) {
+        const currentMetadata = (session.metadata as Record<string, any>) || {};
+        const updatedMetadata = {
+          ...currentMetadata,
+          sessionConfig: executionState.metadata.sessionConfig,
+        };
+
+        await db
+          .update(sessions)
+          .set({ metadata: updatedMetadata })
+          .where(eq(sessions.id, sessionId));
+
+        console.log(
+          '[SessionManager] 💾 Saved sessionConfig to database:',
+          executionState.metadata.sessionConfig
+        );
+      }
 
       // 6. 保存执行结果
       await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
