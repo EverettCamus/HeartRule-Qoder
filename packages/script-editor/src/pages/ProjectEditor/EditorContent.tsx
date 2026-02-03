@@ -21,12 +21,12 @@ const { Text } = Typography;
 const { TextArea } = Input;
 
 interface EditorContentProps {
-  projectId: string;  // 新增：用于获取模板方案列表
+  projectId: string; // 新增：用于获取模板方案列表
   editMode: 'yaml' | 'visual';
   selectedFile: ScriptFile | null;
   fileContent: string;
   currentPhases: PhaseWithTopics[];
-  parsedScript: any;  // YAML解析的原始对象，可能是新格式或旧格式
+  parsedScript: any; // YAML解析的原始对象，可能是新格式或旧格式
   validationResult: ValidationResult | null;
   showValidationErrors: boolean;
   selectedActionPath: { phaseIndex: number; topicIndex: number; actionIndex: number } | null;
@@ -70,6 +70,8 @@ interface EditorContentProps {
   // 模板管理相关回调
   onManageSchemes?: () => void;
   onViewSchemeDetails?: (schemeName: string) => void;
+  // 从父组件传入的模板方案列表（可选）
+  templateSchemes?: TemplateScheme[];
 }
 
 const getFileIcon = (fileType?: string) => {
@@ -118,15 +120,24 @@ const EditorContent: React.FC<EditorContentProps> = ({
   parseYamlToScript,
   onManageSchemes,
   onViewSchemeDetails,
+  templateSchemes: externalTemplateSchemes,
 }) => {
   // 状态：可用的模板方案列表
   const [availableSchemes, setAvailableSchemes] = useState<TemplateScheme[]>([]);
 
   // 加载模板方案列表
   useEffect(() => {
+    // 如果父组件传入了 templateSchemes，直接使用
+    if (externalTemplateSchemes) {
+      setAvailableSchemes(externalTemplateSchemes);
+      console.log('[EditorContent] 使用父组件传入的模板方案:', externalTemplateSchemes);
+      return;
+    }
+
+    // 否则自行加载
     const fetchSchemes = async () => {
       if (!projectId) return;
-      
+
       try {
         const schemes = await projectsApi.getTemplateSchemes(projectId);
         setAvailableSchemes(schemes);
@@ -134,14 +145,12 @@ const EditorContent: React.FC<EditorContentProps> = ({
       } catch (error) {
         console.error('[EditorContent] 获取模板方案失败:', error);
         // 设置默认方案作为备用
-        setAvailableSchemes([
-          { name: 'default', description: '系统默认模板', isDefault: true },
-        ]);
+        setAvailableSchemes([{ name: 'default', description: '系统默认模板', isDefault: true }]);
       }
     };
 
     fetchSchemes();
-  }, [projectId]);
+  }, [projectId, externalTemplateSchemes]);
 
   return (
     <Layout style={{ padding: '0', overflow: 'hidden' }}>

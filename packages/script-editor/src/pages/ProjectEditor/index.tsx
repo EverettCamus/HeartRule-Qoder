@@ -19,12 +19,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { projectsApi, versionsApi } from '../../api/projects';
 import type { ScriptFile } from '../../api/projects';
 import type { ActionNodeListRef } from '../../components/ActionNodeList';
-import type { SessionData } from '../../components/SessionPropertyPanel';
 import DebugChatPanel from '../../components/DebugChatPanel';
 import DebugConfigModal from '../../components/DebugConfigModal';
-import VersionListPanel from '../../components/VersionListPanel';
-import TemplateSchemeManager from '../../components/TemplateSchemeManager';
+import type { SessionData } from '../../components/SessionPropertyPanel';
 import TemplateEditor from '../../components/TemplateEditor';
+import TemplateSchemeManager from '../../components/TemplateSchemeManager';
+import VersionListPanel from '../../components/VersionListPanel';
 import { useEditorState } from '../../hooks/useEditorState';
 import { useFileTreeState } from '../../hooks/useFileTreeState';
 import { yamlService } from '../../services/YamlService';
@@ -119,7 +119,7 @@ const ProjectEditor: React.FC = () => {
   const [publishModalVisible, setPublishModalVisible] = useState(false);
   const [versionNote, setVersionNote] = useState('');
   const [versionPanelVisible, setVersionPanelVisible] = useState(false);
-  
+
   // 模板管理相关状态
   const [templateManagerVisible, setTemplateManagerVisible] = useState(false);
   const [templateEditorVisible, setTemplateEditorVisible] = useState(false);
@@ -263,9 +263,14 @@ const ProjectEditor: React.FC = () => {
 
   // 构建文件树
   const buildFileTree = useCallback(
-    async (fileList: ScriptFile[], schemes: Array<{ name: string; description: string; isDefault: boolean }>): Promise<FileTreeNode[]> => {
+    async (
+      fileList: ScriptFile[],
+      schemes: Array<{ name: string; description: string; isDefault: boolean }>
+    ): Promise<FileTreeNode[]> => {
       const sessionFiles = fileList.filter((f) => f.fileType === 'session');
-      const otherFiles = fileList.filter((f) => f.fileType !== 'session' && f.fileType !== 'template'); // 排除模板文件
+      const otherFiles = fileList.filter(
+        (f) => f.fileType !== 'session' && f.fileType !== 'template'
+      ); // 排除模板文件
 
       const nodes: FileTreeNode[] = [];
 
@@ -311,7 +316,7 @@ const ProjectEditor: React.FC = () => {
             console.log('[buildFileTree] default 文件列表:', defaultFiles);
             console.log('[buildFileTree] defaultFiles.files:', defaultFiles.files);
             console.log('[buildFileTree] defaultFiles.files 长度:', defaultFiles.files?.length);
-            
+
             const fileNodes: FileTreeNode[] = defaultFiles.files.map((file) => ({
               key: `template-default-${file.name}`,
               title: `📝 ${file.name}`,
@@ -423,7 +428,12 @@ const ProjectEditor: React.FC = () => {
         setFiles(filesRes.data);
         const tree = await buildFileTree(filesRes.data, schemes || []);
         setTreeData(tree);
-        setExpandedKeys(['sessions-folder', 'templates-folder', 'template-default', 'template-custom-folder']);
+        setExpandedKeys([
+          'sessions-folder',
+          'templates-folder',
+          'template-default',
+          'template-custom-folder',
+        ]);
 
         // 优先级：1. 当前选中的文件 2. URL中的fileId 3. 第一个文件
         let targetFile = null;
@@ -465,37 +475,40 @@ const ProjectEditor: React.FC = () => {
   }, [projectId]);
 
   // 加载模板文件内容
-  const loadTemplateFile = useCallback(async (templatePath: string) => {
-    if (!projectId) return;
-    
-    try {
-      console.log(`[loadTemplateFile] 开始加载模板: ${templatePath}`);
-      
-      // 解析路径：default/ai_ask_v1.md 或 custom/scheme/ai_ask_v1.md
-      const parts = templatePath.split('/');
-      const schemeName = parts[0] === 'custom' ? parts[1] : 'default';
-      const fileName = parts[parts.length - 1];
-      
-      // 调用API获取模板文件内容
-      const response = await projectsApi.getTemplateContent(projectId, schemeName, fileName);
-      
-      if (response.success && response.data) {
-        // 注意：不清空 selectedFile，保留模板文件对象用于 File Details 显示
-        // setSelectedFile(null); // 已删除
-        setFileContent(response.data.content);
-        setHasUnsavedChanges(false);
-        setEditMode('yaml'); // 模板文件只能用YAML模式
-        setParsedScript(null);
-        setCurrentPhases([]);
-        setValidationResult(null);
-        
-        message.success(`已加载模板: ${fileName}`);
+  const loadTemplateFile = useCallback(
+    async (templatePath: string) => {
+      if (!projectId) return;
+
+      try {
+        console.log(`[loadTemplateFile] 开始加载模板: ${templatePath}`);
+
+        // 解析路径：default/ai_ask_v1.md 或 custom/scheme/ai_ask_v1.md
+        const parts = templatePath.split('/');
+        const schemeName = parts[0] === 'custom' ? parts[1] : 'default';
+        const fileName = parts[parts.length - 1];
+
+        // 调用API获取模板文件内容
+        const response = await projectsApi.getTemplateContent(projectId, schemeName, fileName);
+
+        if (response.success && response.data) {
+          // 注意：不清空 selectedFile，保留模板文件对象用于 File Details 显示
+          // setSelectedFile(null); // 已删除
+          setFileContent(response.data.content);
+          setHasUnsavedChanges(false);
+          setEditMode('yaml'); // 模板文件只能用YAML模式
+          setParsedScript(null);
+          setCurrentPhases([]);
+          setValidationResult(null);
+
+          message.success(`已加载模板: ${fileName}`);
+        }
+      } catch (error) {
+        console.error('[加载模板文件失败]:', error);
+        message.error('加载模板文件失败');
       }
-    } catch (error) {
-      console.error('[加载模板文件失败]:', error);
-      message.error('加载模板文件失败');
-    }
-  }, [projectId]);
+    },
+    [projectId]
+  );
 
   // 加载文件内容
   const loadFile = useCallback((file: ScriptFile) => {
@@ -556,13 +569,13 @@ const ProjectEditor: React.FC = () => {
     (selectedKeys: React.Key[], info: any) => {
       // 更新选中状态
       setSelectedKeys(selectedKeys);
-      
+
       if (info.node.isLeaf) {
         // 处理模板文件选择
         if (info.node.fileType === 'template' && info.node.filePath) {
           const templatePath = info.node.filePath;
           console.log(`[handleTreeSelect] 选择模板文件: ${templatePath}`);
-          
+
           // 创建虚拟文件对象用于File Details显示
           const templateFile = {
             id: `template-${templatePath}`,
@@ -574,15 +587,18 @@ const ProjectEditor: React.FC = () => {
             updatedAt: new Date().toISOString(),
           } as unknown as ScriptFile;
           console.log('[handleTreeSelect] 创建模板文件对象:', templateFile);
-          console.log('[handleTreeSelect] 调用 setSelectedFile 前，当前 selectedFile:', selectedFile);
+          console.log(
+            '[handleTreeSelect] 调用 setSelectedFile 前，当前 selectedFile:',
+            selectedFile
+          );
           setSelectedFile(templateFile);
           console.log('[handleTreeSelect] 调用 setSelectedFile 后');
-          
+
           // 加载模板文件内容
           loadTemplateFile(templatePath);
           return;
         }
-        
+
         // 处理普通文件选择
         if (info.node.fileId) {
           const file = files.find((f) => f.id === info.node.fileId);
@@ -604,7 +620,17 @@ const ProjectEditor: React.FC = () => {
         }
       }
     },
-    [files, hasUnsavedChanges, loadTemplateFile, loadFile, navigate, projectId, selectedFile, setSelectedFile, setSelectedKeys]
+    [
+      files,
+      hasUnsavedChanges,
+      loadTemplateFile,
+      loadFile,
+      navigate,
+      projectId,
+      selectedFile,
+      setSelectedFile,
+      setSelectedKeys,
+    ]
   );
 
   // 处理内容变化
@@ -642,20 +668,20 @@ const ProjectEditor: React.FC = () => {
         // 模板文件保存逻辑
         const templatePath = selectedFile.id.replace('template-', '');
         console.log('[handleSave] 保存模板文件:', templatePath);
-        
+
         // 解析路径：default/ai_ask_v1.md 或 custom/test2/ai_ask_v1.md
         const parts = templatePath.split('/');
         const schemeName = parts[0] === 'custom' ? parts[1] : 'default';
         const fileName = parts[parts.length - 1];
-        
+
         // 检查是否是 default 层模板（只读）
         if (parts[0] === 'default') {
           message.warning('系统默认模板不允许修改，请复制到 custom 目录下进行编辑');
           return;
         }
-        
+
         console.log('[handleSave] schemeName:', schemeName, 'fileName:', fileName);
-        
+
         setSaving(true);
         await projectsApi.updateTemplateContent(projectId, schemeName, fileName, fileContent);
         message.success('模板保存成功');
@@ -1872,7 +1898,7 @@ const ProjectEditor: React.FC = () => {
           session_id: updatedScript.session.session_id,
           session_name: updatedSessionData.name,
         };
-        
+
         if (updatedSessionData.description) {
           orderedSession.description = updatedSessionData.description;
         }
@@ -1882,7 +1908,7 @@ const ProjectEditor: React.FC = () => {
         if (updatedSessionData.template_scheme) {
           orderedSession.template_scheme = updatedSessionData.template_scheme;
         }
-        
+
         orderedSession.phases = updatedScript.session.phases;
         updatedScript.session = orderedSession;
 
@@ -1932,7 +1958,7 @@ const ProjectEditor: React.FC = () => {
   const handleViewSchemeDetails = useCallback((schemeName: string) => {
     setEditingTemplate({
       schemeName,
-      templatePath: 'ai_ask_v1',  // 默认打开 ai_ask_v1 模板
+      templatePath: 'ai_ask_v1', // 默认打开 ai_ask_v1 模板
     });
     setTemplateEditorVisible(true);
   }, []);
@@ -2131,7 +2157,7 @@ const ProjectEditor: React.FC = () => {
           selectedKeys={selectedKeys}
           onCollapse={setLeftCollapsed}
           onTreeSelect={handleTreeSelect}
-          onTreeExpand={setExpandedKeys}  // 新增：传递展开/收起回调
+          onTreeExpand={setExpandedKeys} // 新增：传递展开/收起回调
           onCreateSession={handleCreateSession}
           onFormatYaml={handleFormatYAML}
           onValidate={() => {
@@ -2189,6 +2215,7 @@ const ProjectEditor: React.FC = () => {
           parseYamlToScript={parseYamlToScript}
           onManageSchemes={handleManageSchemes}
           onViewSchemeDetails={handleViewSchemeDetails}
+          templateSchemes={templateSchemes}
         />
       </Layout>
 
