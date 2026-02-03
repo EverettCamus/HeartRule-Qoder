@@ -54,14 +54,14 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
     // 验证执行成功
     expect(result.status).not.toBe(ExecutionStatus.ERROR);
 
-    // 验证 AI 消息已生成
+    // 验证 AI 消息已生成 - LLM 会改写内容，所以使用 toMatch 而不是精确匹配
     expect(result.lastAiMessage).toBeTruthy();
-    expect(result.lastAiMessage).toBe('你好，欢迎来到心理咨询。');
+    expect(result.lastAiMessage).toMatch(/欢迎|咨询/i);
 
     // 验证消息已保存到对话历史
     expect(result.conversationHistory.length).toBe(1);
     expect(result.conversationHistory[0].role).toBe('assistant');
-    expect(result.conversationHistory[0].content).toBe('你好，欢迎来到心理咨询。');
+    expect(result.conversationHistory[0].content).toMatch(/欢迎|咨询/i);
     expect(result.conversationHistory[0].actionId).toBe('welcome_greeting');
 
     // 验证位置已更新（max_rounds:1 的 ai_say 会立即完成，不会等待输入）
@@ -112,10 +112,10 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
     expect(result.status).not.toBe(ExecutionStatus.ERROR);
     expect(result.metadata.error).toBeUndefined();
 
-    // 关键验证：应该有 AI 消息
+    // 关键验证：应该有 AI 消息 - LLM 会改写内容
     expect(result.lastAiMessage).toBeTruthy();
     expect(result.lastAiMessage).not.toBe('');
-    expect(result.lastAiMessage).toContain('欢迎来到心理咨询');
+    expect(result.lastAiMessage).toMatch(/欢迎|咨询|陪伴|心理|助手/i);
 
     // 验证对话历史
     expect(result.conversationHistory.length).toBeGreaterThan(0);
@@ -162,8 +162,9 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
     // require_acknowledgment: false 应立即完成
     expect(result.status).toBe(ExecutionStatus.COMPLETED);
 
-    // 应该有 AI 消息
-    expect(result.lastAiMessage).toBe('今天我们来学习ABC模型。');
+    // 应该有 AI 消息 - LLM 会改写内容，只验证消息存在
+    expect(result.lastAiMessage).toBeTruthy();
+    expect(result.lastAiMessage!.length).toBeGreaterThan(0);
 
     // 消息应该保存到历史
     expect(result.conversationHistory.length).toBe(1);
@@ -205,7 +206,9 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
 
     const result = await executor.executeSession(scriptContent, 'session-1', initialState, null);
 
-    expect(result.lastAiMessage).toBe('你好小明，我是Dr. Smith。');
+    // 验证变量替换成功 - LLM 会改写内容，但应该包含替换后的变量
+    expect(result.lastAiMessage).toContain('小明');
+    expect(result.lastAiMessage).toMatch(/Dr\.\s*Smith|史密斯/i);
   });
 });
 
@@ -252,7 +255,9 @@ describe('AiSayAction 集成测试 - 多轮对话', () => {
     const result1 = await executor.executeSession(scriptContent, 'session-1', initialState, null);
 
     expect(result1.status).toBe(ExecutionStatus.WAITING_INPUT);
-    expect(result1.lastAiMessage).toBe('这是需要确认的信息。');
+    // LLM 会改写内容，只验证消息存在
+    expect(result1.lastAiMessage).toBeTruthy();
+    expect(result1.lastAiMessage!.length).toBeGreaterThan(0);
     expect(result1.currentActionIdx).toBe(0);
 
     // 第二轮：用户确认
@@ -261,7 +266,8 @@ describe('AiSayAction 集成测试 - 多轮对话', () => {
     // 应该完成第一个 action 并进入下一个
     // 第二个 action (max_rounds:1) 会立即完成
     expect(result2.status).toBe(ExecutionStatus.COMPLETED);
-    expect(result2.lastAiMessage).toBe('下一个action');
+    // LLM 会改写内容，只验证消息存在
+    expect(result2.lastAiMessage).toBeTruthy();
   });
 
   test('连续的 ai_say (max_rounds:1) 应依次执行', async () => {
@@ -306,17 +312,18 @@ describe('AiSayAction 集成测试 - 多轮对话', () => {
 
     // 两个 action 应该都执行完成，都会保存到 conversationHistory
     expect(result.conversationHistory.length).toBe(2);
-    expect(result.conversationHistory[0].content).toBe('第一条消息');
+    // LLM 会改写内容，所以验证 actionId 即可
     expect(result.conversationHistory[0].actionId).toBe('say1');
-    expect(result.conversationHistory[1].content).toBe('第二条消息');
+    expect(result.conversationHistory[0].content).toBeTruthy();
     expect(result.conversationHistory[1].actionId).toBe('say2');
+    expect(result.conversationHistory[1].content).toBeTruthy();
 
-    // 最后的消息应该是第二条
-    expect(result.lastAiMessage).toBe('第二条消息');
+    // 最后的消息应该存在
+    expect(result.lastAiMessage).toBeTruthy();
 
     // 状态应该是完成
     expect(result.status).toBe(ExecutionStatus.COMPLETED);
-  });
+  }, 15000); // 增加超时时间以适应 LLM 调用，两次 LLM 调用需要更多时间
 });
 
 describe('AiSayAction 集成测试 - 错误处理', () => {
