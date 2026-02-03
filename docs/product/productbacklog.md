@@ -34,9 +34,15 @@
 
 **验收标准**:
 
-- [ ] 数据库Schema文档化,说明各表与四层脚本结构的映射关系
-- [ ] 所有脚本工程相关API均只依赖数据库模型,不再依赖磁盘目录结构作为唯一真相来源
-- [ ] 至少1个示例工程(如CBT焦虑评估)可以完全通过数据库脚本工程定义加载与执行
+- [x] 数据库Schema文档化,说明各表与四层脚本结构的映射关系
+- [x] 所有脚本工程相关API均只依赖数据库模型,不再依赖磁盘目录结构作为唯一真相来源
+- [x] 至少1个示例工程(如CBT焦虑评估)可以完全通过数据库脚本工程定义加载与执行
+
+**实现状态**: ✅ 已完成
+
+- 完整的Schema设计文档已生成(story-0.1-schema-semantic-unification.md)
+- projects/script_files/project_versions三表完整实现
+- 所有API路由(projects.ts, versions.ts)已按数据库模型实现
 
 **优先级**: P0 - 高  
 **依赖关系**: 依赖现有Schema基础(不引入新技术栈)
@@ -56,9 +62,16 @@
 
 **验收标准**:
 
-- [ ] 任意接口在没有显式指定项目ID时,不会泄露其他用户/项目的数据
-- [ ] 在同一数据库中创建多个项目(不同author/tenant标签),脚本/文件/会话查询均严格按项目过滤
-- [ ] 对Project/Script/Session任一资源做权限校验时,有统一的判定入口(可在API中实现)
+- [.] 任意接口在没有显式指定项目ID时,不会泄露其他用户/项目的数据
+- [.] 在同一数据库中创建多个项目(不同author/tenant标签),脚本/文件/会话查询均严格按项目过滤
+- [.] 对Project/Script/Session任一资源做权限校验时,有统一的判定入口(可在API中实现)
+
+**实现状态**: 🔶 部分完成
+
+- Schema层已支持author/tags/metadata字段
+- API层的projectId过滤已部分实现(sessions通过versionId与project关联)
+- RLS预留空间已设计,但实际RLS还未启用
+- 缺少统一的权限校验入口
 
 **优先级**: P0 - 高  
 **依赖关系**: 依赖Story 0.1的Schema语义统一
@@ -78,9 +91,16 @@
 
 **验收标准**:
 
-- [ ] 新建会话时能在数据库中看到正确的projectId和versionId绑定
-- [ ] 发布工程版本后,版本快照中包含完整的脚本工程结构
-- [ ] 版本发布后修改脚本,已存在的绑定会话行为不受影响,可通过测试脚本验证
+- [x] 新建会话时能在数据库中看到正确的projectId和versionId绑定
+- [x] 发布工程版本后,版本快照中包含完整的脚本工程结构
+- [x] 版本发布后修改脚本,已存在的绑定会话行为不受影响,可通过测试脚本验证
+
+**实现状态**: ✅ 已完成
+
+- sessions表新增versionId和versionSnapshot字段(迁移0002完成)
+- 会话创建时自动写入projectId到metadata(session-manager.ts第716-718行)
+- 版本发布时生成versionFiles快照(prepare-e2e-test.js演示)
+- E2E测试验证了版本快照机制(test-version-switch-sync.js)
 
 **优先级**: P0 - 高  
 **依赖关系**: 依赖Story 0.1(工程模型)与Story 0.2(项目隔离)
@@ -100,12 +120,72 @@
 
 **验收标准**:
 
-- [ ] 默认配置下,模板加载全部通过数据库脚本工程完成,不依赖磁盘模板文件
+- [.] 默认配置下,模板加载全部通过数据库脚本工程完成,不依赖磁盘模板文件
 - [ ] 至少一个完整会话流程(E2E测试)在无workspace模板目录情况下可以顺利执行
-- [ ] 对旧工程启用兼容模式时,模板加载行为与当前版本一致
+- [x] 对旧工程启用兼容模式时,模板加载行为与当前版本一致
+
+**实现状态**: 🔶 部分完成
+
+- DatabaseTemplateProvider已实现(database-template-provider.ts)
+- TemplateResolver支持两种模式(template-resolver.ts第77-112行)
+- TemplateManager支持DatabaseTemplateProvider注入(template-manager.ts第43-79行)
+- 缺少完整的E2E测试验证(无workspace情况下的端到端测试)
 
 **优先级**: P0 - 高  
 **依赖关系**: 依赖前述多用户脚本工程数据库模型(Story 0.1-0.3)
+
+---
+
+### Story 0.5: 移除磁盘同步机制与ProjectInitializer磁盘初始化
+
+**Story描述**: 当DatabaseTemplateProvider完全就位后,移除SessionManager中的syncTemplatesToDisk()临时方案、ProjectInitializer的磁盘目录创建逻辑、以及对PROJECTS_WORKSPACE的依赖,使系统完全基于数据库的脚本工程架构。
+
+**详细需求**:
+
+- 移除SessionManager.syncTemplatesToDisk()方法及其调用
+- 移除ProjectInitializer中的磁盘目录创建逻辑(\_system/config/default等物理目录)
+- 移除ProjectInitializer中的copySystemTemplates()方法(不再需要将磁盘模板复制到工程目录)
+- 修改ProjectInitializer.initializeProject()使其仅在数据库中记录工程元数据,不创建物理目录
+- 保留ProjectInitializer的"模板方案复制"逻辑升级为数据库复制:若用户指定templateScheme,直接从数据库复制对应模板文件
+- 更新import-disk-templates-to-db.ts脚本中对PROJECTS_WORKSPACE的引用文档,标注为"遗留迁移工具"
+- 移除或标记为弃用的workspace初始化代码
+
+**验收标准**:
+
+- [ ] SessionManager中不再有syncTemplatesToDisk()方法
+- [ ] ProjectInitializer不创建任何物理目录,仅执行数据库操作
+- [ ] 新工程创建时无需workspace目录即可正常运行
+- [ ] 完整会话流程(E2E)在无workspace情况下可执行
+- [ ] 所有相关单元测试和集成测试通过(不依赖磁盘目录)
+- [ ] 文档标注import-disk-templates-to-db.ts为"遗留迁移工具",说明其历史用途
+
+**实现状态**: ⏳ 待实现
+
+- syncTemplatesToDisk()仍存在于session-manager.ts(第649-693行),标注为"等TemplateResolver完全数据库化后移除"
+- ProjectInitializer仍创建物理目录
+- 依赖Story 0.4完全就位后才能启动
+
+**优先级**: P0 - 高  
+**预估工作量**: 8 Story Points  
+**依赖关系**: 严格依赖Story 0.4(DatabaseTemplateProvider必须充分就位且经过验证)
+
+**技术实现要点**:
+
+- SessionManager 移除文件系统操作,全量依赖数据库
+- ProjectInitializer 成为纯数据库操作的初始化服务
+- 所有物理目录创建逻辑转移到"首次导入迁移"阶段(import-disk-templates-to-db.ts)
+- 调整工程创建API流程:确保数据库中完整记录模板文件后再返回成功
+
+**关键风险**:
+
+- 若Story 0.4存在遗漏的DatabaseTemplateProvider边界情况,本Story实施时会暴露问题
+- 需确保数据库初始化脚本在首次导入模板文件时完成(reset-database.ts或迁移脚本须包含这一步)
+
+**后续清理**:
+
+- 完成本Story后可删除workspace目录结构(若部署时不再需要)
+- 更新.gitignore,移除对workspace的忽略规则
+- 更新README和部署文档,说明不再需要PROJECTS_WORKSPACE环境变量
 
 ---
 
@@ -129,11 +209,16 @@
 
 **验收标准**:
 
-- [ ] ai_ask能根据用户回复风格调整话术
+- [ ] ai_ask能根据用户回复风格调整話术
 - [ ] 开放式/选择式提问自动切换
-- [ ] 话术调整不改变提问的根本目标
-- [ ] debugInfo记录话术适配决策过程
+- [ ] 話术调整不改变提问的根本目标
+- [ ] debugInfo记录話术适配决策过程
 - [ ] 单元测试覆盖各种回复风格场景
+
+**实现状态**: ⚠️ 未实现
+
+- ai_ask的实现存在（ai-ask-action.ts）
+- 当前为基础执行，缺少动态話术适配能力
 
 **优先级**: P0 - 高  
 **预估工作量**: 5 Story Points  
@@ -168,10 +253,15 @@
 **验收标准**:
 
 - [ ] ai_say可读取用户画像变量
-- [ ] 同一内容对不同受众生成不同话术
+- [ ] 同一内容对不同受众生成不同話术
 - [ ] 青少年(<18岁)自动使用具体比喻
 - [ ] 高学历用户可使用专业术语
 - [ ] 调试面板显示适配决策依据
+
+**实现状态**: ⚠️ 未实现
+
+- ai_say的基础实现存在（ai-say-action.ts）
+- 缺少受众适配的动态调整能力
 
 **优先级**: P1 - 中  
 **预估工作量**: 5 Story Points  
@@ -192,11 +282,17 @@
 
 **验收标准**:
 
-- [ ] ai_ask/ai_say/ai_think都有默认模板
-- [ ] 默认模板包含角色定义、输出格式、安全规范
-- [ ] 脚本只写业务提示词即可运行
-- [ ] 支持两层模板方案机制(default + custom),可通过 session 节点的 `template_scheme` 字段指定使用的方案
+- [.] ai_ask/ai_say/ai_think都有默认模板
+- [.] 默认模板包含角色定义、输出格式、安全规范
+- [.] 脚本只写業务提示词即可运行
+- [.] 支持两层模板方案机制(default + custom),可通过 session 节点的 `template_scheme` 字段指定使用的方案
 - [ ] 单元测试覆盖模板渲染逻辑
+
+**实现状态**: 🔶 部分完成
+
+- ai_ask/ai_say/ai_think的默认模板已实现(config/prompts/目录)
+- TemplateResolver/TemplateManager支持两层模板配置(template-resolver.ts)
+- 缺少全面暄业务模板渲染的单元测试
 
 **优先级**: P0 - 高  
 **预估工作量**: 5 Story Points  
@@ -224,9 +320,14 @@
 - [ ] ActionResult新增metrics字段
 - [ ] ai_ask返回information_completeness和reply_relevance
 - [ ] ai_say返回user_engagement
-- [ ] 指标值合理(有LLM评估依据)
+- [ ] 指标值合理(LLM评估依据)
 - [ ] executionState.metadata可查询历史指标
 - [ ] Action层提供progress_suggestion建议
+
+**实现状态**: ⚠️ 未实现
+
+- ActionResult结构已经简化(没有metrics字段)
+- 缺少精细化指标计算能力
 
 **优先级**: P0 - 高  
 **预估工作量**: 8 Story Points  
@@ -1008,15 +1109,25 @@
 
 **验收标准**:
 
-- [ ] 完成Session/Phase/Topic/Action四层JSON Schema定义
-- [ ] 脚本编辑器支持实时Schema验证,编辑时显示错误提示
-- [ ] API上传接口集成Schema验证,返回详细错误信息
-- [ ] ScriptParser加载时自动验证,无效配置抛出明确异常
+- [x] 完Session/Phase/Topic/Action四层JSON Schema定义
+- [x] 脚本编辑器支持实Schema验证,编辑时显示错误提示
+- [x] API上传接口集成Schema验证,返回详细错误信息
+- [x] ScriptParser加载时自动验证,无效配置抛出明确异常
 - [ ] Schema约束可导出为LLM Prompt格式,用于AI生成
-- [ ] 错误信息包含字段路径、错误类型、修复建议
-- [ ] 验证覆盖所有核心字段和常见错误场景
-- [ ] 单元测试覆盖各层Schema验证逻辑
-- [ ] 文档说明Schema规范和验证机制
+- [x] 错误信息包含字段路径、错误类型、修复建议
+- [x] 验证覆盖所有核心字段和常见错误场景
+- [.] 单元测试覆盖各层Schema验证逻辑
+- [x] 文档说明Schema规范和验证机制
+
+**实现状态**: 🔶 部分完成
+
+- JSON Schema文件定义已应轨于cosure-engine/schemas/目录
+- SchemaValidator类汅了完整的验证体系(validators/schema-validator.ts)
+- 脚本编辑器已集成验证接口(script-editor/)
+- API上传路由已实现Schema验证(scripts.ts, projects.ts)
+- YAMLParser支持脚本一次性验证(yaml-parser.ts)
+- ErrorFormatter提供了友好的错误信息格式(error-formatter.ts)
+- 缺少：LLM Prompt格式的导出特性和单元测试覆盖
 
 **优先级**: P0 - 高  
 **预估工作量**: 13 Story Points  
@@ -1026,18 +1137,33 @@
 
 ## 实施路线图
 
-### Sprint 0 (1-2周) - 多用户脚本工程与数据库基础设施
+### Sprint 0 (2-3周) - 多用户脚本工程与数据库基础设施
 
-**目标**: 建立多用户脚本工程的数据库存储与隔离基础,为后续四层架构与调试能力提供统一的脚本仓库。
+**目标**: 建立多用户脚本工程的数据库存储与隔离基础,完全移除磁盘文件系统依赖,为后续四层架构与调试能力提供统一的数据库脚本仓库。
+
+**核心交付**(必须完成):
 
 - Story 0.1: 脚本工程数据库模型与目录语义统一 (P0)
-- Story 0.2: 多租户与项目隔离机制 (P0)
 - Story 0.3: 会话-版本绑定与脚本快照机制 (P0)
 - Story 0.4: TemplateProvider与PromptTemplateManager数据库优先模式 (P0)
 
-**交付物**: 支持多项目/多用户的脚本工程数据库存储,会话与项目/版本的正确绑定,模板数据库加载路径打通。
+**基础设施升级**(新增,确保MVP稳定性):
 
-**说明**: 作为平台级基础设施,在开始Action/Topic/Phase智能能力之前先完成,避免后续大规模重构。
+- Story 0.2: 多租户与项目隔离机制 (P0) - 简化版:仅API层过滤,不做RLS
+- Story 0.5: 移除磁盘同步机制与ProjectInitializer磁盘初始化 (P0) - **新增重构任务**
+
+**交付物**:
+
+- 支持多项目的脚本工程数据库存储,会话与项目/版本的正确绑定
+- 模板数据库加载路径完全就位,syncTemplatesToDisk()已移除
+- ProjectInitializer纯数据库化,无需workspace物理目录
+- 至少一个完整的CBT脚本可在无workspace情况下完全运行
+
+**说明**:
+
+- Story 0.5是Story 0.4的配套重构,确保MVP的"数据库脚本工程"架构完整性
+- Story 0.2简化为"字段与API过滤约定",RLS等平台能力延后Sprint 3+
+- 作为平台级基础设施,必须在开始Action/Topic/Phase智能能力之前完成,避免后续大规模重构
 
 ### Sprint 1 (2周) - Action层基础增强与验证体系
 
