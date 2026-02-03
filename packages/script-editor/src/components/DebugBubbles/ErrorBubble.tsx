@@ -33,6 +33,26 @@ const ErrorBubble: React.FC<ErrorBubbleProps> = ({
     }
   };
 
+  // 统一的错误内容处理函数：处理转义字符
+  const parseErrorText = (rawText: string): string => {
+    let displayText = rawText;
+
+    // 处理所有常见的转义序列
+    displayText = displayText.replace(/\\r\\n/g, '\n'); // 字面量 \\r\\n -> 换行
+    displayText = displayText.replace(/\\n/g, '\n'); // 字面量 \\n -> 换行
+    displayText = displayText.replace(/\\r/g, '\n'); // 字面量 \\r -> 换行
+    displayText = displayText.replace(/\\t/g, '\t'); // 字面量 \\t -> 制表符
+    displayText = displayText.replace(/\\"/g, '"'); // 字面量 \\\" -> 双引号
+    displayText = displayText.replace(/\\'/g, "'"); // 字面量 \\\' -> 单引号
+    displayText = displayText.replace(/\\\\/g, '\\'); // 字面量 \\\\\\ -> 反斜杠
+
+    // 统一处理真实的换行符（如果存在）
+    displayText = displayText.replace(/\r\n/g, '\n');
+    displayText = displayText.replace(/\r/g, '\n');
+
+    return displayText;
+  };
+
   const handleCopy = () => {
     const text = [
       `错误代码: ${content.code}`,
@@ -138,25 +158,27 @@ const ErrorBubble: React.FC<ErrorBubbleProps> = ({
                   wordBreak: 'break-word',
                 }}
               >
-                {content.details}
+                {parseErrorText(content.details)}
               </div>
             </div>
           )}
 
-          {content.recovery && content.recovery.suggestions && content.recovery.suggestions.length > 0 && (
-            <div style={{ marginBottom: '12px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>
-                修复建议:
+          {content.recovery &&
+            content.recovery.suggestions &&
+            content.recovery.suggestions.length > 0 && (
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>
+                  修复建议:
+                </div>
+                <ul style={{ margin: '4px 0', paddingLeft: '24px' }}>
+                  {content.recovery.suggestions.map((suggestion, index) => (
+                    <li key={index} style={{ fontSize: '13px', color: '#666' }}>
+                      {suggestion}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul style={{ margin: '4px 0', paddingLeft: '24px' }}>
-                {content.recovery.suggestions.map((suggestion, index) => (
-                  <li key={index} style={{ fontSize: '13px', color: '#666' }}>
-                    {suggestion}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            )}
 
           {content.stackTrace && (
             <div style={{ marginBottom: '12px' }}>
@@ -176,7 +198,7 @@ const ErrorBubble: React.FC<ErrorBubbleProps> = ({
                   overflow: 'auto',
                 }}
               >
-                {content.stackTrace}
+                {parseErrorText(content.stackTrace)}
               </div>
             </div>
           )}

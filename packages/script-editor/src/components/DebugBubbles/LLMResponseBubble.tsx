@@ -13,7 +13,7 @@ interface LLMResponseBubbleProps {
 
 /**
  * LLM 响应气泡组件
- * 
+ *
  * 显示 LLM 的原始响应内容（JSON 格式）
  * 紫色/深蓝色主题
  */
@@ -25,6 +25,26 @@ const LLMResponseBubble: React.FC<LLMResponseBubbleProps> = ({
   onToggleExpand,
 }) => {
   const [copySuccess, setCopySuccess] = useState(false);
+
+  // 统一的响应内容处理函数：处理转义字符
+  const parseResponseText = (rawText: string): string => {
+    let displayText = rawText;
+
+    // 处理所有常见的转义序列
+    displayText = displayText.replace(/\\r\\n/g, '\n'); // 字面量 \r\n -> 换行
+    displayText = displayText.replace(/\\n/g, '\n'); // 字面量 \n -> 换行
+    displayText = displayText.replace(/\\r/g, '\n'); // 字面量 \r -> 换行
+    displayText = displayText.replace(/\\t/g, '\t'); // 字面量 \t -> 制表符
+    displayText = displayText.replace(/\\"/g, '"'); // 字面量 \" -> 双引号
+    displayText = displayText.replace(/\\'/g, "'"); // 字面量 \' -> 单引号
+    displayText = displayText.replace(/\\\\/g, '\\'); // 字面量 \\\\ -> 反斜杠
+
+    // 统一处理真实的换行符（如果存在）
+    displayText = displayText.replace(/\r\n/g, '\n');
+    displayText = displayText.replace(/\r/g, '\n');
+
+    return displayText;
+  };
 
   // 格式化时间
   const formatTime = (isoString: string) => {
@@ -134,7 +154,7 @@ const LLMResponseBubble: React.FC<LLMResponseBubbleProps> = ({
                 wordBreak: 'break-word',
               }}
             >
-              {content.processedResponse}
+              {parseResponseText(content.processedResponse)}
             </div>
           </div>
 

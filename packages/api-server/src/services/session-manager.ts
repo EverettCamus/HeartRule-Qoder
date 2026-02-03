@@ -4,11 +4,14 @@
  * 集成脚本执行引擎，提供基于 YAML 脚本的会话管理
  */
 
+import fs from 'fs/promises';
+import path from 'path';
+
 import { ScriptExecutor, ExecutionStatus } from '@heartrule/core-engine';
 import type { ExecutionState } from '@heartrule/core-engine';
 import type { DetailedApiError } from '@heartrule/shared-types';
 import { VariableScope } from '@heartrule/shared-types';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
 
@@ -640,12 +643,64 @@ export class SessionManager {
   /**
    * 初始化会话 - 获取初始 AI 消息
    */
+  /**
+   * 同步模板文件到磁盘（临时方案，等 TemplateResolver 完全数据库化后移除）
+   */
+  private async syncTemplatesToDisk(projectId: string): Promise<void> {
+    console.log('[SessionManager] 💾 Syncing templates to disk for project:', projectId);
+
+    const workspacePath =
+      process.env.PROJECTS_WORKSPACE || path.resolve(process.cwd(), 'workspace', 'projects');
+    const projectPath = path.join(workspacePath, projectId);
+    const configPath = path.join(projectPath, '_system', 'config');
+
+    // 确保目录存在
+    await fs.mkdir(path.join(configPath, 'default'), { recursive: true });
+    await fs.mkdir(path.join(configPath, 'custom'), { recursive: true });
+
+    // 从数据库查询模板文件
+    const templateFiles = await db
+      .select()
+      .from(scriptFiles)
+      .where(and(eq(scriptFiles.projectId, projectId), eq(scriptFiles.fileType, 'template')));
+
+    console.log(`[SessionManager] Found ${templateFiles.length} template files in database`);
+
+    // 写入磁盘
+    for (const file of templateFiles) {
+      // filePath 格式：_system/config/default/ai_say_v1.md 或 _system/config/custom/tttt/ai_say_v1.md
+      if (!file.filePath) continue; // 跳过无路径的文件
+
+      const fullPath = path.join(projectPath, file.filePath);
+      const dirPath = path.dirname(fullPath);
+
+      await fs.mkdir(dirPath, { recursive: true });
+
+      // fileContent 可能是字符串或对象，确保转换为字符串
+      const content =
+        typeof file.fileContent === 'string'
+          ? file.fileContent
+          : JSON.stringify(file.fileContent, null, 2);
+
+      await fs.writeFile(fullPath, content, 'utf-8');
+
+      console.log(`[SessionManager] ✅ Synced: ${file.filePath}`);
+    }
+
+    console.log('[SessionManager] ✅ Template sync complete');
+  }
+
   async initializeSession(sessionId: string): Promise<SessionResponse> {
     console.log('[SessionManager] 🔵 initializeSession called', { sessionId });
 
     // 1. 加载会话和脚本数据
     const session = await this.loadSessionById(sessionId);
     const script = await this.loadScriptById(session.scriptId);
+
+    // 1.5 同步模板文件到磁盘（保证 TemplateResolver 能读取）
+    if (script.projectId) {
+      await this.syncTemplatesToDisk(script.projectId);
+    }
 
     try {
       // 2. 加载全局变量和对话历史

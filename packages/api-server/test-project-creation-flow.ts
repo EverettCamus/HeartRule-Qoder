@@ -10,7 +10,6 @@
 import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 

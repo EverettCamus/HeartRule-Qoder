@@ -31,10 +31,48 @@ const LLMPromptBubble: React.FC<LLMPromptBubbleProps> = ({
     }
   };
 
+  // 统一的 prompt 处理函数：提取 JSON 包装的 content 字段，并统一换行符
+  const parsePromptText = (rawText: string): string => {
+    let displayText = rawText;
+    try {
+      // 判断是否是 JSON 格式
+      const trimmed = displayText.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        const parsed = JSON.parse(trimmed);
+        if (parsed.content && typeof parsed.content === 'string') {
+          displayText = parsed.content;
+        }
+      }
+    } catch (e) {
+      // JSON 解析失败是正常现象（prompt 可能包含未转义的控制字符）
+      // 静默处理，使用原始内容
+    }
+
+    // 处理所有常见的转义序列
+    // 注意：JSON.parse 已经处理了一层转义，但如果是双重JSON序列化，这里需要再处理一次
+    displayText = displayText.replace(/\\r\\n/g, '\n'); // 字面量 \r\n -> 换行
+    displayText = displayText.replace(/\\n/g, '\n'); // 字面量 \n -> 换行
+    displayText = displayText.replace(/\\r/g, '\n'); // 字面量 \r -> 换行
+    displayText = displayText.replace(/\\t/g, '\t'); // 字面量 \t -> 制表符
+    displayText = displayText.replace(/\\"/g, '"'); // 字面量 \" -> 双引号
+    displayText = displayText.replace(/\\'/g, "'"); // 字面量 \' -> 单引号
+    displayText = displayText.replace(/\\\\/g, '\\'); // 字面量 \\\\ -> 反斜杠
+
+    // 统一处理真实的换行符（如果存在）
+    displayText = displayText.replace(/\r\n/g, '\n');
+    displayText = displayText.replace(/\r/g, '\n');
+
+    return displayText;
+  };
+
   const handleCopy = () => {
+    // 使用统一的处理函数
+    const processedSystemPrompt = content.systemPrompt ? parsePromptText(content.systemPrompt) : '';
+    const processedUserPrompt = parsePromptText(content.userPrompt);
+
     const text = [
-      content.systemPrompt ? `系统提示词:\n${content.systemPrompt}\n` : '',
-      `用户提示词:\n${content.userPrompt}\n`,
+      processedSystemPrompt ? `系统提示词:\n${processedSystemPrompt}\n` : '',
+      `用户提示词:\n${processedUserPrompt}\n`,
       content.conversationHistory && content.conversationHistory.length > 0
         ? `\n对话历史:\n${content.conversationHistory.map((h) => `${h.role}: ${h.content}`).join('\n')}`
         : '',
@@ -106,7 +144,7 @@ const LLMPromptBubble: React.FC<LLMPromptBubbleProps> = ({
                   overflow: 'auto',
                 }}
               >
-                {content.systemPrompt}
+                {parsePromptText(content.systemPrompt)}
               </div>
             </div>
           )}
@@ -127,7 +165,7 @@ const LLMPromptBubble: React.FC<LLMPromptBubbleProps> = ({
                 overflow: 'auto',
               }}
             >
-              {content.userPrompt}
+              {parsePromptText(content.userPrompt)}
             </div>
           </div>
 

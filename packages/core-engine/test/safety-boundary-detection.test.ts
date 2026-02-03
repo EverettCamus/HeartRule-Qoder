@@ -1,6 +1,6 @@
 /**
  * T6: 安全边界检测机制单元测试
- * 
+ *
  * 测试 BaseAction 中的新安全检测方法：
  * - parseStructuredOutput: 解析 JSON 输出
  * - confirmSafetyViolation: 二次 LLM 确认
@@ -8,14 +8,24 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { BaseAction } from '../src/actions/base-action.js';
-import type { ActionContext, ActionResult, StructuredActionOutput, SafetyConfirmationResult } from '../src/actions/base-action.js';
+import type {
+  ActionContext,
+  ActionResult,
+  StructuredActionOutput,
+  SafetyConfirmationResult,
+} from '../src/actions/base-action.js';
 
 // 创建测试用的 BaseAction 子类
 class TestAction extends BaseAction {
   static actionType = 'test';
 
   async execute(context: ActionContext, userInput?: string | null): Promise<ActionResult> {
+    // 使用参数以避免 TypeScript 未使用警告
+    if (context && userInput !== undefined) {
+      // 在测试中只需要确保参数被引用
+    }
     return {
       success: true,
       completed: true,
@@ -368,7 +378,7 @@ describe('T6: 安全边界检测机制', () => {
       });
 
       const parsed = testAction.testParseStructuredOutput(llmOutput);
-      
+
       expect(parsed.safety_risk.detected).toBe(false);
       expect(parsed.content).toContain('抑郁情绪');
       // 不需要二次确认，直接返回内容
@@ -389,7 +399,7 @@ describe('T6: 安全边界检测机制', () => {
       });
 
       const parsed = testAction.testParseStructuredOutput(llmOutput);
-      
+
       expect(parsed.safety_risk.detected).toBe(true);
       expect(parsed.safety_risk.confidence).toBe('medium');
       // 设计文档说明：medium/low 置信度记录警告但不阻断
