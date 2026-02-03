@@ -11,8 +11,6 @@ import { VariableScope } from '@heartrule/shared-types';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
-import path from 'path';
-import fs from 'fs/promises';
 
 import { db } from '../db/index.js';
 import {
@@ -630,54 +628,6 @@ export class SessionManager {
   }
 
   /**
-   * 同步模板文件到磁盘（临时方案，供执行器使用）
-   */
-  private async syncTemplatesToDisk(projectId: string): Promise<void> {
-    try {
-      // 查询该项目下的模板文件
-      const templateFiles = await db.query.scriptFiles.findMany({
-        where: (fields, { eq, and }) => and(
-          eq(fields.projectId, projectId),
-          eq(fields.fileType, 'template')
-        ),
-      });
-
-      if (templateFiles.length === 0) {
-        console.warn('[SessionManager] ⚠️  No template files found for project:', projectId);
-        return;
-      }
-
-      // 确定项目目录
-      const workspacePath = process.env.PROJECTS_WORKSPACE || path.resolve(process.cwd(), 'workspace', 'projects');
-      const projectPath = path.join(workspacePath, projectId);
-
-      console.log('[SessionManager] 📁 Syncing templates to disk:', {
-        projectId,
-        projectPath,
-        templateCount: templateFiles.length,
-      });
-
-      // 写入模板文件
-      for (const file of templateFiles) {
-        if (!file.filePath) continue;
-
-        const diskPath = path.join(projectPath, file.filePath);
-        const content = (file.fileContent as { content?: string })?.content || '';
-
-        // 创建目录
-        await fs.mkdir(path.dirname(diskPath), { recursive: true });
-
-        // 写入文件
-        await fs.writeFile(diskPath, content, 'utf-8');
-        console.log('[SessionManager]   ✅ Synced:', file.filePath);
-      }
-    } catch (error) {
-      console.error('[SessionManager] ❌ Failed to sync templates:', error);
-      // 不抛出错误，继续执行
-    }
-  }
-
-  /**
    * 初始化会话 - 获取初始 AI 消息
    */
   async initializeSession(sessionId: string): Promise<SessionResponse> {
@@ -688,21 +638,19 @@ export class SessionManager {
     const script = await this.loadScriptById(session.scriptId);
 
     try {
-      // 2. 同步模板文件到磁盘（临时方案）
-      if (script.projectId) {
-        await this.syncTemplatesToDisk(script.projectId);
-      }
-
-      // 3. 加载全局变量和对话历史
+      // 2. 加载全局变量和对话历史
       const globalVariables = await this.loadGlobalVariables(script.scriptName);
       const conversationHistory = await this.loadConversationHistory(sessionId);
 
-      // 4. 创建初始执行状态
+      // 3. 创建初始执行状态，将projectId传递给metadata
       let executionState = this.createInitialExecutionState(
         globalVariables,
         session.variables,
         conversationHistory,
-        session.metadata as Record<string, any> // 传递 session.metadata
+        {
+          ...(session.metadata as Record<string, any>),
+          projectId: script.projectId, // 传递projectId用于模板加载
+        }
       );
 
       // 5. 执行脚本

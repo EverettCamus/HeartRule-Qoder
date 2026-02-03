@@ -1,5 +1,4 @@
-import fs from 'fs/promises';
-import path from 'path';
+import type { TemplateProvider } from './template-provider.js';
 
 /**
  * 提示词模板定义
@@ -16,14 +15,22 @@ export interface PromptTemplate {
 /**
  * 提示词模板管理器
  * 负责加载提示词模板并进行两层变量替换
+ * 支持数据库和文件系统两种模板源
  */
 export class PromptTemplateManager {
   private templates: Map<string, PromptTemplate> = new Map();
-  private templateBasePath: string;
+  private templateBasePath?: string;
+  private projectId?: string;
+  private templateProvider?: TemplateProvider;
 
-  constructor(templateBasePath?: string) {
-    // 默认模板路径：config/prompts
-    this.templateBasePath = templateBasePath || path.join(process.cwd(), 'config', 'prompts');
+  constructor(templateBasePathOrProjectId?: string, templateProvider?: TemplateProvider) {
+    // 兼容旧版本：如果传入的是路径（包含 / 或 \），则作为templateBasePath
+    if (templateBasePathOrProjectId && (templateBasePathOrProjectId.includes('/') || templateBasePathOrProjectId.includes('\\'))) {
+      this.templateBasePath = templateBasePathOrProjectId;
+    } else {
+      this.projectId = templateBasePathOrProjectId;
+    }
+    this.templateProvider = templateProvider;
   }
 
   /**
@@ -38,7 +45,66 @@ export class PromptTemplateManager {
       return this.templates.get(templateId)!;
     }
 
-    const fullPath = path.join(this.templateBasePath, templatePath);
+    // 如果有 TemplateProvider，使用数据库模式
+    if (this.templateProvider && this.projectId) {
+      return await this.loadTemplateFromDatabase(templatePath, templateId);
+    }
+    
+    // 否则使用文件系统模式（兼容旧版本）
+    return await this.loadTemplateFromFilesystem(templatePath, templateId);
+  }
+
+  /**
+   * 从数据库加载模板
+   */
+  private async loadTemplateFromDatabase(templatePath: string, templateId: string): Promise<PromptTemplate> {
+    if (!this.templateProvider || !this.projectId) {
+      throw new Error('[TemplateManager] Template provider or project ID not configured');
+    }
+
+    try {
+      const templateData = await this.templateProvider.getTemplate(this.projectId, templatePath);
+      
+      if (!templateData) {
+        throw new Error(`Template not found in database: ${templatePath}`);
+      }
+
+      const content = templateData.content;
+      const variables = this.extractVariables(content);
+
+      // 开发模式下验证模板
+      if (process.env.NODE_ENV === 'development') {
+        const validation = this.validateTemplate(content, templatePath);
+        if (!validation.valid) {
+          console.error(`[TemplateManager] ❌ Template validation failed for ${templatePath}:`, validation.errors);
+        }
+        if (validation.warnings.length > 0) {
+          console.warn(`[TemplateManager] ⚠️ Template validation warnings for ${templatePath}:`, validation.warnings);
+        }
+      }
+
+      const template: PromptTemplate = {
+        templateId,
+        content,
+        variables,
+      };
+
+      // 缓存模板
+      this.templates.set(templateId, template);
+      return template;
+    } catch (error: any) {
+      throw new Error(`Failed to load template from database ${templatePath}: ${error.message}`);
+    }
+  }
+
+  /**
+   * 从文件系统加载模板（兼容旧版本）
+   */
+  private async loadTemplateFromFilesystem(templatePath: string, templateId: string): Promise<PromptTemplate> {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const basePath = this.templateBasePath || path.join(process.cwd(), 'config', 'prompts');
+    const fullPath = path.join(basePath, templatePath);
 
     try {
       const content = await fs.readFile(fullPath, 'utf-8');

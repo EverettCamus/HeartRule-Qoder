@@ -147,6 +147,12 @@ export * from './engines/variable-scope/variable-scope-resolver.js';
 // PromptTemplateManager: 提示词模板管理器，支持两层变量替换与模板组装
 export * from './engines/prompt-template/index.js';
 
+// TemplateProvider: 模板提供器接口，支持数据库和文件系统两种模板源
+export * from './engines/prompt-template/template-provider.js';
+
+// TemplateResolver: 模板路径解析器，支持两层方案机制
+export * from './engines/prompt-template/template-resolver.js';
+
 // MemoryEngine: 记忆引擎，管理长期/短期记忆的读写（待实现）
 export * from './engines/memory/index.js';
 

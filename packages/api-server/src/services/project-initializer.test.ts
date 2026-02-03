@@ -38,10 +38,12 @@ describe('ProjectInitializer', () => {
   });
 
   afterEach(async () => {
-    // 清理测试数据
     try {
       await fs.rm(TEST_WORKSPACE, { recursive: true, force: true });
-    } catch {}
+    } catch (error) {
+      // Ignore cleanup errors
+      console.log('Cleanup warning:', error);
+    }
   });
 
   describe('T12: 工程初始化基本功能', () => {

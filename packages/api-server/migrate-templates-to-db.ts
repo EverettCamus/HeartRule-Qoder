@@ -4,8 +4,6 @@
 
 import { sql } from 'drizzle-orm';
 import { db } from './src/db/index.js';
-import fs from 'fs/promises';
-import path from 'path';
 
 async function migrate() {
   console.log('🚀 开始数据库迁移...');
