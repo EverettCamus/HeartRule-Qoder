@@ -1,18 +1,21 @@
 /**
  * ProjectInitializer - 工程初始化服务
- * 
+ *
+ * Story 0.5: 完全数据库化架构
  * 负责在创建新工程时：
- * 1. 创建物理目录结构
- * 2. 复制系统默认模板
- * 3. 生成示例脚本（可选）
- * 4. 创建 project.json 配置文件
- * 
- * 参考设计文档：template-security-boundary-addition.md 第3.10节
+ * 1. 导入系统默认模板到数据库
+ * 2. 复制模板方案(若指定)
+ * 3. 生成示例脚本内容(不写磁盘)
  */
 
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+import { eq } from 'drizzle-orm';
+
+import { db } from '../db/index.js';
+import { scriptFiles, projects } from '../db/schema.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,7 +28,7 @@ export interface ProjectInitConfig {
   scenario?: string;
   language?: string;
   author?: string;
-  templateScheme?: string;  // 模板方案（可选）
+  templateScheme?: string; // 模板方案（可选）
 }
 
 export interface GeneratedScript {
@@ -41,13 +44,9 @@ export interface ProjectInitResult {
 }
 
 export class ProjectInitializer {
-  private workspacePath: string;
   private systemTemplatesPath: string;
 
-  constructor(workspacePath?: string, systemTemplatesPath?: string) {
-    // 默认工作区路径
-    this.workspacePath = workspacePath || path.join(process.cwd(), 'workspace', 'projects');
-    
+  constructor(systemTemplatesPath?: string) {
     // 系统模板路径
     if (systemTemplatesPath) {
       this.systemTemplatesPath = systemTemplatesPath;
@@ -59,49 +58,41 @@ export class ProjectInitializer {
   }
 
   /**
-   * 初始化新工程目录结构
+   * 初始化新工程 - 纯数据库操作
    */
   async initializeProject(config: ProjectInitConfig): Promise<ProjectInitResult> {
-    const projectPath = path.join(this.workspacePath, config.projectId);
-
-    console.log(`[ProjectInitializer] Initializing project at: ${projectPath}`);
+    console.log(`[ProjectInitializer] Initializing database-based project: ${config.projectId}`);
 
     try {
-      // 1. 创建工程根目录
-      await fs.mkdir(projectPath, { recursive: true });
+      // 1. 验证工程已创建
+      const project = await db.query.projects.findFirst({
+        where: eq(projects.id, config.projectId),
+      });
 
-      // 2. 创建基础目录结构
-      await this.createDirectoryStructure(projectPath);
-
-      // 3. 复制系统默认模板
-      await this.copySystemTemplates(projectPath);
-
-      // 4. 根据模板类型创建领域模板（如果需要）
-      if (config.template && config.template !== 'blank') {
-        await this.createDomainTemplates(projectPath, config);
+      if (!project) {
+        throw new Error(`Project not found: ${config.projectId}`);
       }
 
-      // 5. 如果指定了模板方案，复制到custom层
+      // 2. 导入默认模板到数据库
+      const templateCount = await this.importDefaultTemplates(config.projectId);
+      console.log(`[ProjectInitializer] ✅ Imported ${templateCount} default templates`);
+
+      // 3. 处理templateScheme(可选)
       if (config.templateScheme) {
-        await this.copyTemplateScheme(projectPath, config.templateScheme);
+        // 注意: 目前简化实现,仅记录日志
+        // 完整实现需要从系统工程或预设位置复制custom方案
+        console.log(
+          `[ProjectInitializer] ⚠️ Template scheme not yet implemented: ${config.templateScheme}`
+        );
       }
 
-      // 6. 生成示例脚本
-      const generatedScripts = await this.generateSampleScripts(projectPath, config);
+      // 4. 生成示例脚本内容(不写磁盘)
+      const generatedScripts = await this.generateSampleScriptsContent(config);
 
-      // 7. 创建 project.json 配置文件
-      await this.createProjectConfig(projectPath, config);
-
-      // 8. 创建 README.md
-      await this.createReadme(projectPath, config);
-
-      // 9. 创建 .gitignore
-      await this.createGitignore(projectPath);
-
-      console.log(`[ProjectInitializer] ✅ Project initialized successfully`);
+      console.log(`[ProjectInitializer] ✅ Project initialized successfully (database mode)`);
 
       return {
-        projectPath,
+        projectPath: `[DB]project/${config.projectId}`, // 虚拟路径标识
         generatedScripts,
       };
     } catch (error: any) {
@@ -111,131 +102,70 @@ export class ProjectInitializer {
   }
 
   /**
-   * 创建基础目录结构（两层方案机制）
+   * 从系统模板目录读取默认模板,导入到script_files表
    */
-  private async createDirectoryStructure(projectPath: string): Promise<void> {
-    const directories = [
-      '_system/config/default',  // 第1层：默认层
-      '_system/config/custom',   // 第2层：custom 层（空目录）
-      'scripts/examples',
-    ];
+  private async importDefaultTemplates(projectId: string): Promise<number> {
+    console.log(
+      `[ProjectInitializer] Importing default templates from: ${this.systemTemplatesPath}`
+    );
 
-    for (const dir of directories) {
-      const fullPath = path.join(projectPath, dir);
-      await fs.mkdir(fullPath, { recursive: true });
-      
-      // 在 custom 目录中创建 .gitkeep
-      if (dir.includes('custom')) {
-        await fs.writeFile(
-          path.join(fullPath, '.gitkeep'),
-          '# Custom 模板方案目录\n\n请在此目录下创建自定义模板方案。\n例如：custom/cbt_scheme/ai_ask_v1.md'
-        );
-      }
-    }
-  }
-
-  /**
-   * 复制系统默认模板（到 default 层）
-   */
-  private async copySystemTemplates(projectPath: string): Promise<void> {
-    const targetPath = path.join(projectPath, '_system/config/default');
-    
     try {
-      console.log(`[ProjectInitializer] Copying system templates from: ${this.systemTemplatesPath}`);
-      
       // 检查系统模板路径是否存在
       try {
         await fs.access(this.systemTemplatesPath);
       } catch {
-        console.warn(`[ProjectInitializer] ⚠️ System templates not found at: ${this.systemTemplatesPath}`);
-        console.warn('[ProjectInitializer] Creating empty default directory');
-        await fs.mkdir(targetPath, { recursive: true });
-        return;
+        console.warn(
+          `[ProjectInitializer] ⚠️ System templates not found at: ${this.systemTemplatesPath}`
+        );
+        console.warn('[ProjectInitializer] Skipping template import');
+        return 0;
       }
 
-      // 复制整个目录到 default 层
-      await this.copyDirectory(this.systemTemplatesPath, targetPath);
-      
-      // 添加只读标记文件
-      await fs.writeFile(
-        path.join(targetPath, '.readonly'),
-        '# 系统默认模板（Default 层）\n\n此目录包含系统默认模板，请勿直接修改。\n如需自定义，请在 custom/ 目录下创建新的模板方案。'
-      );
-      
-      console.log('[ProjectInitializer] ✅ System templates copied successfully to default layer');
+      // 读取模板目录
+      const entries = await fs.readdir(this.systemTemplatesPath, { withFileTypes: true });
+      let importedCount = 0;
+
+      for (const entry of entries) {
+        // 仅处理.md文件
+        if (!entry.isFile() || !entry.name.endsWith('.md')) {
+          continue;
+        }
+
+        try {
+          const filePath = path.join(this.systemTemplatesPath, entry.name);
+          const content = await fs.readFile(filePath, 'utf-8');
+          const virtualPath = `_system/config/default/${entry.name}`;
+
+          // 插入到数据库
+          await db.insert(scriptFiles).values({
+            projectId,
+            fileType: 'template',
+            fileName: entry.name,
+            filePath: virtualPath,
+            fileContent: { content },
+          });
+
+          console.log(`[ProjectInitializer]   ✅ Imported: ${entry.name}`);
+          importedCount++;
+        } catch (error: any) {
+          console.error(`[ProjectInitializer]   ❌ Failed to import ${entry.name}:`, error.message);
+          // 继续处理其他模板
+        }
+      }
+
+      return importedCount;
     } catch (error: any) {
-      console.error('[ProjectInitializer] ❌ Failed to copy system templates:', error);
+      console.error('[ProjectInitializer] ❌ Failed to import templates:', error);
       throw error;
     }
   }
 
   /**
-   * 递归复制目录
+   * 生成示例脚本内容,返回字符串而非写入磁盘
    */
-  private async copyDirectory(source: string, target: string): Promise<void> {
-    await fs.mkdir(target, { recursive: true });
-
-    const entries = await fs.readdir(source, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const sourcePath = path.join(source, entry.name);
-      const targetPath = path.join(target, entry.name);
-
-      if (entry.isDirectory()) {
-        await this.copyDirectory(sourcePath, targetPath);
-      } else {
-        await fs.copyFile(sourcePath, targetPath);
-      }
-    }
-  }
-
-  /**
-   * 创建领域模板（已废弃 - 两层方案不再支持领域模板）
-   */
-  private async createDomainTemplates(_projectPath: string, _config: ProjectInitConfig): Promise<void> {
-    // 两层方案不再需要领域模板，此方法保留仅为兼容
-    console.log(`[ProjectInitializer] Skipping domain templates (two-layer scheme)`);
-  }
-
-  /**
-   * 复制预设模板方案到custom层
-   */
-  private async copyTemplateScheme(projectPath: string, schemeName: string): Promise<void> {
-    try {
-      console.log(`[ProjectInitializer] Copying template scheme: ${schemeName}`);
-
-      // 构建源路径（从系统模板目录下的_system/config目录）
-      const projectRoot = path.resolve(__dirname, '../../..');
-      const systemConfigPath = path.join(projectRoot, '_system', 'config');
-      const sourcePath = path.join(systemConfigPath, 'custom', schemeName);
-
-      // 检查源模板方案是否存在
-      try {
-        await fs.access(sourcePath);
-      } catch {
-        console.warn(`[ProjectInitializer] ⚠️ Template scheme not found: ${schemeName}`);
-        console.warn('[ProjectInitializer] Skipping template scheme copy');
-        return;
-      }
-
-      // 构建目标路径（工程的custom层）
-      const targetPath = path.join(projectPath, '_system', 'config', 'custom', schemeName);
-
-      // 复制整个方案目录
-      await this.copyDirectory(sourcePath, targetPath);
-
-      console.log(`[ProjectInitializer] ✅ Template scheme copied: ${schemeName}`);
-    } catch (error: any) {
-      console.error('[ProjectInitializer] ❌ Failed to copy template scheme:', error);
-      // 不抛出异常，允许工程创建继续
-    }
-  }
-
-  /**
-   * 生成示例脚本
-   */
-  private async generateSampleScripts(projectPath: string, config: ProjectInitConfig): Promise<GeneratedScript[]> {
-    const scriptsPath = path.join(projectPath, 'scripts', 'examples');
+  private async generateSampleScriptsContent(
+    config: ProjectInitConfig
+  ): Promise<GeneratedScript[]> {
     const generatedScripts: GeneratedScript[] = [];
 
     // 空白工程：生成 hello-world.yaml
@@ -270,9 +200,6 @@ export class ProjectInitializer {
                 max_rounds: 3
 `;
 
-      const filePath = path.join(scriptsPath, 'hello-world.yaml');
-      await fs.writeFile(filePath, helloWorldScript);
-      
       generatedScripts.push({
         fileName: 'hello-world.yaml',
         fileType: 'session',
@@ -313,9 +240,6 @@ export class ProjectInitializer {
                 max_rounds: 1
 `;
 
-      const filePath = path.join(scriptsPath, 'cbt-assessment-demo.yaml');
-      await fs.writeFile(filePath, cbtScript);
-      
       generatedScripts.push({
         fileName: 'cbt-assessment-demo.yaml',
         fileType: 'session',
@@ -324,131 +248,7 @@ export class ProjectInitializer {
       });
     }
 
-    console.log('[ProjectInitializer] ✅ Sample scripts generated');
+    console.log('[ProjectInitializer] ✅ Sample scripts content generated');
     return generatedScripts;
-  }
-
-  /**
-   * 创建 project.json 配置文件
-   */
-  private async createProjectConfig(projectPath: string, config: ProjectInitConfig): Promise<void> {
-    const projectConfig = {
-      projectId: config.projectId,
-      name: config.projectName,
-      version: '1.0.0',
-      description: '',
-      domain: config.domain || undefined,
-      scenario: config.scenario || undefined,
-      language: config.language || 'zh-CN',
-      templateVersion: '1.0.0',
-      systemTemplateVersion: '1.2.0',
-      createdAt: new Date().toISOString(),
-      metadata: {
-        author: config.author || '',
-        organization: '',
-        tags: [],
-      },
-      dependencies: {
-        '@心流引擎/core-engine': '^2.0.0',
-      },
-    };
-
-    await fs.writeFile(
-      path.join(projectPath, 'project.json'),
-      JSON.stringify(projectConfig, null, 2)
-    );
-
-    console.log('[ProjectInitializer] ✅ project.json created');
-  }
-
-  /**
-   * 创建 README.md
-   */
-  private async createReadme(projectPath: string, config: ProjectInitConfig): Promise<void> {
-    const readme = `# ${config.projectName}
-
-## 工程说明
-
-此工程使用心流引擎创建，用于开发和管理咨询脚本。
-
-## 目录结构
-
-- \`_system/config/\` - 模板方案配置目录
-  - \`default/\` - 系统默认模板（只读）
-  - \`custom/\` - 自定义模板方案
-- \`scripts/\` - 咨询脚本目录
-  - \`examples/\` - 示例脚本
-
-## 开始使用
-
-1. 在 \`scripts/\` 目录中编辑或创建咨询脚本
-2. 使用心流引擎编辑器进行可视化编辑
-3. 运行和测试您的咨询脚本
-
-## 模板系统（两层方案机制）
-
-本工程采用两层模板方案机制：
-
-1. **Default 层** (\`_system/config/default/\`) - 系统默认模板，只读，由引擎提供
-2. **Custom 层** (\`_system/config/custom/\`) - 自定义模板方案，用户可编辑
-
-### 使用示例
-
-在脚本中指定模板方案：
-
-\`\`\`yaml
-actions:
-  - action_id: ask1
-    action_type: ai_ask
-    template_scheme: custom/cbt_scheme  # 使用自定义方案
-    template: ai_ask_v1
-\`\`\`
-
-引擎将按照以下顺序查找模板：
-1. \`_system/config/custom/cbt_scheme/ai_ask_v1.md\` (自定义层)
-2. \`_system/config/default/ai_ask_v1.md\` (默认层，回退)
-
-详细文档请参考：[模板系统使用指南](https://docs.heartrule.com/templates)
-`;
-
-    await fs.writeFile(path.join(projectPath, 'README.md'), readme);
-    console.log('[ProjectInitializer] ✅ README.md created');
-  }
-
-  /**
-   * 创建 .gitignore
-   */
-  private async createGitignore(projectPath: string): Promise<void> {
-    const gitignore = `# Node modules
-node_modules/
-
-# Environment variables
-.env
-.env.local
-
-# Build outputs
-dist/
-build/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-`;
-
-    await fs.writeFile(path.join(projectPath, '.gitignore'), gitignore);
-    console.log('[ProjectInitializer] ✅ .gitignore created');
-  }
-
-  /**
-   * 获取工程路径
-   */
-  getProjectPath(projectId: string): string {
-    return path.join(this.workspacePath, projectId);
   }
 }

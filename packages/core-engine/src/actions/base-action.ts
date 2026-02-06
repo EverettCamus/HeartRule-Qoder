@@ -84,7 +84,7 @@ export interface ActionResult {
 
 /**
  * 结构化 Action 输出（新安全机制）
- * 
+ *
  * 所有咨询 Action（ai_ask, ai_say）的统一 JSON 输出格式
  * 包含安全风险检测字段和元数据
  */
@@ -104,7 +104,7 @@ export interface StructuredActionOutput {
 
 /**
  * 安全违规二次确认结果
- * 
+ *
  * 当主 LLM 检测到潜在安全风险时，二次 LLM 确认的返回结果
  */
 export interface SafetyConfirmationResult {
@@ -270,15 +270,14 @@ export abstract class BaseAction {
   protected resolveProjectRoot(context?: ActionContext): string {
     // 从 context.metadata 中读取 projectId
     const projectId = context?.metadata?.projectId;
-    
+
     if (projectId) {
-      // 如果有 projectId，使用项目工作区路径
-      const workspacePath = process.env.PROJECTS_WORKSPACE || path.resolve(process.cwd(), 'workspace', 'projects');
-      const projectPath = path.join(workspacePath, projectId);
-      console.log(`[BaseAction] 📁 Using project path: ${projectPath}`);
-      return projectPath;
+      // 数据库模式,不需要物理路径
+      // TemplateResolver在接收到空字符串时,完全依赖DatabaseTemplateProvider
+      console.log(`[BaseAction] 💾 Using database mode for project: ${projectId}`);
+      return '';
     }
-    
+
     // 如果没有 projectId，回退到默认行为（monorepo 结构）
     const cwd = process.cwd();
     // 检测运行目录：适配 monorepo 结构
@@ -561,13 +560,13 @@ export abstract class BaseAction {
 
   /**
    * 安全边界检测（已弃用，保留用于向后兼容）
-   * 
+   *
    * @deprecated 使用新的基于 LLM 的安全边界检测机制（parseStructuredOutput + confirmSafetyViolation）
    * 对 AI 生成的消息进行关键词扫描，检测潜在的安全边界违反。
    * 这是事后检测机制，作为 LLM 指令跟随的兜底手段。
-   * 
+   *
    * 注意：关键词检测有误报风险，仅作辅助手段，不直接阻断 Action 执行。
-   * 
+   *
    * @param aiMessage AI 生成的消息
    * @returns 安全检查结果
    */
@@ -644,7 +643,10 @@ export abstract class BaseAction {
     }
 
     // 危机信号检测（通过 crisis_detected 字段，由 LLM 输出）
-    if (aiMessage.includes('crisis_detected: true') || aiMessage.includes('"crisis_detected":true')) {
+    if (
+      aiMessage.includes('crisis_detected: true') ||
+      aiMessage.includes('"crisis_detected":true')
+    ) {
       violations.push({
         category: 'crisis',
         matched_pattern: 'crisis_detected flag',
@@ -660,19 +662,19 @@ export abstract class BaseAction {
 
   /**
    * 解析 LLM 输出的结构化 JSON（新安全机制）
-   * 
+   *
    * 从 LLM 输出的 JSON 中提取安全风险检测字段。
    * 支持清理 Markdown 代码块标记。
-   * 
+   *
    * @param aiMessage LLM 返回的原始文本（可能包含 ```json 标记）
    * @returns 结构化输出对象
    */
   protected parseStructuredOutput(aiMessage: string): StructuredActionOutput {
     const jsonText = this.cleanJsonOutput(aiMessage);
-    
+
     try {
       const parsed = JSON.parse(jsonText);
-      
+
       // 兼容性处理：确保所有必需字段存在
       return {
         content: parsed.content || '',
@@ -690,7 +692,7 @@ export abstract class BaseAction {
     } catch (error: any) {
       console.error('[BaseAction] ❌ Failed to parse structured output:', error.message);
       console.error('[BaseAction] Raw text:', aiMessage);
-      
+
       // 兜底：返回安全的默认值
       return {
         content: aiMessage, // 直接使用原始文本
@@ -709,10 +711,10 @@ export abstract class BaseAction {
 
   /**
    * 二次 LLM 确认安全违规
-   * 
+   *
    * 当主 LLM 检测到潜在安全风险时，启动第二次 LLM 调用进行确认。
    * 这个方法需要 LLMOrchestrator 实例，由子类注入。
-   * 
+   *
    * @param originalResponse 原始回复内容
    * @param riskType 风险类型
    * @param reason 初步检测原因
@@ -789,7 +791,7 @@ ${originalResponse}
       };
     } catch (error: any) {
       console.error('[BaseAction] ❌ Safety confirmation failed:', error.message);
-      
+
       // 确认失败，保守策略：确认违规
       return {
         violation_confirmed: true,
@@ -802,9 +804,9 @@ ${originalResponse}
 
   /**
    * 生成安全兜底回复
-   * 
+   *
    * 当确认违反安全边界时，使用预定义的安全回复替代原始内容。
-   * 
+   *
    * @returns 安全兜底回复文本
    */
   protected generateSafeFallbackResponse(): string {

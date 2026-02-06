@@ -1,5 +1,5 @@
-import path from 'path';
 import fs from 'fs/promises';
+import path from 'path';
 
 import { eq, and, desc, like, or, ne, SQL } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
@@ -190,18 +190,18 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
 
       // 初始化默认模板到数据库
       try {
-        const projectRoot = path.resolve(process.cwd(), '../..');
-        const systemTemplatesPath = path.join(projectRoot, '_system', 'config', 'default');
-        
+        // 🔧 修复：使用绝对路径定位系统模板目录
+        const systemTemplatesPath = path.resolve(__dirname, '../../../../_system/config/default');
+
         const templateFiles = await fs.readdir(systemTemplatesPath);
-        
+
         for (const fileName of templateFiles) {
           if (!fileName.endsWith('.md')) continue;
-          
+
           const filePath = path.join(systemTemplatesPath, fileName);
           const content = await fs.readFile(filePath, 'utf-8');
           const virtualPath = `_system/config/default/${fileName}`;
-          
+
           await db.insert(scriptFiles).values({
             projectId: newProject.id,
             fileType: 'template',
@@ -209,7 +209,7 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
             filePath: virtualPath,
             fileContent: { content },
           });
-          
+
           console.log(`[API]   ✅ Imported template: ${fileName}`);
         }
       } catch (templateError: any) {
@@ -218,10 +218,8 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
 
       // 初始化工程目录结构和模板文件
       try {
-        // 使用绝对路径，默认为api-server包下的workspace/projects
-        const workspacePath =
-          process.env.PROJECTS_WORKSPACE || path.resolve(process.cwd(), 'workspace', 'projects');
-        const initializer = new ProjectInitializer(workspacePath);
+        // 不再需要workspacePath参数
+        const initializer = new ProjectInitializer();
 
         const initResult = await initializer.initializeProject({
           projectId: newProject.id,
@@ -651,11 +649,26 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         yamlContent?: string;
       };
 
+      // 🚨 关键修复：确保fileContent格式统一为{content: "..."}
+      let normalizedFileContent = fileContent;
+      if (fileContent && yamlContent) {
+        // 如果同时提供了yamlContent，将fileContent包装为{content: yamlContent}
+        normalizedFileContent = { content: yamlContent };
+        console.log(
+          `[PUT /projects/${id}/files/${fileId}] 🔧 Normalizing fileContent with yamlContent`
+        );
+      } else if (fileContent && typeof fileContent === 'object' && !fileContent.content) {
+        // 如果fileContent是对象但没有content字段，保持原样（可能是template）
+        console.log(
+          `[PUT /projects/${id}/files/${fileId}] ℹ️ fileContent is object without 'content' field, keeping as-is`
+        );
+      }
+
       const [updated] = await db
         .update(scriptFiles)
         .set({
           ...(fileName && { fileName }),
-          ...(fileContent && { fileContent }),
+          ...(normalizedFileContent && { fileContent: normalizedFileContent }),
           ...(yamlContent !== undefined && { yamlContent }),
           updatedAt: new Date(),
         })
@@ -723,17 +736,16 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // 查询模板文件，提取唯一的 filePath 层级
-      const templateFiles = await db.select()
+      const templateFiles = await db
+        .select()
         .from(scriptFiles)
-        .where(
-          and(
-            eq(scriptFiles.projectId, id),
-            eq(scriptFiles.fileType, 'template')
-          )
-        );
+        .where(and(eq(scriptFiles.projectId, id), eq(scriptFiles.fileType, 'template')));
 
       // 解析 filePath 提取方案名
-      const schemeMap = new Map<string, { name: string; description: string; isDefault: boolean }>();
+      const schemeMap = new Map<
+        string,
+        { name: string; description: string; isDefault: boolean }
+      >();
 
       for (const file of templateFiles) {
         if (!file.filePath) continue;
@@ -780,11 +792,13 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(404).send({ success: false, error: 'Project not found' });
       }
 
-      const pathPattern = schemeName === 'default'
-        ? '_system/config/default/%'
-        : `_system/config/custom/${schemeName}/%`;
+      const pathPattern =
+        schemeName === 'default'
+          ? '_system/config/default/%'
+          : `_system/config/custom/${schemeName}/%`;
 
-      const templateFiles = await db.select()
+      const templateFiles = await db
+        .select()
         .from(scriptFiles)
         .where(
           and(
@@ -794,7 +808,7 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
           )
         );
 
-      const files = templateFiles.map(file => ({
+      const files = templateFiles.map((file) => ({
         name: path.basename(file.filePath!),
         path: file.filePath!,
       }));
@@ -815,18 +829,24 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
   // 获取模板内容
   fastify.get('/projects/:id/templates/:schemeName/:templatePath', async (request, reply) => {
     try {
-      const { id, schemeName, templatePath } = request.params as { id: string; schemeName: string; templatePath: string };
+      const { id, schemeName, templatePath } = request.params as {
+        id: string;
+        schemeName: string;
+        templatePath: string;
+      };
 
       const [project] = await db.select().from(projects).where(eq(projects.id, id));
       if (!project) {
         return reply.status(404).send({ success: false, error: 'Project not found' });
       }
 
-      const filePath = schemeName === 'default'
-        ? `_system/config/default/${templatePath}`
-        : `_system/config/custom/${schemeName}/${templatePath}`;
+      const filePath =
+        schemeName === 'default'
+          ? `_system/config/default/${templatePath}`
+          : `_system/config/custom/${schemeName}/${templatePath}`;
 
-      const [templateFile] = await db.select()
+      const [templateFile] = await db
+        .select()
         .from(scriptFiles)
         .where(
           and(
@@ -860,7 +880,11 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
   // 更新模板内容
   fastify.put('/projects/:id/templates/:schemeName/:templatePath', async (request, reply) => {
     try {
-      const { id, schemeName, templatePath } = request.params as { id: string; schemeName: string; templatePath: string };
+      const { id, schemeName, templatePath } = request.params as {
+        id: string;
+        schemeName: string;
+        templatePath: string;
+      };
       const { content } = request.body as { content: string };
 
       const [project] = await db.select().from(projects).where(eq(projects.id, id));
@@ -868,11 +892,13 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(404).send({ success: false, error: 'Project not found' });
       }
 
-      const filePath = schemeName === 'default'
-        ? `_system/config/default/${templatePath}`
-        : `_system/config/custom/${schemeName}/${templatePath}`;
+      const filePath =
+        schemeName === 'default'
+          ? `_system/config/default/${templatePath}`
+          : `_system/config/custom/${schemeName}/${templatePath}`;
 
-      const [templateFile] = await db.select()
+      let [templateFile] = await db
+        .select()
         .from(scriptFiles)
         .where(
           and(
@@ -883,11 +909,55 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         )
         .limit(1);
 
+      // 🚨 关键修复：如果模板不存在，尝试从系统模板目录创建
       if (!templateFile) {
-        return reply.status(404).send({ success: false, error: 'Template not found' });
+        console.log(`[PUT Template] Template not found in DB, attempting to create: ${filePath}`);
+
+        try {
+          // 从系统模板目录读取默认内容作为初始化内容
+          const systemTemplatesPath = path.resolve(__dirname, '../../../../_system/config/default');
+          const systemFilePath = path.join(systemTemplatesPath, templatePath);
+
+          let initialContent = content; // 使用请求中的content作为初始内容
+
+          // 如果系统默认模板存在，优先使用它作为初始化
+          if (schemeName !== 'default') {
+            try {
+              const defaultContent = await fs.readFile(systemFilePath, 'utf-8');
+              initialContent = defaultContent;
+              console.log(
+                `[PUT Template] Using default template as initial content (${defaultContent.length} chars)`
+              );
+            } catch {
+              console.log(`[PUT Template] No default template found, using provided content`);
+            }
+          }
+
+          // 创建新模板记录
+          const [newTemplate] = await db
+            .insert(scriptFiles)
+            .values({
+              projectId: id,
+              fileType: 'template',
+              fileName: templatePath,
+              filePath: filePath,
+              fileContent: { content: initialContent },
+            })
+            .returning();
+
+          console.log(`[PUT Template] ✅ Created template: ${filePath}`);
+          templateFile = newTemplate;
+        } catch (createError: any) {
+          console.error(`[PUT Template] Failed to create template:`, createError);
+          return reply.status(500).send({
+            success: false,
+            error: `Failed to create template: ${createError.message}`,
+          });
+        }
       }
 
-      await db.update(scriptFiles)
+      await db
+        .update(scriptFiles)
         .set({
           fileContent: { content },
           updatedAt: new Date(),
@@ -925,10 +995,13 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       if (name === 'default') {
-        return reply.status(400).send({ success: false, error: 'Cannot use reserved name "default"' });
+        return reply
+          .status(400)
+          .send({ success: false, error: 'Cannot use reserved name "default"' });
       }
 
-      const existingFiles = await db.select()
+      const existingFiles = await db
+        .select()
         .from(scriptFiles)
         .where(
           and(
@@ -943,11 +1016,11 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ success: false, error: `Scheme "${name}" already exists` });
       }
 
-      const sourcePathPattern = copyFrom === 'default'
-        ? '_system/config/default/%'
-        : `_system/config/custom/${copyFrom}/%`;
+      const sourcePathPattern =
+        copyFrom === 'default' ? '_system/config/default/%' : `_system/config/custom/${copyFrom}/%`;
 
-      const sourceFiles = await db.select()
+      const sourceFiles = await db
+        .select()
         .from(scriptFiles)
         .where(
           and(
@@ -958,7 +1031,9 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         );
 
       if (sourceFiles.length === 0) {
-        return reply.status(404).send({ success: false, error: `Source scheme "${copyFrom}" not found` });
+        return reply
+          .status(404)
+          .send({ success: false, error: `Source scheme "${copyFrom}" not found` });
       }
 
       for (const sourceFile of sourceFiles) {

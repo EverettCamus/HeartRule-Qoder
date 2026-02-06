@@ -73,6 +73,14 @@ export class AiSayAction extends BaseAction {
 
   constructor(actionId: string, config: Record<string, any>, llmOrchestrator?: LLMOrchestrator) {
     super(actionId, config);
+    console.log(`[AiSayAction] 🏭 Constructor called:`, {
+      actionId,
+      configKeys: Object.keys(config || {}),
+      hasMaxRounds: 'max_rounds' in (config || {}),
+      maxRoundsValue: config?.max_rounds,
+      hasExitCriteria: 'exit_criteria' in (config || {}),
+      hasLlmOrchestrator: !!llmOrchestrator,
+    });
     this.llmOrchestrator = llmOrchestrator;
 
     const templateBasePath = this.resolveTemplatePath();
@@ -376,6 +384,8 @@ export class AiSayAction extends BaseAction {
     // 💉 如果 TemplateManager 未初始化 provider，重新初始化
     if (projectId && templateProvider && !this.templateManager['templateProvider']) {
       console.log('[AiSayAction] 💉 Re-initializing TemplateManager with projectId and provider');
+      // 🚨 关键修复：清除旧缓存，避免 custom/default 模板缓存冲突
+      this.templateManager.clearCache();
       this.templateManager = new PromptTemplateManager(projectId, templateProvider);
     }
 

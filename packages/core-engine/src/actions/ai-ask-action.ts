@@ -328,6 +328,8 @@ export class AiAskAction extends BaseAction {
     // 💉 如果 TemplateManager 未初始化 provider，重新初始化
     if (projectId && templateProvider && !this.templateManager['templateProvider']) {
       console.log('[AiAskAction] 💉 Re-initializing TemplateManager with projectId and provider');
+      // 🚨 关键修复：清除旧缓存，避免 custom/default 模板缓存冲突
+      this.templateManager.clearCache();
       this.templateManager = new PromptTemplateManager(projectId, templateProvider);
     }
 
