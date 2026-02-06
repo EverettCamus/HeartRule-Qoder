@@ -9,11 +9,9 @@
 
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import * as fs from 'fs';
-import * as path from 'path';
 
 import { db, closeConnection } from './src/db/index.js';
-import { sessions, messages, scripts, projects, scriptFiles } from './src/db/schema.js';
+import { sessions, scripts, projects, scriptFiles } from './src/db/schema.js';
 import { SessionManager } from './src/services/session-manager.js';
 
 /**
