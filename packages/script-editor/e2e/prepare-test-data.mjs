@@ -9,7 +9,7 @@
  * 5. 发布版本 v2.0.0
  */
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'http://localhost:3000/api';
 
 async function request(method, url, body) {
   const options = {
@@ -71,9 +71,11 @@ async function prepareE2EData() {
                   actions: [
                     {
                       action_id: 'action_1',
-                      action_name: 'Action 1',
                       action_type: 'ai_say',
-                      config: { content: 'Hello V1' }
+                      config: {
+                        content: 'Hello V1',
+                        max_rounds: 1
+                      }
                     }
                   ]
                 }
@@ -112,16 +114,33 @@ async function prepareE2EData() {
                   actions: [
                     {
                       action_id: 'action_1',
-                      action_name: 'Action 1',
                       action_type: 'ai_say',
-                      config: { content: 'Hello V2' }
+                      config: {
+                        content: 'Hello V2',
+                        max_rounds: 1
+                      }
                     }
                   ]
                 },
                 {
                   topic_id: 'topic_2',
                   topic_name: 'Topic 2 New',
-                  actions: []
+                  actions: [
+                    {
+                      action_id: 'action_2',
+                      action_type: 'ai_ask',
+                      config: {
+                        content: '请问您的名字？',
+                        output: [
+                          {
+                            get: 'user_name',
+                            define: '提取用户姓名'
+                          }
+                        ],
+                        max_rounds: 3
+                      }
+                    }
+                  ]
                 }
               ]
             },

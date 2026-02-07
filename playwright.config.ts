@@ -34,8 +34,8 @@ export default defineConfig({
 
   /* 全局配置 */
   use: {
-    /* 基准URL - 指向本地开发服务器 */
-    baseURL: 'http://localhost:3000',
+    /* 基准URL - 指向前端编辑器服务器 */
+    baseURL: 'http://localhost:8081',
 
     /* 失败时截图 */
     screenshot: 'only-on-failure',

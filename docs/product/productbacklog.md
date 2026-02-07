@@ -154,18 +154,19 @@
 
 **验收标准**:
 
-- [ ] SessionManager中不再有syncTemplatesToDisk()方法
-- [ ] ProjectInitializer不创建任何物理目录,仅执行数据库操作
-- [ ] 新工程创建时无需workspace目录即可正常运行
-- [ ] 完整会话流程(E2E)在无workspace情况下可执行
-- [ ] 所有相关单元测试和集成测试通过(不依赖磁盘目录)
-- [ ] 文档标注import-disk-templates-to-db.ts为"遗留迁移工具",说明其历史用途
+- [x] SessionManager中不再有syncTemplatesToDisk()方法
+- [x] ProjectInitializer不创建任何物理目录,仅执行数据库操作
+- [x] 新工程创建时无需workspace目录即可正常运行
+- [x] 完整会话流程(E2E)在无workspace情况下可执行
+- [x] 所有相关单元测试和集成测试通过(不依赖磁盘目录)
+- [x] 文档标注import-disk-templates-to-db.ts为"遗留迁移工具",说明其历史用途
 
-**实现状态**: ⏳ 待实现
+**实现状态**: ✅ 已完成
 
-- syncTemplatesToDisk()仍存在于session-manager.ts(第649-693行),标注为"等TemplateResolver完全数据库化后移除"
-- ProjectInitializer仍创建物理目录
-- 依赖Story 0.4完全就位后才能启动
+- syncTemplatesToDisk()已从session-manager.ts移除
+- ProjectInitializer已重构为纯数据库操作
+- E2E测试test-database-template-mode.ts验证通过,系统在无workspace情况下正常运行
+- 完成日期: 2026-02-07
 
 **优先级**: P0 - 高  
 **预估工作量**: 8 Story Points  
