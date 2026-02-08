@@ -110,19 +110,27 @@ export class ProjectInitializer {
     );
 
     try {
+      // 默认模板路径：_system/config/default/
+      const defaultTemplatePath = path.join(
+        this.systemTemplatesPath,
+        '_system',
+        'config',
+        'default'
+      );
+
       // 检查系统模板路径是否存在
       try {
-        await fs.access(this.systemTemplatesPath);
+        await fs.access(defaultTemplatePath);
       } catch {
         console.warn(
-          `[ProjectInitializer] ⚠️ System templates not found at: ${this.systemTemplatesPath}`
+          `[ProjectInitializer] ⚠️ System templates not found at: ${defaultTemplatePath}`
         );
         console.warn('[ProjectInitializer] Skipping template import');
         return 0;
       }
 
       // 读取模板目录
-      const entries = await fs.readdir(this.systemTemplatesPath, { withFileTypes: true });
+      const entries = await fs.readdir(defaultTemplatePath, { withFileTypes: true });
       let importedCount = 0;
 
       for (const entry of entries) {
@@ -132,7 +140,7 @@ export class ProjectInitializer {
         }
 
         try {
-          const filePath = path.join(this.systemTemplatesPath, entry.name);
+          const filePath = path.join(defaultTemplatePath, entry.name);
           const content = await fs.readFile(filePath, 'utf-8');
           const virtualPath = `_system/config/default/${entry.name}`;
 

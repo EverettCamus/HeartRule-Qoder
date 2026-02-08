@@ -1,0 +1,121 @@
+{
+  "timestamp": "2026-02-08T04:09:57.881Z",
+  "dryRun": false,
+  "deletedFiles": [
+    "C:\\CBT\\HeartRule-Qcoder\\config\\prompts\\_system\\config\\default\\ai_ask_v1.md",
+    "C:\\CBT\\HeartRule-Qcoder\\config\\prompts\\_system\\config\\default\\ai_say_v1.md"
+  ],
+  "failedFiles": [],
+  "report": {
+    "totalScanned": 9,
+    "canDelete": [
+      {
+        "projectId": "8488225c-f710-4929-a97b-1b163b5385ff",
+        "projectName": "test111",
+        "filePath": "_system/config/default/ai_ask_v1.md",
+        "fileName": "ai_ask_v1.md",
+        "existsInDb": true,
+        "existsOnDisk": true,
+        "diskPath": "C:\\CBT\\HeartRule-Qcoder\\config\\prompts\\_system\\config\\default\\ai_ask_v1.md",
+        "canDelete": true,
+        "reason": "已在数据库中（项目: test111），系统将优先从数据库加载"
+      },
+      {
+        "projectId": "8488225c-f710-4929-a97b-1b163b5385ff",
+        "projectName": "test111",
+        "filePath": "_system/config/default/ai_say_v1.md",
+        "fileName": "ai_say_v1.md",
+        "existsInDb": true,
+        "existsOnDisk": true,
+        "diskPath": "C:\\CBT\\HeartRule-Qcoder\\config\\prompts\\_system\\config\\default\\ai_say_v1.md",
+        "canDelete": true,
+        "reason": "已在数据库中（项目: test111），系统将优先从数据库加载"
+      }
+    ],
+    "mustKeep": [
+      {
+        "projectId": "N/A",
+        "projectName": "N/A",
+        "filePath": "ai-ask/mainline-ask-template.md",
+        "fileName": "mainline-ask-template.md",
+        "existsInDb": false,
+        "existsOnDisk": true,
+        "diskPath": "C:\\CBT\\HeartRule-Qcoder\\config\\prompts\\ai-ask\\mainline-ask-template.md",
+        "canDelete": false,
+        "reason": "旧架构文件，可能被兼容模式或测试使用"
+      },
+      {
+        "projectId": "N/A",
+        "projectName": "N/A",
+        "filePath": "ai-ask/multi-round-ask.md",
+        "fileName": "multi-round-ask.md",
+        "existsInDb": false,
+        "existsOnDisk": true,
+        "diskPath": "C:\\CBT\\HeartRule-Qcoder\\config\\prompts\\ai-ask\\multi-round-ask.md",
+        "canDelete": false,
+        "reason": "旧架构文件，可能被兼容模式或测试使用"
+      },
+      {
+        "projectId": "N/A",
+        "projectName": "N/A",
+        "filePath": "ai-ask/simple-ask.md",
+        "fileName": "simple-ask.md",
+        "existsInDb": false,
+        "existsOnDisk": true,
+        "diskPath": "C:\\CBT\\HeartRule-Qcoder\\config\\prompts\\ai-ask\\simple-ask.md",
+        "canDelete": false,
+        "reason": "旧架构文件，可能被兼容模式或测试使用"
+      },
+      {
+        "projectId": "N/A",
+        "projectName": "N/A",
+        "filePath": "ai-say/mainline-a-introduce-concept.md",
+        "fileName": "mainline-a-introduce-concept.md",
+        "existsInDb": false,
+        "existsOnDisk": true,
+        "diskPath": "C:\\CBT\\HeartRule-Qcoder\\config\\prompts\\ai-say\\mainline-a-introduce-concept.md",
+        "canDelete": false,
+        "reason": "旧架构文件，可能被兼容模式或测试使用"
+      },
+      {
+        "projectId": "N/A",
+        "projectName": "N/A",
+        "filePath": "ai_ask_v1.md",
+        "fileName": "ai_ask_v1.md",
+        "existsInDb": false,
+        "existsOnDisk": true,
+        "diskPath": "C:\\CBT\\HeartRule-Qcoder\\config\\prompts\\ai_ask_v1.md",
+        "canDelete": false,
+        "reason": "根目录模板，可能被兼容模式或本地开发使用"
+      },
+      {
+        "projectId": "N/A",
+        "projectName": "N/A",
+        "filePath": "ai_say_v1.md",
+        "fileName": "ai_say_v1.md",
+        "existsInDb": false,
+        "existsOnDisk": true,
+        "diskPath": "C:\\CBT\\HeartRule-Qcoder\\config\\prompts\\ai_say_v1.md",
+        "canDelete": false,
+        "reason": "根目录模板，可能被兼容模式或本地开发使用"
+      },
+      {
+        "projectId": "N/A",
+        "projectName": "N/A",
+        "filePath": "_system/config/custom/crisis_intervention/ai_ask_v1.md",
+        "fileName": "ai_ask_v1.md",
+        "existsInDb": false,
+        "existsOnDisk": true,
+        "diskPath": "C:\\CBT\\HeartRule-Qcoder\\config\\prompts\\_system\\config\\custom\\crisis_intervention\\ai_ask_v1.md",
+        "canDelete": false,
+        "reason": "新架构路径但未导入数据库，可能是孤立文件"
+      }
+    ],
+    "summary": {
+      "totalInDb": 35,
+      "totalOnDisk": 9,
+      "redundant": 2,
+      "essential": 7
+    }
+  }
+}

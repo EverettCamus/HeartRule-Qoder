@@ -16,7 +16,10 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx test-version-switch-sync.js",
     "test:flow": "tsx test-full-flow.ts",
-    "test:welcome": "tsx test-full-welcome.ts"
+    "test:welcome": "tsx test-full-welcome.ts",
+    "cleanup-templates:analyze": "tsx analyze-and-cleanup-templates.ts",
+    "cleanup-templates:execute": "tsx analyze-and-cleanup-templates.ts --execute",
+    "cleanup-templates:auto": "tsx analyze-and-cleanup-templates.ts --execute --yes"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.0",

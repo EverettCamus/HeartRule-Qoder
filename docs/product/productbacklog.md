@@ -504,6 +504,38 @@
 
 ---
 
+### Story 2.6: Topic动作编排与Orchestrator落地
+
+**Story描述**: 作为Topic层引擎,我希望基于监控线程输出,通过TopicActionOrchestrator对当前Topic内的动作队列进行智能编排(插入/跳过/重排),以便在用户遇阻或偏题时结构化调整脚本,而不仅仅是话术微调。
+
+**详细需求**:
+
+- 在核心引擎中实现`TopicActionOrchestrator`接口的基础实现,支持根据MonitorAnalysis和OrchestrationContext生成编排计划(OrchestrationPlan)
+- 支持的编排操作至少包含: 在当前Action后插入安抚ai_say/引导ai_ask动作、跳过后续低优先级动作、调整剩余动作顺序
+- 集成到AiAskMonitorHandler/AiSayMonitorHandler,当`orchestration_needed=true`且`intervention_level="topic_orchestration"`时触发Orchestrator
+- 编排结果直接作用于当前Topic的动作队列(如topic.actions),并记录到executionState.metadata和debugInfo中,便于调试和回放
+- 设计并实现Topic编排专用LLM模板(`topic_orchestrator_v1.md`),支持default/custom双层方案
+
+**验收标准**:
+
+- [ ] `TopicActionOrchestrator`接口及`OrchestrationPlan`数据结构在core-engine中落地实现
+- [ ] 监控线程在识别严重阻抗或偏题时能够调用Orchestrator生成编排计划
+- [ ] Orchestrator至少支持插入安抚Action和跳过后续动作两类结构性调整
+- [ ] 编排后的动作队列在执行流和调试面板中可见(含原计划vs实际队列对比)
+- [ ] 为编排逻辑补充单元/集成测试,覆盖触发与不触发编排的关键场景
+
+**实现状态**: 🔶 部分完成
+
+- Topic动作编排扩展点接口已在Story 1.4的设计与代码中预留(TopicActionOrchestrator、OrchestrationPlan等)
+- 监控线程已输出`intervention_level`与`orchestration_needed`字段,支持区分话术反馈与结构性编排
+- 尚未实现实际编排逻辑及与ScriptExecutor/Topic执行流程的集成
+
+**优先级**: P1 - 中  
+**预估工作量**: 8 Story Points  
+**依赖关系**: 依赖Story 1.4(Action执行状态精细化暴露)以及Story 2.2/2.4的Topic规划基础
+
+---
+
 ## Epic 3: Phase层智能调度能力(环节导航层)
 
 **Epic目标**: 实现Phase层的"议程调度"能力,根据时间/进度/用户状态动态调整Topic队列

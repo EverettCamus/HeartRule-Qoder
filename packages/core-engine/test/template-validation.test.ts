@@ -1,6 +1,6 @@
 /**
  * T8: 模板验证机制单元测试
- * 
+ *
  * 测试 PromptTemplateManager.validateTemplate 方法的增强功能：
  * - 变量完整性验证
  * - 安全边界声明检查
@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { PromptTemplateManager } from '../src/engines/prompt-template/template-manager.js';
 
 describe('T8: 模板验证机制', () => {
@@ -44,7 +45,7 @@ describe('T8: 模板验证机制', () => {
 
       // 注意：当前实现可能不会检测到所有情况，这是一个边界情况
       // 如果检测到了就判定为错误
-      if (result.errors.some(e => e.includes('unclosed variable'))) {
+      if (result.errors.some((e) => e.includes('unclosed variable'))) {
         expect(result.valid).toBe(false);
       } else {
         // 如果没有检测到，这也是可接受的（正则表达式的限制）
@@ -61,13 +62,10 @@ describe('T8: 模板验证机制', () => {
 
 输出：{{ai_role}}: {{content}}`;
 
-      const result = templateManager.validateTemplate(
-        templateWithoutSafety,
-        'ai_ask_v1.md'
-      );
+      const result = templateManager.validateTemplate(templateWithoutSafety, 'ai_ask_v1.md');
 
       expect(result.valid).toBe(true); // 只是警告，不影响有效性
-      expect(result.warnings.some(w => w.includes('safety boundary'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes('safety boundary'))).toBe(true);
     });
 
     it('应该通过包含安全边界声明的模板', () => {
@@ -82,13 +80,10 @@ describe('T8: 模板验证机制', () => {
 
 请向用户提问：{{task}}`;
 
-      const result = templateManager.validateTemplate(
-        templateWithSafety,
-        'ai_ask_v1.md'
-      );
+      const result = templateManager.validateTemplate(templateWithSafety, 'ai_ask_v1.md');
 
       expect(result.valid).toBe(true);
-      expect(result.warnings.filter(w => w.includes('safety boundary')).length).toBe(0);
+      expect(result.warnings.filter((w) => w.includes('safety boundary')).length).toBe(0);
     });
 
     it('应该检查关键安全规范关键词', () => {
@@ -100,13 +95,12 @@ describe('T8: 模板验证机制', () => {
 
 任务：{{task}}`;
 
-      const result = templateManager.validateTemplate(
-        templateMissingKeywords,
-        'ai_ask_v1.md'
-      );
+      const result = templateManager.validateTemplate(templateMissingKeywords, 'ai_ask_v1.md');
 
-      expect(result.warnings.some(w => w.includes('missing critical safety keywords'))).toBe(true);
-      expect(result.warnings.some(w => w.includes('诊断禁止'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes('missing critical safety keywords'))).toBe(
+        true
+      );
+      expect(result.warnings.some((w) => w.includes('诊断禁止'))).toBe(true);
     });
 
     it('不应该对非咨询类模板检查安全边界', () => {
@@ -114,12 +108,9 @@ describe('T8: 模板验证机制', () => {
 
 这是一个不需要安全边界的模板。`;
 
-      const result = templateManager.validateTemplate(
-        simpleTemplate,
-        'general/simple.md'
-      );
+      const result = templateManager.validateTemplate(simpleTemplate, 'general/simple.md');
 
-      expect(result.warnings.filter(w => w.includes('safety boundary')).length).toBe(0);
+      expect(result.warnings.filter((w) => w.includes('safety boundary')).length).toBe(0);
     });
   });
 
@@ -137,12 +128,9 @@ describe('T8: 模板验证机制', () => {
 }
 \`\`\``;
 
-      const result = templateManager.validateTemplate(
-        templateWithoutSafetyRisk,
-        'ai_ask_v1.md'
-      );
+      const result = templateManager.validateTemplate(templateWithoutSafetyRisk, 'ai_ask_v1.md');
 
-      expect(result.warnings.some(w => w.includes('missing \'safety_risk\' field'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes("missing 'safety_risk' field"))).toBe(true);
     });
 
     it('应该检查 JSON 模板是否包含 crisis_signal 字段', () => {
@@ -163,12 +151,9 @@ describe('T8: 模板验证机制', () => {
 }
 \`\`\``;
 
-      const result = templateManager.validateTemplate(
-        templateWithoutCrisisSignal,
-        'ai_ask_v1.md'
-      );
+      const result = templateManager.validateTemplate(templateWithoutCrisisSignal, 'ai_ask_v1.md');
 
-      expect(result.warnings.some(w => w.includes('missing \'crisis_signal\' field'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes("missing 'crisis_signal' field"))).toBe(true);
     });
 
     it('应该通过完整的新安全机制模板', () => {
@@ -202,15 +187,13 @@ describe('T8: 模板验证机制', () => {
 
 任务：{{task}}`;
 
-      const result = templateManager.validateTemplate(
-        completeTemplate,
-        'ai_ask_v1.md'
-      );
+      const result = templateManager.validateTemplate(completeTemplate, 'ai_ask_v1.md');
 
       expect(result.valid).toBe(true);
-      expect(result.warnings.filter(w => 
-        w.includes('safety_risk') || w.includes('crisis_signal')
-      ).length).toBe(0);
+      expect(
+        result.warnings.filter((w) => w.includes('safety_risk') || w.includes('crisis_signal'))
+          .length
+      ).toBe(0);
     });
   });
 
@@ -222,11 +205,13 @@ describe('T8: 模板验证机制', () => {
       const result = templateManager.validateTemplate(
         template,
         'test.md',
-        ['time', 'who', 'user'],  // 必需系统变量
+        ['time', 'who', 'user'], // 必需系统变量
         []
       );
 
-      expect(result.warnings.some(w => w.includes('missing required system variables'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes('missing required system variables'))).toBe(
+        true
+      );
       expect(result.missing_system_vars).toContain('time');
       expect(result.missing_system_vars).toContain('who');
       expect(result.missing_system_vars).toContain('user');
@@ -240,10 +225,12 @@ describe('T8: 模板验证机制', () => {
         template,
         'test.md',
         [],
-        ['task', 'exit']  // 必需脚本变量
+        ['task', 'exit'] // 必需脚本变量
       );
 
-      expect(result.warnings.some(w => w.includes('missing required script variables'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes('missing required script variables'))).toBe(
+        true
+      );
       expect(result.missing_script_vars).toContain('task');
       expect(result.missing_script_vars).toContain('exit');
     });
@@ -292,12 +279,11 @@ describe('T8: 模板验证机制', () => {
 
 请提出问题。`;
 
-      const result = templateManager.validateTemplate(
-        templateWithoutFormat,
-        'multi-round-ask.md'
-      );
+      const result = templateManager.validateTemplate(templateWithoutFormat, 'multi-round-ask.md');
 
-      expect(result.warnings.some(w => w.includes('missing output format specification'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes('missing output format specification'))).toBe(
+        true
+      );
     });
 
     it('应该通过包含输出格式说明的模板', () => {
@@ -315,12 +301,9 @@ describe('T8: 模板验证机制', () => {
 
 任务：{{task}}`;
 
-      const result = templateManager.validateTemplate(
-        templateWithFormat,
-        'multi-round-ask.md'
-      );
+      const result = templateManager.validateTemplate(templateWithFormat, 'multi-round-ask.md');
 
-      expect(result.warnings.filter(w => w.includes('missing output format')).length).toBe(0);
+      expect(result.warnings.filter((w) => w.includes('missing output format')).length).toBe(0);
     });
   });
 
@@ -335,13 +318,10 @@ describe('T8: 模板验证机制', () => {
 }
 \`\`\``;
 
-      const result = templateManager.validateTemplate(
-        template,
-        'test.md'
-      );
+      const result = templateManager.validateTemplate(template, 'test.md');
 
       expect(result.valid).toBe(true); // 只是警告
-      expect(result.warnings.some(w => w.includes('non-standard variable format'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes('non-standard variable format'))).toBe(true);
     });
 
     it('应该忽略 JSON 代码块中的单括号', () => {
@@ -357,10 +337,7 @@ JSON 示例：
 }
 \`\`\``;
 
-      const result = templateManager.validateTemplate(
-        template,
-        'test.md'
-      );
+      const result = templateManager.validateTemplate(template, 'test.md');
 
       expect(result.valid).toBe(true);
       // 不应该警告 JSON 中的花括号
@@ -427,23 +404,24 @@ JSON 示例：
 
       const result = templateManager.validateTemplate(
         systemTemplate,
-        'config/prompts/ai_ask_v1.md',
-        ['who', 'user', 'chat'],  // 必需系统变量（去掉 time，因为模板中没有使用）
-        ['task', 'exit']  // 必需脚本变量
+        'config/prompts/_system/config/default/ai_ask_v1.md',
+        ['who', 'user', 'chat'], // 必需系统变量（去掉 time，因为模板中没有使用）
+        ['task', 'exit'] // 必需脚本变量
       );
 
       // 应该通过所有验证
       expect(result.valid).toBe(true);
       expect(result.errors.length).toBe(0);
-      
+
       // 不应该有关于安全边界的警告
-      expect(result.warnings.filter(w => w.includes('safety boundary')).length).toBe(0);
-      
+      expect(result.warnings.filter((w) => w.includes('safety boundary')).length).toBe(0);
+
       // 不应该有关于 safety_risk 或 crisis_signal 的警告
-      expect(result.warnings.filter(w => 
-        w.includes('safety_risk') || w.includes('crisis_signal')
-      ).length).toBe(0);
-      
+      expect(
+        result.warnings.filter((w) => w.includes('safety_risk') || w.includes('crisis_signal'))
+          .length
+      ).toBe(0);
+
       // 不应该有缺失变量
       expect(result.missing_system_vars).toBeUndefined();
       expect(result.missing_script_vars).toBeUndefined();
@@ -458,17 +436,14 @@ JSON 示例：
 
 请提出问题。`;
 
-      const result = templateManager.validateTemplate(
-        oldTemplate,
-        'old_ai_ask.md'
-      );
+      const result = templateManager.validateTemplate(oldTemplate, 'old_ai_ask.md');
 
       // 应该有多个警告
       expect(result.warnings.length).toBeGreaterThan(0);
-      
+
       // 缺少安全边界
-      expect(result.warnings.some(w => w.includes('safety boundary'))).toBe(true);
-      
+      expect(result.warnings.some((w) => w.includes('safety boundary'))).toBe(true);
+
       // 缺少输出格式说明（如果是多轮模板）
       // expect(result.warnings.some(w => w.includes('output format'))).toBe(true);
     });
