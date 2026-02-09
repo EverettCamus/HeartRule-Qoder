@@ -1,30 +1,35 @@
 /**
  * 变量作用域解析器
- * 
+ *
  * 【DDD 视角】领域服务，负责变量的作用域解析与优先级查找
- * 
+ *
  * 核心职责：
  * 1. 作用域决策：根据变量定义或默认策略确定变量应写入的作用域
  * 2. 优先级查找：按 topic > phase > session > global 顺序查找变量值
  * 3. 变量定义管理：维护变量的作用域元数据（从脚本 declare 中读取）
- * 
+ *
  * 作用域规则：
  * - global: 全局配置、常量，跨会话共享
  * - session: 会话级变量，存储用户身份、会话元数据等
  * - phase: 阶段级变量，适合临时状态与中间结果
  * - topic: 话题级变量，最小生命周期，适合单一话题内的临时数据
- * 
+ *
  * 默认策略：
  * - 未定义的变量默认写入 topic 作用域（最小生命周期，避免数据泄漏）
  * - 查找时按优先级从内层到外层逐级查找
  */
 
-import type { VariableStore, VariableValue, VariableDefinition, Position } from '@heartrule/shared-types';
+import type {
+  VariableStore,
+  VariableValue,
+  VariableDefinition,
+  Position,
+} from '@heartrule/shared-types';
 import { VariableScope } from '@heartrule/shared-types';
 
 /**
  * 变量作用域解析器（领域服务）
- * 
+ *
  * 负责变量在不同作用域之间的读写逻辑，封装作用域规则。
  * 与 Session 领域模型协作，Session 维护 variableStore，该解析器提供访问逻辑。
  */
@@ -48,7 +53,7 @@ export class VariableScopeResolver {
 
   /**
    * 解析变量值（按优先级查找：topic > phase > session > global）
-   * 
+   *
    * @param varName 变量名
    * @param position 当前执行位置
    * @returns 变量值或 null
@@ -79,7 +84,7 @@ export class VariableScopeResolver {
 
   /**
    * 确定变量应写入的作用域
-   * 
+   *
    * @param varName 变量名
    * @returns 目标作用域
    */
@@ -88,18 +93,23 @@ export class VariableScopeResolver {
     const definition = this.variableDefinitions.get(varName);
 
     if (definition) {
-      console.log(`[VariableScopeResolver] 📋 Variable "${varName}" has defined scope:`, definition.scope);
+      console.log(
+        `[VariableScopeResolver] 📋 Variable "${varName}" has defined scope:`,
+        definition.scope
+      );
       return definition.scope;
     }
 
     // 默认策略：未定义变量写入 topic 作用域（最小生命周期）
-    console.log(`[VariableScopeResolver] ⚠️ Variable "${varName}" not defined, defaulting to topic scope`);
+    console.log(
+      `[VariableScopeResolver] ⚠️ Variable "${varName}" not defined, defaulting to topic scope`
+    );
     return VariableScope.TOPIC;
   }
 
   /**
    * 验证 VariableStore 结构完整性
-   * 
+   *
    * @returns 验证结果
    */
   public validateStoreStructure(): { valid: boolean; errors: string[] } {
@@ -136,7 +146,10 @@ export class VariableScopeResolver {
     if (valid) {
       console.log('[VariableScopeResolver] ✅ VariableStore structure is valid');
     } else {
-      console.error('[VariableScopeResolver] ❌ VariableStore structure validation failed:', errors);
+      console.error(
+        '[VariableScopeResolver] ❌ VariableStore structure validation failed:',
+        errors
+      );
     }
 
     return { valid, errors };
@@ -144,7 +157,7 @@ export class VariableScopeResolver {
 
   /**
    * 获取变量操作历史记录
-   * 
+   *
    * @returns 变量操作数组
    */
   public getVariableOperations() {
@@ -160,7 +173,7 @@ export class VariableScopeResolver {
 
   /**
    * 获取变量定义元数据
-   * 
+   *
    * @param varName 变量名
    * @returns 变量定义或 null
    */
@@ -170,7 +183,7 @@ export class VariableScopeResolver {
 
   /**
    * 添加或更新变量定义
-   * 
+   *
    * @param definition 变量定义
    */
   public setVariableDefinition(definition: VariableDefinition): void {
@@ -183,7 +196,7 @@ export class VariableScopeResolver {
 
   /**
    * 批量设置变量定义
-   * 
+   *
    * @param definitions 变量定义数组
    */
   public setVariableDefinitions(definitions: VariableDefinition[]): void {
@@ -194,7 +207,7 @@ export class VariableScopeResolver {
 
   /**
    * 内部方法：在指定作用域中查找变量
-   * 
+   *
    * @param scope 作用域类型
    * @param key 作用域key（phase/topic需要）
    * @param varName 变量名
@@ -231,7 +244,7 @@ export class VariableScopeResolver {
 
   /**
    * 写入变量到指定作用域
-   * 
+   *
    * @param varName 变量名
    * @param value 变量值
    * @param scope 作用域
@@ -267,7 +280,9 @@ export class VariableScopeResolver {
     switch (scope) {
       case 'topic':
         if (!position.topicId) {
-          console.error(`[VariableScopeResolver] ❌ Cannot write to topic scope: topicId is missing`);
+          console.error(
+            `[VariableScopeResolver] ❌ Cannot write to topic scope: topicId is missing`
+          );
           return;
         }
         if (!this.variableStore.topic[position.topicId]) {
@@ -282,7 +297,9 @@ export class VariableScopeResolver {
 
       case 'phase':
         if (!position.phaseId) {
-          console.error(`[VariableScopeResolver] ❌ Cannot write to phase scope: phaseId is missing`);
+          console.error(
+            `[VariableScopeResolver] ❌ Cannot write to phase scope: phaseId is missing`
+          );
           return;
         }
         if (!this.variableStore.phase[position.phaseId]) {
@@ -297,12 +314,16 @@ export class VariableScopeResolver {
 
       case 'session':
         this.variableStore.session[varName] = variableValue;
-        console.log(`[VariableScopeResolver] ✅ Set variable "${varName}" in session scope`, { value });
+        console.log(`[VariableScopeResolver] ✅ Set variable "${varName}" in session scope`, {
+          value,
+        });
         break;
 
       case 'global':
         this.variableStore.global[varName] = variableValue;
-        console.log(`[VariableScopeResolver] ✅ Set variable "${varName}" in global scope`, { value });
+        console.log(`[VariableScopeResolver] ✅ Set variable "${varName}" in global scope`, {
+          value,
+        });
         break;
 
       default:
@@ -318,5 +339,59 @@ export class VariableScopeResolver {
     if (value === undefined) return 'undefined';
     if (Array.isArray(value)) return 'array';
     return typeof value;
+  }
+
+  /**
+   * [Phase 7] 将扁平变量迁移到分层 variableStore
+   *
+   * @param variables 扁平变量对象
+   * @returns 分层的 VariableStore
+   */
+  static migrateToVariableStore(variables: Record<string, any>): VariableStore {
+    console.log('[VariableScopeResolver] 🔄 Migrating variables to variableStore');
+
+    const variableStore: VariableStore = {
+      global: {},
+      session: {},
+      phase: {},
+      topic: {},
+    };
+
+    // Migrate old data to session scope
+    for (const [key, value] of Object.entries(variables)) {
+      variableStore.session[key] = {
+        value,
+        type: this.inferTypeStatic(value),
+        source: 'migrated',
+        lastUpdated: new Date().toISOString(),
+      };
+    }
+
+    console.log(
+      '[VariableScopeResolver] ✅ Migrated',
+      Object.keys(variables).length,
+      'variables to session scope'
+    );
+
+    return variableStore;
+  }
+
+  /**
+   * [Phase 7] 静态方法：推断值的类型
+   */
+  static inferTypeStatic(value: any): string {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (Array.isArray(value)) return 'array';
+    return typeof value;
+  }
+
+  /**
+   * [Phase 7] 如果需要则迁移 variableStore（带副作用）
+   */
+  static migrateIfNeeded(executionState: any): void {
+    if (!executionState.variableStore && executionState.variables) {
+      executionState.variableStore = this.migrateToVariableStore(executionState.variables);
+    }
   }
 }

@@ -135,6 +135,15 @@ export * from './application/session-application-service.js';
 // ScriptExecutor: 脚本执行引擎，根据脚本结构逐步推进会话执行
 export * from './engines/script-execution/script-executor.js';
 
+// MonitorOrchestrator: 监控编排器，协调监控处理器与分析逻辑（Phase 5）
+export * from './orchestrators/monitor-orchestrator.js';
+
+// ActionStateManager: 状态管理器，负责 Action 状态的序列化、反序列化、恢复（Phase 6）
+export * from './state/action-state-manager.js';
+
+// ExecutionResultHandler: 执行结果处理器，处理 Action 执行结果（Phase 8）
+export * from './handlers/execution-result-handler.js';
+
 // LLMOrchestrator: LLM 编排引擎，封装与 LLM 的交互与结构化输出
 export * from './engines/llm-orchestration/index.js';
 
@@ -167,9 +176,17 @@ export * from './engines/script-execution/yaml-parser.js';
 export * from './schemas/index.js';
 
 // =============================================================================
-// 注：旧版接口（已废弃，待迁移）
+// Phase 1-8 重构完成标记
 // =============================================================================
-// 以下文件将在第二阶段逐步迁移到新接口：
-// - actions/base.ts (旧版 Action 基类)
-// - actions/registry.ts (旧版注册表)
-// - engines/script-execution/executor.ts (旧版执行器)
+// 已完成的重构阶段：
+// - Phase 1: LLM 依赖注入优化 ✅
+// - Phase 2: ActionFactory 重构 ✅
+// - Phase 5: 监控编排能力分离（MonitorOrchestrator）✅
+// - Phase 6: 状态管理能力分离（ActionStateManager）✅
+// - Phase 7: 变量管理能力完善（VariableScopeResolver）✅
+// - Phase 8: 执行结果处理器分离（ExecutionResultHandler）✅
+//
+// 废弃代码已清理：
+// - actions/base.ts (已删除，使用 base-action.ts)
+// - actions/registry.ts (已删除，使用 action-registry.ts)
+// - engines/script-execution/executor.ts (已删除，使用 script-executor.ts)

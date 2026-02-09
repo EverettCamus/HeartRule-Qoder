@@ -2,19 +2,19 @@ import { describe, test, expect, beforeEach } from 'vitest';
 
 import { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
 import { AiSayAction } from '../ai-say-action.js';
-import type { ActionContext } from '../base.js';
+import type { ActionContext } from '../base-action.js';
 
 /**
  * 【Bug修复回归测试】模板路径配置错误
- * 
+ *
  * 问题：
  * - process.cwd() 在 api-server 运行时指向 packages/api-server
  * - 原路径计算 ../../../../config/prompts 错误
  * - 导致模板加载失败：ENOENT: no such file or directory
- * 
+ *
  * 修复：
  * - 改为 ../../config/prompts (api-server -> packages -> root -> config/prompts)
- * 
+ *
  * 测试目标：
  * - 验证模板路径计算正确
  * - 确保 max_rounds 模式能找到模板文件
@@ -74,7 +74,7 @@ describe('AiSayAction - 模板路径配置回归测试', () => {
 
     // 关键：执行时不应抛出模板路径错误
     const result = await action.execute(context);
-    
+
     // 验证：如果有错误，不应该是路径错误
     if (result.error) {
       // 不应该包含错误的路径格式（C:\CBT\config 而不是 HeartRule-Qcoder）
@@ -99,7 +99,7 @@ describe('AiSayAction - 模板路径配置回归测试', () => {
 
     // 兼容模式下应该成功执行，不会尝试加载模板
     const result = await action.execute(context);
-    
+
     expect(result.success).toBe(true);
     expect(result.aiMessage).toBeTruthy();
   });
@@ -145,11 +145,7 @@ describe('AiSayAction - 模板路径配置回归测试', () => {
         // 注意：实际不能更改 process.cwd()，这里只是验证逻辑
         // 真实场景中，api-server 会在 packages/api-server 目录运行
         expect(() => {
-          new AiSayAction(
-            'test',
-            { content: '测试', max_rounds: 3 },
-            mockOrchestrator
-          );
+          new AiSayAction('test', { content: '测试', max_rounds: 3 }, mockOrchestrator);
         }).not.toThrow();
       });
     } finally {

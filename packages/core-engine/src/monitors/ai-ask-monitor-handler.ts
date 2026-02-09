@@ -1,40 +1,45 @@
 /**
  * AiAskMonitorHandler - ai_ask Action监控处理器
- * 
+ *
  * 监控ai_ask Action执行状态，识别信息收集障碍，生成策略建议
+ *
+ * 【Phase 3 重构】使用MonitorTemplateService分离模板处理逻辑
  */
 
-import path from 'path';
-
-import type { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
-import { PromptTemplateManager } from '../engines/prompt-template/index.js';
-
-import { BaseMonitorHandler, type MonitorAnalysis, type MonitorContext } from './base-monitor-handler.js';
-import { MonitorTemplateResolver, type MonitorTemplateProvider } from './monitor-template-resolver.js';
 import type { ActionMetrics, ActionResult } from '../actions/base-action.js';
+import type { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
+
+import {
+  BaseMonitorHandler,
+  type MonitorAnalysis,
+  type MonitorContext,
+} from './base-monitor-handler.js';
+import { type MonitorTemplateProvider } from './monitor-template-resolver.js';
+import {
+  DefaultMonitorTemplateService,
+  type IMonitorTemplateService,
+} from './monitor-template-service.js';
 
 /**
  * ai_ask监控处理器
+ *
+ * 【Phase 3 重构】依赖注入MonitorTemplateService，职责更单一
  */
 export class AiAskMonitorHandler extends BaseMonitorHandler {
-  private llmOrchestrator: LLMOrchestrator;
-  private templateManager: PromptTemplateManager;
-  private templateResolver: MonitorTemplateResolver;
+  private templateService: IMonitorTemplateService;
 
   constructor(
     llmOrchestrator: LLMOrchestrator,
     projectRootOrId: string,
-    templateProvider?: MonitorTemplateProvider
+    templateProvider?: MonitorTemplateProvider,
+    templateService?: IMonitorTemplateService // 【新增】支持注入自定义服务
   ) {
     super();
-    this.llmOrchestrator = llmOrchestrator;
-    
-    // 初始化模板管理器（传递templateProvider支持数据库模式）
-    // 注：MonitorTemplateProvider 和 TemplateProvider 接口不同，但可以共用
-    this.templateManager = new PromptTemplateManager(projectRootOrId, templateProvider as any);
-    
-    // 初始化模板解析器
-    this.templateResolver = new MonitorTemplateResolver(projectRootOrId, templateProvider);
+
+    // 使用注入的服务，或创建默认服务（向后兼容）
+    this.templateService =
+      templateService ||
+      new DefaultMonitorTemplateService(llmOrchestrator, projectRootOrId, templateProvider);
   }
 
   /**
@@ -56,67 +61,33 @@ export class AiAskMonitorHandler extends BaseMonitorHandler {
 
   /**
    * 调用监控LLM进行分析（异步）
+   *
+   * 【Phase 3 重构】使用MonitorTemplateService简化流程，代码从90行→30行
    */
   async analyzeWithLLM(metrics: ActionMetrics, context: MonitorContext): Promise<MonitorAnalysis> {
     try {
-      // 1. 解析监控模板路径
-      const sessionConfig = context.metadata?.sessionConfig;
-      const resolution = await this.templateResolver.resolveMonitorTemplatePath(
-        'ai_ask',
-        sessionConfig
-      );
-
-      console.log('[AiAskMonitorHandler] 监控模板解析:', {
-        path: resolution.path,
-        layer: resolution.layer,
-        scheme: resolution.scheme,
-        exists: resolution.exists,
-      });
-
-      if (!resolution.exists) {
-        console.warn('[AiAskMonitorHandler] 监控模板不存在，返回空反馈');
-        return {
-          intervention_needed: false,
-          intervention_reason: 'normal',
-          intervention_level: 'action_feedback',
-          strategy_suggestion: 'continue',
-          feedback_for_action: '',
-          orchestration_needed: false,
-        };
-      }
-
-      // 2. 加载监控模板
-      let template;
-      if (context.metadata?.templateProvider) {
-        // 数据库模式
-        template = await this.templateManager.loadTemplate(resolution.path);
-      } else {
-        // 文件系统模式，需要拼接完整路径
-        const fullPath = path.join(this.templateResolver['basePath'], resolution.path);
-        template = await this.templateManager.loadTemplate(fullPath);
-      }
-
-      // 3. 准备监控变量
+      // 1. 准备监控变量
       const monitorVariables = this.buildMonitorVariables(metrics, context);
 
-      // 4. 替换变量
-      const prompt = this.templateManager.substituteVariables(
-        template.content,
-        new Map(Object.entries(monitorVariables)),
-        {}
+      // 2. 生成监控提示词（委托给服务）
+      const prompt = await this.templateService.generateMonitorPrompt(
+        'ai_ask',
+        monitorVariables,
+        context
       );
 
-      console.log(`[AiAskMonitorHandler] 监控提示词准备完成 (${prompt.length} chars)`);
+      // 提示词为空表示模板不存在，返回空反馈
+      if (!prompt) {
+        console.warn('[AiAskMonitorHandler] 监控提示词为空，返回空反馈');
+        return this.getEmptyAnalysis('normal');
+      }
 
-      // 5. 调用监控LLM
-      const llmResult = await this.llmOrchestrator.generateText(prompt, {
-        temperature: 0.5,
-        maxTokens: 800,
-      });
+      // 3. 调用监控LLM（委托给服务）
+      const llmResponse = await this.templateService.callMonitorLLM(prompt);
 
-      // 6. 解析监控LLM输出
-      const parseResult = this.parseMonitorOutput(llmResult.text);
-      
+      // 4. 解析监控LLM输出
+      const parseResult = this.parseMonitorOutput(llmResponse);
+
       // 添加解析错误信息到metadata
       if (parseResult.parseError) {
         parseResult.analysis.metadata = {
@@ -135,26 +106,37 @@ export class AiAskMonitorHandler extends BaseMonitorHandler {
       return parseResult.analysis;
     } catch (error: any) {
       console.error('[AiAskMonitorHandler] 监控分析失败:', error);
-      
+
       // 返回空反馈，不阻塞主流程
-      return {
-        intervention_needed: false,
-        intervention_reason: 'error',
-        intervention_level: 'action_feedback',
-        strategy_suggestion: 'continue',
-        feedback_for_action: '',
-        orchestration_needed: false,
-        metadata: {
-          parseError: true,
-        },
-      };
+      return this.getEmptyAnalysis('error', { parseError: true });
     }
+  }
+
+  /**
+   * 获取空分析结果（提取复用逻辑）
+   */
+  private getEmptyAnalysis(
+    reason: string = 'normal',
+    metadata?: Record<string, any>
+  ): MonitorAnalysis {
+    return {
+      intervention_needed: false,
+      intervention_reason: reason,
+      intervention_level: 'action_feedback',
+      strategy_suggestion: 'continue',
+      feedback_for_action: '',
+      orchestration_needed: false,
+      metadata,
+    };
   }
 
   /**
    * 构建监控变量
    */
-  private buildMonitorVariables(metrics: ActionMetrics, context: MonitorContext): Record<string, string> {
+  private buildMonitorVariables(
+    metrics: ActionMetrics,
+    context: MonitorContext
+  ): Record<string, string> {
     const vars: Record<string, string> = {
       current_round: context.currentRound.toString(),
       max_rounds: context.maxRounds.toString(),
@@ -200,12 +182,10 @@ export class AiAskMonitorHandler extends BaseMonitorHandler {
    */
   private buildEngagementTrend(history: MonitorContext['metricsHistory']): string {
     if (!history || history.length === 0) return '';
-    
+
     const recent = history.slice(-3);
-    const trends = recent.map((h, i) => 
-      `第${h.round}轮: ${h.metrics.user_engagement || '未评估'}`
-    );
-    
+    const trends = recent.map((h) => `第${h.round}轮: ${h.metrics.user_engagement || '未评估'}`);
+
     return trends.join(' → ');
   }
 
@@ -214,12 +194,12 @@ export class AiAskMonitorHandler extends BaseMonitorHandler {
    */
   private buildEmotionTrend(history: MonitorContext['metricsHistory']): string {
     if (!history || history.length === 0) return '';
-    
+
     const recent = history.slice(-3);
-    const trends = recent.map((h, i) => 
-      `第${h.round}轮: ${h.metrics.emotional_intensity || '未评估'}`
+    const trends = recent.map(
+      (h) => `第${h.round}轮: ${h.metrics.emotional_intensity || '未评估'}`
     );
-    
+
     return trends.join(' → ');
   }
 }

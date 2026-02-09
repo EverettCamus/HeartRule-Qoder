@@ -69,106 +69,114 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
     expect(result.status).toBe(ExecutionStatus.COMPLETED);
   });
 
-  test('【回归测试】完整模拟 cbt_depression_assessment 第一个 topic', async () => {
-    const scriptContent = JSON.stringify({
-      session: {
-        session_id: 'cbt_depression_assessment_v1',
-        session_name: 'CBT抑郁症初次评估会谈',
-        phases: [
-          {
-            phase_id: 'phase_1_rapport',
-            phase_name: '建立关系阶段',
-            topics: [
-              {
-                topic_id: 'topic_1_1_welcome',
-                topic_name: '开场欢迎',
-                actions: [
-                  {
-                    action_type: 'ai_say',
-                    action_id: 'welcome_greeting',
-                    config: {
-                      content: `你好，欢迎来到心理咨询。我是AI咨询助手，会陪伴你完成今天的会谈。
+  test(
+    '【回归测试】完整模拟 cbt_depression_assessment 第一个 topic',
+    { timeout: 10000 },
+    async () => {
+      const scriptContent = JSON.stringify({
+        session: {
+          session_id: 'cbt_depression_assessment_v1',
+          session_name: 'CBT抑郁症初次评估会谈',
+          phases: [
+            {
+              phase_id: 'phase_1_rapport',
+              phase_name: '建立关系阶段',
+              topics: [
+                {
+                  topic_id: 'topic_1_1_welcome',
+                  topic_name: '开场欢迎',
+                  actions: [
+                    {
+                      action_type: 'ai_say',
+                      action_id: 'welcome_greeting',
+                      config: {
+                        content: `你好，欢迎来到心理咨询。我是AI咨询助手，会陪伴你完成今天的会谈。
 在开始之前，我想先了解一些基本信息，这将帮助我更好地理解你的情况。
 你可以放心，这里的所有对话都是保密的。`,
-                      say_goal: '让来访者感到被欢迎和安全',
-                      require_acknowledgment: false,
+                        say_goal: '让来访者感到被欢迎和安全',
+                        require_acknowledgment: false,
+                      },
                     },
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    });
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
 
-    const executor = new ScriptExecutor();
-    const initialState = ScriptExecutor.createInitialState();
-    const sessionId = '329f3f58-bf48-4c92-add3-7a11da0d3ec3';
+      const executor = new ScriptExecutor();
+      const initialState = ScriptExecutor.createInitialState();
+      const sessionId = '329f3f58-bf48-4c92-add3-7a11da0d3ec3';
 
-    const result = await executor.executeSession(scriptContent, sessionId, initialState, null);
+      const result = await executor.executeSession(scriptContent, sessionId, initialState, null);
 
-    // 关键验证：不应该返回错误状态
-    expect(result.status).not.toBe(ExecutionStatus.ERROR);
-    expect(result.metadata.error).toBeUndefined();
+      // 关键验证：不应该返回错误状态
+      expect(result.status).not.toBe(ExecutionStatus.ERROR);
+      expect(result.metadata.error).toBeUndefined();
 
-    // 关键验证：应该有 AI 消息 - LLM 会改写内容
-    expect(result.lastAiMessage).toBeTruthy();
-    expect(result.lastAiMessage).not.toBe('');
-    expect(result.lastAiMessage).toMatch(/欢迎|咨询|陪伴|心理|助手/i);
+      // 关键验证：应该有 AI 消息 - LLM 会改写内容
+      expect(result.lastAiMessage).toBeTruthy();
+      expect(result.lastAiMessage).not.toBe('');
+      expect(result.lastAiMessage).toMatch(/欢迎|咨询|陪伴|心理|助手/i);
 
-    // 验证对话历史
-    expect(result.conversationHistory.length).toBeGreaterThan(0);
-    const firstMessage = result.conversationHistory[0];
-    expect(firstMessage.role).toBe('assistant');
-    expect(firstMessage.actionId).toBe('welcome_greeting');
+      // 验证对话历史
+      expect(result.conversationHistory.length).toBeGreaterThan(0);
+      const firstMessage = result.conversationHistory[0];
+      expect(firstMessage.role).toBe('assistant');
+      expect(firstMessage.actionId).toBe('welcome_greeting');
 
-    // 验证位置信息（max_rounds:1 会立即完成，状态变为 COMPLETED）
-    expect(result.status).toBe(ExecutionStatus.COMPLETED);
-  });
+      // 验证位置信息（max_rounds:1 会立即完成，状态变为 COMPLETED）
+      expect(result.status).toBe(ExecutionStatus.COMPLETED);
+    }
+  );
 
-  test('第一个 ai_say (max_rounds:3) 应输出但不完成', async () => {
-    const scriptContent = JSON.stringify({
-      session: {
-        session_id: 'test_session',
-        phases: [
-          {
-            phase_id: 'phase_1',
-            topics: [
-              {
-                topic_id: 'topic_1',
-                actions: [
-                  {
-                    action_type: 'ai_say',
-                    action_id: 'intro',
-                    config: {
-                      content: '今天我们来学习ABC模型。',
-                      require_acknowledgment: false,
+  test(
+    '第一个 ai_say (require_acknowledgment:false) 应输出并立即完成',
+    { timeout: 10000 },
+    async () => {
+      const scriptContent = JSON.stringify({
+        session: {
+          session_id: 'test_session',
+          phases: [
+            {
+              phase_id: 'phase_1',
+              topics: [
+                {
+                  topic_id: 'topic_1',
+                  actions: [
+                    {
+                      action_type: 'ai_say',
+                      action_id: 'intro',
+                      config: {
+                        content: '今天我们来学习ABC模型。',
+                        require_acknowledgment: false,
+                      },
                     },
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    });
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
 
-    const executor = new ScriptExecutor();
-    const initialState = ScriptExecutor.createInitialState();
+      const executor = new ScriptExecutor();
+      const initialState = ScriptExecutor.createInitialState();
 
-    const result = await executor.executeSession(scriptContent, 'session-1', initialState, null);
+      const result = await executor.executeSession(scriptContent, 'session-1', initialState, null);
 
-    // require_acknowledgment: false 应立即完成
-    expect(result.status).toBe(ExecutionStatus.COMPLETED);
+      // require_acknowledgment: false 应立即完成
+      expect(result.status).toBe(ExecutionStatus.COMPLETED);
 
-    // 应该有 AI 消息 - LLM 会改写内容，只验证消息存在
-    expect(result.lastAiMessage).toBeTruthy();
-    expect(result.lastAiMessage!.length).toBeGreaterThan(0);
+      // 应该有 AI 消息 - LLM 会改写内容，只验证消息存在
+      expect(result.lastAiMessage).toBeTruthy();
+      expect(result.lastAiMessage!.length).toBeGreaterThan(0);
 
-    // 消息应该保存到历史
-    expect(result.conversationHistory.length).toBe(1);
-  });
+      // 消息应该保存到历史
+      expect(result.conversationHistory.length).toBe(1);
+    }
+  );
 
   test('变量替换应正常工作', async () => {
     const scriptContent = JSON.stringify({
@@ -213,7 +221,7 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
 });
 
 describe('AiSayAction 集成测试 - 多轮对话', () => {
-  test('require_acknowledgment: true 应正确处理两轮交互', async () => {
+  test('require_acknowledgment: true 应正确处理两轮交互', { timeout: 15000 }, async () => {
     const scriptContent = JSON.stringify({
       session: {
         session_id: 'test_session',
@@ -264,7 +272,7 @@ describe('AiSayAction 集成测试 - 多轮对话', () => {
     const result2 = await executor.executeSession(scriptContent, 'session-1', result1, '我知道了');
 
     // 应该完成第一个 action 并进入下一个
-    // 第二个 action (max_rounds:1) 会立即完成
+    // 第二个 action (require_acknowledgment:false) 会立即完成
     expect(result2.status).toBe(ExecutionStatus.COMPLETED);
     // LLM 会改写内容，只验证消息存在
     expect(result2.lastAiMessage).toBeTruthy();
