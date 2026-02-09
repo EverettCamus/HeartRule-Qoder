@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { db } from '../db/index.js';
-import { scripts } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { describe, it, expect, afterAll } from 'vitest';
+
+import { db } from '../db/index.js';
+import { scripts } from '../db/schema.js';
 
 /**
  * 脚本导入接口测试
@@ -65,7 +66,7 @@ phases:
 
     // 验证可以提取 projectId
     const tags = (script.tags as string[]) || [];
-    const projectTag = tags.find(tag => tag.startsWith('project:'));
+    const projectTag = tags.find((tag) => tag.startsWith('project:'));
     const projectId = projectTag?.replace('project:', '');
     expect(projectId).toBe(testProjectId1);
   });
@@ -98,7 +99,7 @@ phases:
 
     // 验证提取的 projectId 已更新
     const tags = (updatedScript.tags as string[]) || [];
-    const projectTag = tags.find(tag => tag.startsWith('project:'));
+    const projectTag = tags.find((tag) => tag.startsWith('project:'));
     const projectId = projectTag?.replace('project:', '');
     expect(projectId).toBe(testProjectId2);
     expect(projectId).not.toBe(testProjectId1); // 确保不是旧的 projectId
@@ -109,7 +110,7 @@ phases:
     const [script] = await db.select().from(scripts).where(eq(scripts.id, createdScriptId));
 
     const tags = (script.tags as string[]) || [];
-    const projectTag = tags.find(tag => tag.startsWith('project:'));
+    const projectTag = tags.find((tag) => tag.startsWith('project:'));
     const extractedProjectId = projectTag?.replace('project:', '');
 
     // 验证提取的 projectId 是最新的（testProjectId2），而非旧的（testProjectId1）
