@@ -63,6 +63,12 @@
   "content": "你生成的回复内容（直接文本，不包含JSON结构）",
   "EXIT": "false",
   "BRIEF": "回复摘要(10字以内)",
+  "metrics": {
+    "user_engagement": "用户回应的投入度描述",
+    "emotional_intensity": "情绪强度描述",
+    "understanding_level": "用户理解度描述"
+  },
+  "progress_suggestion": "continue_needed",
   "safety_risk": {
     "detected": false,
     "risk_type": null,
@@ -86,6 +92,17 @@
 - `content`：你的回复内容（纯文本）
 - `EXIT`：是否退出当前讲解（"true" / "false"，根据理解度评估）
 - `BRIEF`：回复摘要，10字以内
+- `metrics`：精细化状态指标
+  - `user_engagement`：描述用户的投入和理解意愿
+    - 例如："用户积极提问，表现出强烈的学习意愿"
+  - `emotional_intensity`：描述情绪反应强度
+    - 例如："用户语气平静，未显示明显焦虑或抵触"
+  - `understanding_level`：描述理解度
+    - 例如："用户能够用自己的话解释概念，理解程度较好"
+- `progress_suggestion`：进度建议，只能是以下值之一：
+  - `"continue_needed"`：用户尚未完全理解，需要继续解释
+  - `"completed"`：用户已理解
+  - `"blocked"`：用户理解困难，需要调整表达方式
 - `safety_risk`：安全风险自我检测
   - `detected`：你是否检测到自己的回复违反了安全边界（布尔值）
   - `risk_type`：违规类型（null / "diagnosis" / "prescription" / "guarantee" / "inappropriate_advice"）

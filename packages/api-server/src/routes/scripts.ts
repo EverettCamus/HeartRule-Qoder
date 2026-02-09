@@ -272,14 +272,23 @@ export async function registerScriptRoutes(app: FastifyInstance) {
         if (existingScript) {
           // 脚本已存在，更新内容
           scriptId = existingScript.id;
+          
+          // 构建更新数据
+          const updateData: any = {
+            scriptContent: yamlContent,
+            parsedContent, // 更新解析后的内容
+            description: description || existingScript.description,
+            updatedAt: now,
+          };
+          
+          // 如果提供了 projectId，更新 tags
+          if (projectId) {
+            updateData.tags = ['debug', `project:${projectId}`];
+          }
+          
           await db
             .update(scripts)
-            .set({
-              scriptContent: yamlContent,
-              parsedContent, // 更新解析后的内容
-              description: description || existingScript.description,
-              updatedAt: now,
-            })
+            .set(updateData)
             .where(eq(scripts.id, scriptId));
 
           app.log.info({ scriptId, scriptName, projectId }, 'Script updated successfully');

@@ -23,7 +23,7 @@ import { LLMOrchestrator } from '../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager, TemplateResolver } from '../engines/prompt-template/index.js';
 
 import { BaseAction } from './base-action.js';
-import type { ActionContext, ActionResult } from './base-action.js';
+import type { ActionContext, ActionResult, ActionMetrics, ProgressSuggestion, ExitReason } from './base-action.js';
 
 /**
  * LLM 输出格式（支持新旧两种格式）
@@ -33,6 +33,8 @@ interface MainLineOutput {
   content?: string;
   EXIT?: string;
   BRIEF?: string;
+  metrics?: ActionMetrics; // 精细化状态指标
+  progress_suggestion?: ProgressSuggestion; // 进度建议
   safety_risk?: {
     detected: boolean;
     risk_type: string | null;
@@ -162,12 +164,24 @@ export class AiSayAction extends BaseAction {
     const scriptVariables = this.extractScriptVariables(context);
     const systemVariables = this.buildSystemVariables(context);
 
+    // 2.1 🔥 新增: 从 metadata 读取监控反馈并拼接到提示词
+    let monitorFeedback = '';
+    if (context.metadata?.latestMonitorFeedback) {
+      monitorFeedback = `\n\n${context.metadata.latestMonitorFeedback}`;
+      console.log('[AiSayAction] 📝 检测到监控反馈,已拼接到提示词:', monitorFeedback.substring(0, 100) + '...');
+    }
+
     // 3. 两层变量替换
-    const prompt = this.templateManager.substituteVariables(
+    let prompt = this.templateManager.substituteVariables(
       template.content,
       scriptVariables,
       systemVariables
     );
+
+    // 3.1 🔥 新增: 将监控反馈拼接到提示词末尾
+    if (monitorFeedback) {
+      prompt = prompt + monitorFeedback;
+    }
 
     console.log(`[AiSayAction] 📝 Prompt prepared (${prompt.length} chars)`);
 
@@ -183,21 +197,28 @@ export class AiSayAction extends BaseAction {
       console.warn(`[AiSayAction] ⚠️ Safety boundary violations detected:`, safetyCheck.violations);
     }
 
-    // 6. 解析 LLM 响应（处理 markdown 代码块）
-    const jsonText = this.cleanJsonOutput(llmResult.text);
+    // 6. 解析 LLM 响应（支持3次重试机制）
+    const parseResult = this.parseTemplateOutput(llmResult.text);
+    const llmOutput = parseResult.output;
 
-    let llmOutput: MainLineOutput;
-    try {
-      llmOutput = JSON.parse(jsonText);
-    } catch (error: any) {
-      console.error(`[AiSayAction] ❌ Failed to parse LLM output:`, llmResult.text);
-      throw new Error(`Failed to parse LLM output: ${error.message}`);
-    }
+    // 提取 metrics 和 progress_suggestion
+    const metrics = this.extractMetrics(llmOutput);
+    const progressSuggestion = this.extractProgressSuggestion(llmOutput);
 
     // 7. 退出决策（使用统一的 evaluateExitCondition 方法）
     const exitDecision = this.evaluateExitCondition(context, llmOutput);
 
-    console.log(`[AiSayAction] 🎯 Exit decision:`, exitDecision);
+    // 计算 exit_reason
+    let exitReason: ExitReason | undefined;
+    if (this.currentRound >= this.maxRounds) {
+      exitReason = 'max_rounds_reached';
+    } else if (exitDecision.should_exit) {
+      exitReason = 'exit_criteria_met';
+    } else if (progressSuggestion === 'blocked') {
+      exitReason = 'user_blocked';
+    }
+
+    console.log(`[AiSayAction] 🎯 Exit decision:`, exitDecision, `exit_reason:`, exitReason);
 
     // 提取 AI 消息：优先使用 content 字段（新格式），兼容旧格式
     const aiRole = this.getConfig('ai_role', '咨询师');
@@ -228,7 +249,9 @@ export class AiSayAction extends BaseAction {
       success: true,
       completed: shouldWaitForAcknowledgment ? false : exitDecision.should_exit || isLastRound,
       aiMessage,
-      debugInfo: llmResult.debugInfo, // ✅ 添加 debugInfo
+      metrics, // 新增：精细化状态指标
+      progress_suggestion: progressSuggestion, // 新增：进度建议
+      debugInfo: llmResult.debugInfo,
       metadata: {
         actionType: AiSayAction.actionType,
         currentRound: this.currentRound,
@@ -241,6 +264,10 @@ export class AiSayAction extends BaseAction {
         safety_check: safetyCheck,
         safety_risk: safetyRisk,
         llm_metadata: llmMetadata,
+        exit_reason: exitReason, // 新增：退出原因分类
+        parseError: (parseResult.parseError?.retryCount || 0) > 1, // 是否发生过解析失败
+        parseRetryCount: parseResult.parseError?.retryCount || 0, // 重试次数
+        parseErrorDetails: parseResult.parseError, // 解析错误详情
         exitDecision: isLastRound
           ? {
               should_exit: true,
@@ -474,5 +501,160 @@ export class AiSayAction extends BaseAction {
     // 获取最近 10 条消息
     const recent = history.slice(-10);
     return recent.map((msg) => `${msg.role === 'user' ? '用户' : 'AI'}: ${msg.content}`).join('\n');
+  }
+
+  /**
+   * 解析模板JSON输出（支持3次重试机制）
+   */
+  private parseTemplateOutput(rawResponse: string): {
+    output: MainLineOutput;
+    cleanedResponse: string;
+    parseError?: {
+      retryCount: number;
+      strategies: string[];
+      finalError: string;
+    };
+  } {
+    const MAX_PARSE_RETRY = 3;
+    const RETRY_STRATEGIES = [
+      'direct_parse',
+      'trim_and_parse',
+      'extract_json_block'
+    ];
+
+    let parseAttempt = 0;
+    let lastError: Error | null = null;
+    let cleanedResponse = rawResponse;
+
+    for (const strategy of RETRY_STRATEGIES) {
+      parseAttempt++;
+      
+      try {
+        cleanedResponse = this.applyParseStrategy(rawResponse, strategy);
+        const output = JSON.parse(cleanedResponse) as MainLineOutput;
+
+        if (parseAttempt > 1) {
+          console.warn(`[AiSayAction] JSON解析在第${parseAttempt}次尝试成功，使用策略: ${strategy}`);
+        }
+
+        return {
+          output,
+          cleanedResponse,
+          parseError: parseAttempt > 1 ? {
+            retryCount: parseAttempt,
+            strategies: RETRY_STRATEGIES.slice(0, parseAttempt),
+            finalError: '',
+          } : undefined,
+        };
+      } catch (e: any) {
+        lastError = e;
+        console.warn(`[AiSayAction] JSON解析第${parseAttempt}次失败，策略: ${strategy}，错误: ${e.message}`);
+
+        if (parseAttempt >= MAX_PARSE_RETRY) {
+          console.error('[AiSayAction] JSON解析重试耗尽，使用降级默认值');
+          console.error('[AiSayAction] 最后错误:', lastError);
+          console.error('[AiSayAction] 原始响应:', rawResponse);
+
+          return {
+            output: this.getDefaultSayOutput(rawResponse),
+            cleanedResponse: rawResponse,
+            parseError: {
+              retryCount: parseAttempt,
+              strategies: RETRY_STRATEGIES,
+              finalError: lastError?.message || 'Unknown error',
+            },
+          };
+        }
+      }
+    }
+
+    return {
+      output: this.getDefaultSayOutput(rawResponse),
+      cleanedResponse: rawResponse,
+      parseError: {
+        retryCount: MAX_PARSE_RETRY,
+        strategies: RETRY_STRATEGIES,
+        finalError: lastError?.message || 'Unknown error',
+      },
+    };
+  }
+
+  /**
+   * 应用解析策略
+   */
+  private applyParseStrategy(rawResponse: string, strategy: string): string {
+    switch (strategy) {
+      case 'direct_parse':
+        return this.cleanJsonOutput(rawResponse);
+
+      case 'trim_and_parse':
+        return this.cleanJsonOutput(rawResponse).trim();
+
+      case 'extract_json_block': {
+        const match = rawResponse.match(/```json\s*([\s\S]*?)\s*```/);
+        if (match) {
+          return match[1].trim();
+        }
+        return this.cleanJsonOutput(rawResponse).trim();
+      }
+
+      default:
+        return this.cleanJsonOutput(rawResponse);
+    }
+  }
+
+  /**
+   * 获取默认Say输出（解析失败时降级）
+   */
+  private getDefaultSayOutput(rawResponse: string): MainLineOutput {
+    return {
+      content: rawResponse.trim(),
+      EXIT: 'NO',
+      metrics: this.getDefaultMetrics(),
+      progress_suggestion: 'continue_needed',
+    };
+  }
+
+  /**
+   * 获取默认metrics（解析失败时）
+   */
+  private getDefaultMetrics(): ActionMetrics {
+    return {
+      user_engagement: 'LLM输出JSON解析失败，无法评估',
+      emotional_intensity: 'LLM输出JSON解析失败，无法评估',
+      understanding_level: 'LLM输出JSON觧析失败，无法评估',
+    };
+  }
+
+  /**
+   * 提取metrics字段，填充缺失值
+   */
+  private extractMetrics(llmOutput: MainLineOutput): ActionMetrics {
+    const metrics = llmOutput.metrics || {};
+    const defaultMetrics = this.getDefaultMetrics();
+
+    return {
+      user_engagement: metrics.user_engagement || defaultMetrics.user_engagement,
+      emotional_intensity: metrics.emotional_intensity || defaultMetrics.emotional_intensity,
+      understanding_level: metrics.understanding_level || defaultMetrics.understanding_level,
+    };
+  }
+
+  /**
+   * 提取progress_suggestion，验证合法性
+   */
+  private extractProgressSuggestion(llmOutput: MainLineOutput): ProgressSuggestion {
+    const suggestion = llmOutput.progress_suggestion;
+    const validSuggestions: ProgressSuggestion[] = ['continue_needed', 'completed', 'blocked', 'off_topic'];
+
+    if (suggestion && validSuggestions.includes(suggestion as ProgressSuggestion)) {
+      return suggestion as ProgressSuggestion;
+    }
+
+    if (suggestion && !validSuggestions.includes(suggestion as ProgressSuggestion)) {
+      console.warn(`[AiSayAction] 非法的progress_suggestion值: ${suggestion}，使用默认值: continue_needed`);
+    }
+    
+    return 'continue_needed';
   }
 }

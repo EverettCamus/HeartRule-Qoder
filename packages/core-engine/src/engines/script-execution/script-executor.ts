@@ -25,6 +25,9 @@ import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
 import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.js';
 import type { TemplateProvider } from '../prompt-template/template-provider.js';
 import { VariableScopeResolver } from '../variable-scope/variable-scope-resolver.js';
+import { AiAskMonitorHandler } from '../../monitors/ai-ask-monitor-handler.js';
+import { AiSayMonitorHandler } from '../../monitors/ai-say-monitor-handler.js';
+import type { MonitorContext } from '../../monitors/base-monitor-handler.js';
 
 /**
  * 鎵ц�鐘舵€?
@@ -335,6 +338,42 @@ export class ScriptExecutor {
           executionState.metadata.actionState = this.serializeActionState(
             executionState.currentAction
           );
+
+          // 【Story 1.4】存储metrics历史（continueAction分支）
+          if (result.metrics) {
+            if (!executionState.metadata.actionMetricsHistory) {
+              executionState.metadata.actionMetricsHistory = [];
+            }
+            executionState.metadata.actionMetricsHistory.push({
+              actionId: executionState.currentAction.actionId,
+              actionType: executionState.currentActionType || 'unknown',
+              round: result.metadata?.currentRound || 1,
+              metrics: result.metrics,
+              progress_suggestion: result.progress_suggestion,
+              timestamp: new Date().toISOString(),
+            });
+            console.log('[ScriptExecutor] 📊 Saved action metrics to history (continueAction):', {
+              actionId: executionState.currentAction.actionId,
+              actionType: executionState.currentActionType,
+              progress_suggestion: result.progress_suggestion,
+            });
+          }
+
+          // 【Story 1.4】异步触发监控分析（continueAction分支，不阻塞主流程）
+          const actionType = executionState.currentActionType;
+          if (result.metrics && (actionType === 'ai_ask' || actionType === 'ai_say')) {
+            this.triggerMonitorAnalysis(
+              actionType,
+              executionState.currentAction.actionId,
+              result,
+              executionState,
+              sessionId,
+              executionState.currentPhaseId || '',
+              executionState.currentTopicId || ''
+            ).catch((error: any) => {
+              console.error('[ScriptExecutor] ⚠️ 监控分析异步执行失败(continueAction):', error);
+            });
+          }
           console.log('[ScriptExecutor] 鈴革笍 Action still not completed, waiting for more input');
           return executionState;
         }
@@ -1005,5 +1044,102 @@ export class ScriptExecutor {
     if (value === undefined) return 'undefined';
     if (Array.isArray(value)) return 'array';
     return typeof value;
+  }
+
+  /**
+   * 【Story 1.4】异步触发监控分析
+   * 
+   * 调用监控处理器分析Action执行状态，生成策略建议
+   * 异步执行，不阻塞主流程
+   */
+  private async triggerMonitorAnalysis(
+    actionType: string,
+    actionId: string,
+    result: ActionResult,
+    executionState: ExecutionState,
+    sessionId: string,
+    phaseId: string,
+    topicId: string
+  ): Promise<void> {
+    console.log('[ScriptExecutor] 🔍 触发监控分析:', {
+      actionType,
+      actionId,
+      hasMetrics: !!result.metrics,
+    });
+
+    try {
+      // 构建监控上下文
+      const monitorContext: MonitorContext = {
+        sessionId,
+        actionId,
+        actionType,
+        currentRound: result.metadata?.currentRound || 1,
+        maxRounds: result.metadata?.maxRounds || 3,
+        actionResult: result,
+        metricsHistory: executionState.metadata.actionMetricsHistory || [],
+        metadata: {
+          sessionConfig: executionState.metadata.sessionConfig,
+          templateProvider: executionState.metadata.templateProvider, // 💉 传递templateProvider到监控上下文
+          projectId: executionState.metadata.projectId,
+          phaseId,
+          topicId,
+        },
+      };
+
+      // 选择对应的监控处理器
+      let monitorHandler;
+      const projectId = executionState.metadata.projectId;
+      const templateProvider = executionState.metadata.templateProvider; // 💉 从 metadata 中获取templateProvider
+      if (actionType === 'ai_ask') {
+        monitorHandler = new AiAskMonitorHandler(this.llmOrchestrator, projectId || '.', templateProvider);
+      } else if (actionType === 'ai_say') {
+        monitorHandler = new AiSayMonitorHandler(this.llmOrchestrator, projectId || '.', templateProvider);
+      } else {
+        console.warn('[ScriptExecutor] ⚠️ 不支持的Action类型:', actionType);
+        return;
+      }
+
+      // 解析metrics
+      const metrics = monitorHandler.parseMetrics(result);
+
+      // 调用监控LLM分析
+      const analysis = await monitorHandler.analyzeWithLLM(metrics, monitorContext);
+
+      console.log('[ScriptExecutor] ✅ 监控分析完成:', {
+        intervention_needed: analysis.intervention_needed,
+        intervention_level: analysis.intervention_level,
+      });
+
+      // 存储监控分析结果
+      if (!executionState.metadata.monitorFeedback) {
+        executionState.metadata.monitorFeedback = [];
+      }
+      executionState.metadata.monitorFeedback.push({
+        actionId,
+        actionType,
+        timestamp: new Date().toISOString(),
+        analysis,
+      });
+
+      // 如果需要介入，生成反馈提示词
+      if (analysis.intervention_needed) {
+        const feedbackPrompt = monitorHandler.buildFeedbackPrompt(analysis);
+        if (feedbackPrompt) {
+          // 存储反馈提示词，等待下一轮Action调用时拼接
+          executionState.metadata.latestMonitorFeedback = feedbackPrompt;
+          console.log('[ScriptExecutor] 📝 生成监控反馈提示词:', feedbackPrompt.substring(0, 100) + '...');
+        }
+      }
+
+      // 检查是否需要触发Topic动作编排（本阶段固定返回false）
+      const needOrchestration = monitorHandler.shouldTriggerOrchestration(analysis);
+      if (needOrchestration) {
+        console.log('[ScriptExecutor] 💡 监控建议触发Topic动作编排（未实现）');
+        // TODO: 未来实现TopicActionOrchestrator集成
+      }
+    } catch (error: any) {
+      console.error('[ScriptExecutor] ❌ 监控分析失败:', error);
+      // 监控失败不影响主流程，仅记录错误
+    }
   }
 }

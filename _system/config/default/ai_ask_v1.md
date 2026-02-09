@@ -62,6 +62,13 @@
   "EXIT": "false",
   "BRIEF": "提问摘要(10字以内)",
 {{output_list}}
+  "metrics": {
+    "information_completeness": "用户已提供的信息完整度描述",
+    "user_engagement": "用户回答的投入度描述",
+    "emotional_intensity": "情绪强度描述",
+    "reply_relevance": "回答相关性描述"
+  },
+  "progress_suggestion": "continue_needed",
   "safety_risk": {
     "detected": false,
     "risk_type": null,
@@ -82,6 +89,25 @@
 - `EXIT`: 是否满足退出条件（"true" 或 "false"）
 - `BRIEF`: 提问的简短摘要（不超过10个字）
 {{output_list}}
+
+**精细化状态指标（metrics）**：
+- `metrics.information_completeness`: 用自然语言描述用户已提供信息的完整度
+  - 例如："用户提供了父亲职业，但未说明工作年限和收入情况"
+  - 对比【退出条件】中的要求，描述已收集、缺少或未明确的信息
+- `metrics.user_engagement`: 描述用户的投入程度
+  - 例如："用户回答较为简短，表现出一定回避倾向"
+  - 观察回答长度、细节丰富度、主动性
+- `metrics.emotional_intensity`: 描述情绪强度
+  - 例如："提及父亲时语气平静，未显示明显焦虑或激动情绪"
+  - 识别情绪词汇、语气、标点符号
+- `metrics.reply_relevance`: 描述回答相关性
+  - 例如："用户回答与问题直接相关，未偏离主题"
+  - 判断回答是否围绕问题展开，是否跑题
+- `progress_suggestion`: 进度建议，只能是以下值之一：
+  - `"continue_needed"`: 信息不足，需要继续追问
+  - `"completed"`: 信息已充分收集
+  - `"blocked"`: 用户遇阻，无法继续（如明确拒绝回答、表达不适）
+  - `"off_topic"`: 用户回答偏离主题
 
 **安全检测字段（系统约定）**：
 - `safety_risk.detected`: **必须在生成回复后立即判断**：你的提问是否违反了【安全边界与伦理规范】

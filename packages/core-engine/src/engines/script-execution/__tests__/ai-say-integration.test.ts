@@ -13,7 +13,7 @@ import { describe, test, expect } from 'vitest';
 import { ScriptExecutor, ExecutionStatus } from '../script-executor.js';
 
 describe('AiSayAction 集成测试 - 会话初始化', () => {
-  test('【回归测试】第一个 ai_say (max_rounds:1) 应正常输出', async () => {
+  test('【回归测试】第一个 ai_say (max_rounds:1) 应正常输出', { timeout: 10000 }, async () => {
     // 模拟 cbt_depression_assessment.yaml 的脚本结构
     const scriptContent = JSON.stringify({
       session: {

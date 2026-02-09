@@ -61,6 +61,42 @@ export interface ActionContext {
 }
 
 /**
+ * Action执行状态精细化指标（系统变量）
+ * 
+ * 由LLM评估生成，作为字符串描述返回
+ * 用于Topic层监控分析和策略决策
+ */
+export interface ActionMetrics {
+  information_completeness?: string; // 信息完整度描述
+  user_engagement?: string;          // 用户投入度描述
+  emotional_intensity?: string;      // 情绪强度描述
+  reply_relevance?: string;          // 回答相关性描述
+  understanding_level?: string;      // 理解度描述（ai_say专用）
+}
+
+/**
+ * 进度建议枚举
+ * 
+ * LLM提供的进度建议，指导Topic层下一步动作
+ */
+export type ProgressSuggestion = 
+  | 'continue_needed'  // 信息不足，需要继续追问
+  | 'completed'        // 信息已充分收集
+  | 'blocked'          // 用户遇阻，无法继续
+  | 'off_topic';       // 用户回答偏离主题
+
+/**
+ * 退出原因分类
+ * 
+ * 代码层对退出原因进行分类，供Topic层选择不同策略
+ */
+export type ExitReason = 
+  | 'max_rounds_reached' // 达到最大轮次限制
+  | 'exit_criteria_met'  // 满足退出条件
+  | 'user_blocked'       // 用户遇阻
+  | 'off_topic';         // 用户偏题
+
+/**
  * Action 执行结果
  *
  * 统一的返回结构，支持多轮对话与变量提取：
@@ -68,14 +104,18 @@ export interface ActionContext {
  * - completed: Action 是否完成（false 表示需等待用户下一轮输入）
  * - aiMessage: AI 生成的消息（返回给用户）
  * - extractedVariables: 从用户回答中提取的变量（写入 variableStore）
+ * - metrics: 精细化状态指标（系统变量，可选）
+ * - progress_suggestion: 进度建议（可选）
  * - debugInfo: LLM 调试信息（包含 prompt 与 response）
- * - metadata: 额外元数据（如轮次、退出决策等）
+ * - metadata: 额外元数据（如轮次、退出决策、exit_reason等）
  */
 export interface ActionResult {
   success: boolean;
   completed: boolean; // Action是否完成（可能需要多轮）
   aiMessage?: string | null; // AI生成的消息
-  extractedVariables?: Record<string, any> | null; // 提取的变量
+  extractedVariables?: Record<string, any> | null; // 提取的变量（用户变量）
+  metrics?: ActionMetrics | null; // 精细化状态指标（系统变量）
+  progress_suggestion?: ProgressSuggestion | null; // 进度建议
   nextAction?: string | null; // 下一个要执行的Action ID
   error?: string | null; // 错误信息
   metadata?: Record<string, any>; // 额外元数据
