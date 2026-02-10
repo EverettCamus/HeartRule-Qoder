@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { SchemaValidationError } from '../../../schemas/index.js';
+import { SchemaValidationError } from '../../../adapters/inbound/script-schema/index.js';
 import { YAMLParser } from '../yaml-parser.js';
 
 describe('YAMLParser Schema Validation Integration', () => {

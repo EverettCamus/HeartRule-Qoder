@@ -1,46 +1,18 @@
 import { generateText, streamText } from 'ai';
 import type { LanguageModel } from 'ai';
+import type {
+  ILLMProvider,
+  LLMConfig,
+  LLMDebugInfo,
+  LLMGenerateResult,
+} from '../../application/ports/outbound/llm-provider.port.js';
 
 /**
- * LLM调试信息
+ * 重新导出端口定义以保持向后兼容
+ * 
+ * @deprecated 请直接从 application/ports/outbound/llm-provider.port.ts 导入
  */
-export interface LLMDebugInfo {
-  prompt: string; // 完整的提示词
-  response: any; // 原始响应（JSON格式）
-  model: string; // 使用的模型
-  config: Partial<LLMConfig>; // LLM配置
-  timestamp: string; // 调用时间
-  tokensUsed?: number; // 使用的token数
-}
-
-/**
- * LLM生成结果（包含调试信息）
- */
-export interface LLMGenerateResult {
-  text: string; // 生成的文本
-  debugInfo: LLMDebugInfo; // 调试信息
-}
-
-/**
- * LLM配置
- */
-export interface LLMConfig {
-  model: string;
-  temperature?: number;
-  maxTokens?: number;
-  topP?: number;
-  frequencyPenalty?: number;
-  presencePenalty?: number;
-}
-
-/**
- * LLM提供者接口
- */
-export interface LLMProvider {
-  getModel(): LanguageModel;
-  generateText(prompt: string, config?: Partial<LLMConfig>): Promise<LLMGenerateResult>;
-  streamText(prompt: string, config?: Partial<LLMConfig>): AsyncIterable<string>;
-}
+export type { ILLMProvider as LLMProvider, LLMConfig, LLMDebugInfo, LLMGenerateResult };
 
 /**
  * LLM编排引擎
@@ -48,10 +20,10 @@ export interface LLMProvider {
  * 统一管理多个LLM提供者，支持批量调用与上下文共享
  */
 export class LLMOrchestrator {
-  private providers: Map<string, LLMProvider>;
+  private providers: Map<string, ILLMProvider>;
   private defaultProvider: string;
 
-  constructor(defaultProvider: LLMProvider, providerName = 'default') {
+  constructor(defaultProvider: ILLMProvider, providerName = 'default') {
     this.providers = new Map();
     this.providers.set(providerName, defaultProvider);
     this.defaultProvider = providerName;
@@ -60,7 +32,7 @@ export class LLMOrchestrator {
   /**
    * 注册新的LLM提供者
    */
-  registerProvider(name: string, provider: LLMProvider): void {
+  registerProvider(name: string, provider: ILLMProvider): void {
     this.providers.set(name, provider);
   }
 
@@ -136,7 +108,7 @@ export class LLMOrchestrator {
   /**
    * 获取提供者
    */
-  private getProvider(name?: string): LLMProvider {
+  private getProvider(name?: string): ILLMProvider {
     const providerName = name || this.defaultProvider;
     const provider = this.providers.get(providerName);
 
@@ -163,7 +135,7 @@ export class LLMOrchestrator {
 /**
  * 基础LLM提供者实现
  */
-export abstract class BaseLLMProvider implements LLMProvider {
+export abstract class BaseLLMProvider implements ILLMProvider {
   protected config: LLMConfig;
 
   constructor(config: LLMConfig) {

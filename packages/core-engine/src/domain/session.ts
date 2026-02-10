@@ -1,7 +1,7 @@
 import { SessionStatus, ExecutionStatus, type ExecutionPosition, type VariableStore } from '@heartrule/shared-types';
 import { v4 as uuidv4 } from 'uuid';
 
-import type { BaseAction } from '../actions/base-action.js';
+import type { BaseAction } from './actions/base-action.js';
 import type { LLMDebugInfo } from '../engines/llm-orchestration/orchestrator.js';
 
 /**

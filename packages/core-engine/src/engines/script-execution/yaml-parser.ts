@@ -1,6 +1,6 @@
 import * as yaml from 'js-yaml';
 
-import { schemaValidator } from '../../schemas/index.js';
+import { schemaValidator } from '../../adapters/inbound/script-schema/index.js';
 
 /**
  * YAML脚本解析器

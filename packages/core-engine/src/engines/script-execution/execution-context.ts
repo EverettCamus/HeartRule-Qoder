@@ -13,7 +13,7 @@
 
 import type { VariableStore } from '@heartrule/shared-types';
 
-import type { BaseAction } from '../../actions/base-action.js';
+import type { BaseAction } from '../../domain/actions/base-action.js';
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 
 import { ExecutionStatus } from './script-executor.js';

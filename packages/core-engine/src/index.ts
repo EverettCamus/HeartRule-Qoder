@@ -109,14 +109,14 @@ export * from './domain/variable.js';
 // 注：ActionDefinition 本身属于领域模型（Script/Topic 内的值对象），这里导出的是应用层的执行器
 
 // BaseAction: 动作执行器基类，定义执行上下文与结果结构
-export * from './actions/base-action.js';
+export * from './domain/actions/base-action.js';
 
 // ActionRegistry: 动作执行器注册表，支持运行时动态创建执行器实例
-export * from './actions/action-registry.js';
+export * from './domain/actions/action-registry.js';
 
 // 具体动作执行器实现
-export * from './actions/ai-say-action.js'; // AI 讲解/介绍动作执行器
-export * from './actions/ai-ask-action.js'; // AI 追问/提问动作执行器
+export * from './domain/actions/ai-say-action.js'; // AI 讲解/介绍动作执行器
+export * from './domain/actions/ai-ask-action.js'; // AI 追问/提问动作执行器
 
 // =============================================================================
 // Application Layer - Application Services (应用层 - 应用服务接口)
@@ -136,13 +136,13 @@ export * from './application/session-application-service.js';
 export * from './engines/script-execution/script-executor.js';
 
 // MonitorOrchestrator: 监控编排器，协调监控处理器与分析逻辑（Phase 5）
-export * from './orchestrators/monitor-orchestrator.js';
+export * from './application/orchestrators/monitor-orchestrator.js';
 
 // ActionStateManager: 状态管理器，负责 Action 状态的序列化、反序列化、恢复（Phase 6）
-export * from './state/action-state-manager.js';
+export * from './application/state/action-state-manager.js';
 
 // ExecutionResultHandler: 执行结果处理器，处理 Action 执行结果（Phase 8）
-export * from './handlers/execution-result-handler.js';
+export * from './application/handlers/execution-result-handler.js';
 
 // LLMOrchestrator: LLM 编排引擎，封装与 LLM 的交互与结构化输出
 export * from './engines/llm-orchestration/index.js';
@@ -173,7 +173,7 @@ export * from './engines/script-execution/yaml-parser.js';
 // =============================================================================
 // YAML 脚本 Schema 验证服务，提供完整的验证与错误处理能力
 
-export * from './schemas/index.js';
+export * from './adapters/inbound/script-schema/index.js';
 
 // =============================================================================
 // Phase 1-8 重构完成标记

@@ -16,11 +16,11 @@
 
 import type { VariableStore } from '@heartrule/shared-types';
 
-import { DefaultActionFactory, type ActionFactory } from '../../actions/action-factory.js';
-import type { BaseAction, ActionContext, ActionResult } from '../../actions/base-action.js';
-import { ExecutionResultHandler } from '../../handlers/execution-result-handler.js';
-import { MonitorOrchestrator } from '../../orchestrators/monitor-orchestrator.js';
-import { ActionStateManager } from '../../state/action-state-manager.js';
+import { DefaultActionFactory, type ActionFactory } from '../../domain/actions/action-factory.js';
+import type { BaseAction, ActionContext, ActionResult } from '../../domain/actions/base-action.js';
+import { ExecutionResultHandler } from '../../application/handlers/execution-result-handler.js';
+import { MonitorOrchestrator } from '../../application/orchestrators/monitor-orchestrator.js';
+import { ActionStateManager } from '../../application/state/action-state-manager.js';
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
 import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.js';
