@@ -28,9 +28,12 @@ export default defineConfig({
   splitting: false,
   external: ['@heartrule/shared-types'],
   onSuccess: async () => {
-    // 复制 schemas 目录到 dist
-    console.log('Copying schemas to dist...');
-    copyDir('src/schemas', 'dist/schemas');
-    console.log('Schemas copied successfully!');
+    // 复制 schemas 目录到 dist（如果存在）
+    const { existsSync } = await import('fs');
+    if (existsSync('src/schemas')) {
+      console.log('Copying schemas to dist...');
+      copyDir('src/schemas', 'dist/schemas');
+      console.log('Schemas copied successfully!');
+    }
   },
 });

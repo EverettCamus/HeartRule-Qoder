@@ -16,11 +16,11 @@
 
 import type { VariableStore } from '@heartrule/shared-types';
 
-import { DefaultActionFactory, type ActionFactory } from '../../domain/actions/action-factory.js';
-import type { BaseAction, ActionContext, ActionResult } from '../../domain/actions/base-action.js';
 import { ExecutionResultHandler } from '../../application/handlers/execution-result-handler.js';
 import { MonitorOrchestrator } from '../../application/orchestrators/monitor-orchestrator.js';
 import { ActionStateManager } from '../../application/state/action-state-manager.js';
+import { DefaultActionFactory, type ActionFactory } from '../../domain/actions/action-factory.js';
+import type { BaseAction, ActionContext, ActionResult } from '../../domain/actions/base-action.js';
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
 import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.js';
@@ -823,32 +823,5 @@ export class ScriptExecutor {
       metadata: {},
       lastAiMessage: null,
     };
-  }
-
-  /**
-   * [Story 1.4] Async trigger monitor analysis
-   *
-   * Set monitor template, observe Action execution status, generate testable results
-   * Async execution, non-blocking process
-   */
-  private async triggerMonitorAnalysis(
-    actionType: string,
-    actionId: string,
-    result: ActionResult,
-    executionState: ExecutionState,
-    sessionId: string,
-    phaseId: string,
-    topicId: string
-  ): Promise<void> {
-    // [Phase 5] Delegate to MonitorOrchestrator
-    await this.monitorOrchestrator.analyze(
-      actionType,
-      actionId,
-      result,
-      executionState,
-      sessionId,
-      phaseId,
-      topicId
-    );
   }
 }
