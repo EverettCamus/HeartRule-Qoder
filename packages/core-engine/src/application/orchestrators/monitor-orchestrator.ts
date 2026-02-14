@@ -19,10 +19,7 @@ import type { MonitorContext } from '../monitors/base-monitor-handler.js';
 import type { MonitorTemplateProvider } from '../monitors/monitor-template-resolver.js';
 
 export class MonitorOrchestrator {
-  constructor(
-    private llmOrchestrator: LLMOrchestrator,
-    private projectId?: string
-  ) {}
+  constructor(private llmOrchestrator: LLMOrchestrator) {}
 
   /**
    * Trigger monitor analysis for action execution result

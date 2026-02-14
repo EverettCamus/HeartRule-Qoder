@@ -10,12 +10,12 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { MonitorOrchestrator } from '../../src/application/orchestrators/monitor-orchestrator.js';
 import type { ActionResult } from '../../src/domain/actions/base-action.js';
 import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
 import { VolcanoDeepSeekProvider } from '../../src/engines/llm-orchestration/volcano-provider.js';
 import { ScriptExecutor } from '../../src/engines/script-execution/script-executor.js';
 import type { ExecutionState } from '../../src/engines/script-execution/script-executor.js';
-import { MonitorOrchestrator } from '../../src/application/orchestrators/monitor-orchestrator.js';
 
 describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
   let llmOrchestrator: LLMOrchestrator;
@@ -34,11 +34,6 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
   describe('1. MonitorOrchestrator 独立性测试', () => {
     it('应该能够独立创建 MonitorOrchestrator 实例', () => {
       const orchestrator = new MonitorOrchestrator(llmOrchestrator);
-      expect(orchestrator).toBeDefined();
-    });
-
-    it('应该支持可选的 projectId 参数', () => {
-      const orchestrator = new MonitorOrchestrator(llmOrchestrator, 'test-project');
       expect(orchestrator).toBeDefined();
     });
 

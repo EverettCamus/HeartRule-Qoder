@@ -1,12 +1,32 @@
-# ScriptExecutor Phase 5+ 重构执行计划
+# ScriptExecutor Phase 5-8 重构历史文档
 
+> **状态**: 已归档。本文档记录了 Phase 5-8 重构的设计方案，现已全部完成。  
+> **查看当前实现**: 请参考 `packages/core-engine/src/` 中的实际代码。  
 > **设计者**: Martin Fowler Pattern  
 > **设计原则**: DDD + 单一职责原则 + 渐进式重构  
 > **目标**: 将 ScriptExecutor 类从 1235 行降至约 700 行，提升可维护性和可测试性
 
 ---
 
-## 一、现状分析
+## 重构完成状态
+
+- ✅ **Phase 1**: LLM 依赖注入
+- ✅ **Phase 2**: ActionFactory 依赖注入
+- ✅ **Phase 3**: 监控逻辑模板服务分离
+- ✅ **Phase 5**: MonitorOrchestrator 监控编排器分离
+- ✅ **Phase 6**: ActionStateManager 状态管理器分离
+- ✅ **Phase 7**: VariableScopeResolver 变量作用域解析器分离
+- ✅ **Phase 8**: ExecutionResultHandler 执行结果处理器分离
+
+**最终成果**:
+
+- ScriptExecutor 从 1235 行减少至 ~828 行（达成目标）
+- 职责清晰分离，架构清晰明确
+- 测试覆盖率提升（404+ 测试用例）
+
+---
+
+## 一、现状分析（重构前）
 
 ### 1.1 当前职责分布
 

@@ -11,13 +11,13 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { ExecutionResultHandler } from '../../src/application/handlers/execution-result-handler.js';
+import { MonitorOrchestrator } from '../../src/application/orchestrators/monitor-orchestrator.js';
+import { ActionStateManager } from '../../src/application/state/action-state-manager.js';
 import { DefaultActionFactory } from '../../src/domain/actions/action-factory.js';
 import type { ActionResult } from '../../src/domain/actions/base-action.js';
 import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
 import { VolcanoDeepSeekProvider } from '../../src/engines/llm-orchestration/volcano-provider.js';
-import { ExecutionResultHandler } from '../../src/application/handlers/execution-result-handler.js';
-import { MonitorOrchestrator } from '../../src/application/orchestrators/monitor-orchestrator.js';
-import { ActionStateManager } from '../../src/application/state/action-state-manager.js';
 
 describe('Phase 8 重构：ExecutionResultHandler 执行结果处理器分离', () => {
   let handler: ExecutionResultHandler;
@@ -42,7 +42,7 @@ describe('Phase 8 重构：ExecutionResultHandler 执行结果处理器分离', 
         orchestration_needed: false,
       }),
     };
-    monitorOrchestrator = new MonitorOrchestrator(mockMonitorHandler as any, null as any);
+    monitorOrchestrator = new MonitorOrchestrator(mockMonitorHandler as any);
     stateManager = new ActionStateManager(actionFactory);
     handler = new ExecutionResultHandler(monitorOrchestrator, stateManager);
   });
