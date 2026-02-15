@@ -1161,21 +1161,24 @@
 - [x] 脚本编辑器支持实Schema验证,编辑时显示错误提示
 - [x] API上传接口集成Schema验证,返回详细错误信息
 - [x] ScriptParser加载时自动验证,无效配置抛出明确异常
-- [ ] Schema约束可导出为LLM Prompt格式,用于AI生成
+- [x] Schema约束可导出为LLM Prompt格式,用于AI生成
 - [x] 错误信息包含字段路径、错误类型、修复建议
 - [x] 验证覆盖所有核心字段和常见错误场景
-- [.] 单元测试覆盖各层Schema验证逻辑
+- [x] 单元测试覆盖各层Schema验证逻辑
 - [x] 文档说明Schema规范和验证机制
 
-**实现状态**: 🔶 部分完成
+**实现状态**: ✅ 已完成（2026-02-14）
 
-- JSON Schema文件定义已应轨于cosure-engine/schemas/目录
-- SchemaValidator类汅了完整的验证体系(validators/schema-validator.ts)
-- 脚本编辑器已集成验证接口(script-editor/)
-- API上传路由已实现Schema验证(scripts.ts, projects.ts)
-- YAMLParser支持脚本一次性验证(yaml-parser.ts)
-- ErrorFormatter提供了友好的错误信息格式(error-formatter.ts)
-- 缺少：LLM Prompt格式的导出特性和单元测试覆盖
+- JSON Schema文件定义已完成（core-engine/src/adapters/inbound/script-schema/）
+- SchemaValidator类实现了完整的验证体系（validators/schema-validator.ts）
+- 脚本编辑器已集成验证接口（script-editor/）
+- API上传路由已实现Schema验证（scripts.ts, projects.ts）
+- YAMLParser支持脚本验证（yaml-parser.ts）
+- ErrorFormatter提供了友好的错误信息格式（error-formatter.ts）
+- ✅ 新增：SchemaPromptGenerator实现LLM Prompt格式导出（schema-prompt-generator.ts）
+- ✅ 新增：DeprecatedFieldsRegistry统一管理废弃字段（deprecated-fields-registry.ts）
+- ✅ 新增：完整单元测试覆盖（99个测试用例，5个测试文件）
+- 📄 实施报告：docs/design/story-7.5-schema-validation-completion-report.md
 
 **优先级**: P0 - 高  
 **预估工作量**: 13 Story Points  

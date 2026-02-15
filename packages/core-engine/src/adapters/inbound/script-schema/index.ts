@@ -20,3 +20,12 @@ export {
   SchemaValidationError,
   type ValidationErrorDetail,
 } from './validators/schema-validation-error.js';
+export {
+  SchemaPromptGenerator,
+  schemaPromptGenerator,
+} from './validators/schema-prompt-generator.js';
+export {
+  DeprecatedFieldsRegistry,
+  deprecatedFieldsRegistry,
+  type DeprecatedField,
+} from './validators/deprecated-fields-registry.js';
