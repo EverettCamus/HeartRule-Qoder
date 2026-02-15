@@ -1,6 +1,6 @@
 /**
  * 监控处理器单元测试
- * 
+ *
  * 测试范围：
  * - JSON解析3次重试机制
  * - 降级策略
@@ -9,7 +9,12 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { BaseMonitorHandler, type MonitorAnalysis, type MonitorContext } from '../../../src/application/monitors/base-monitor-handler.js';
+
+import {
+  BaseMonitorHandler,
+  type MonitorAnalysis,
+  type MonitorContext,
+} from '../../../src/application/monitors/base-monitor-handler.js';
 import { MonitorTemplateResolver } from '../../../src/application/monitors/monitor-template-resolver.js';
 import type { ActionResult, ActionMetrics } from '../../../src/domain/actions/base-action.js';
 
@@ -19,7 +24,10 @@ class TestMonitorHandler extends BaseMonitorHandler {
     return result.metrics || {};
   }
 
-  async analyzeWithLLM(metrics: ActionMetrics, context: MonitorContext): Promise<MonitorAnalysis> {
+  async analyzeWithLLM(
+    _metrics: ActionMetrics,
+    _context: MonitorContext
+  ): Promise<MonitorAnalysis> {
     return {
       intervention_needed: false,
       intervention_reason: 'normal',
@@ -230,7 +238,8 @@ describe('MonitorTemplateResolver - 模板路径解析', () => {
 
   it('应该回退到default层模板', async () => {
     const mockProvider = {
-      getTemplate: vi.fn()
+      getTemplate: vi
+        .fn()
         .mockResolvedValueOnce(null) // custom层不存在
         .mockResolvedValueOnce('default template'), // default层存在
     };
