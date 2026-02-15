@@ -27,7 +27,13 @@ import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrat
 import { PromptTemplateManager, TemplateResolver } from '../../engines/prompt-template/index.js';
 
 import { BaseAction } from './base-action.js';
-import type { ActionContext, ActionResult, ActionMetrics, ProgressSuggestion, ExitReason } from './base-action.js';
+import type {
+  ActionContext,
+  ActionResult,
+  ActionMetrics,
+  ProgressSuggestion,
+  ExitReason,
+} from './base-action.js';
 
 interface AskLLMOutput {
   // 新格式字段
@@ -45,6 +51,12 @@ interface AskLLMOutput {
   metadata?: {
     emotional_tone?: string;
     crisis_signal?: boolean;
+    style_adaptation?: {
+      user_reply_length: number;
+      suggested_style: 'open' | 'choice' | 'example_guided';
+      style_used: 'open' | 'choice' | 'example_guided' | 'mixed';
+      adaptation_reason: string;
+    };
   };
 
   // 兼容旧格式：支持动态的 ai_role 字段
@@ -398,7 +410,10 @@ export class AiAskAction extends BaseAction {
     let monitorFeedback = '';
     if (context.metadata?.latestMonitorFeedback) {
       monitorFeedback = `\n\n${context.metadata.latestMonitorFeedback}`;
-      console.log('[AiAskAction] 📝 检测到监控反馈,已拼接到提示词:', monitorFeedback.substring(0, 100) + '...');
+      console.log(
+        '[AiAskAction] 📝 检测到监控反馈,已拼接到提示词:',
+        monitorFeedback.substring(0, 100) + '...'
+      );
     }
 
     // 4. 替换变量
@@ -487,6 +502,9 @@ export class AiAskAction extends BaseAction {
       // 提取元数据
       const llmMetadata = llmOutput.metadata || {};
 
+      // 提取话术风格适配信息
+      const styleAdaptation = llmMetadata.style_adaptation;
+
       return {
         success: true,
         completed: false,
@@ -508,6 +526,7 @@ export class AiAskAction extends BaseAction {
           safety_check: safetyCheck,
           safety_risk: safetyRisk,
           llm_metadata: llmMetadata,
+          style_adaptation: styleAdaptation, // 新增：话术风格适配信息
           parseError: (parseResult.parseError?.retryCount || 0) > 1, // 是否发生过解析失败
           parseRetryCount: parseResult.parseError?.retryCount || 0, // 重试次数
           parseErrorDetails: parseResult.parseError, // 解析错误详情
@@ -774,9 +793,9 @@ ${historyText}
   } {
     const MAX_PARSE_RETRY = 3;
     const RETRY_STRATEGIES = [
-      'direct_parse',      // 直接解析
-      'trim_and_parse',    // 去除空白后解析
-      'extract_json_block' // 提取JSON代码块
+      'direct_parse', // 直接解析
+      'trim_and_parse', // 去除空白后解析
+      'extract_json_block', // 提取JSON代码块
     ];
 
     let parseAttempt = 0;
@@ -785,28 +804,35 @@ ${historyText}
 
     for (const strategy of RETRY_STRATEGIES) {
       parseAttempt++;
-      
+
       try {
         cleanedResponse = this.applyParseStrategy(rawResponse, strategy);
         const output = JSON.parse(cleanedResponse) as AskLLMOutput;
 
         // 解析成功，记录日志
         if (parseAttempt > 1) {
-          console.warn(`[AiAskAction] JSON解析在第${parseAttempt}次尝试成功，使用策略: ${strategy}`);
+          console.warn(
+            `[AiAskAction] JSON解析在第${parseAttempt}次尝试成功，使用策略: ${strategy}`
+          );
         }
 
         return {
           output,
           cleanedResponse,
-          parseError: parseAttempt > 1 ? {
-            retryCount: parseAttempt,
-            strategies: RETRY_STRATEGIES.slice(0, parseAttempt),
-            finalError: '',
-          } : undefined,
+          parseError:
+            parseAttempt > 1
+              ? {
+                  retryCount: parseAttempt,
+                  strategies: RETRY_STRATEGIES.slice(0, parseAttempt),
+                  finalError: '',
+                }
+              : undefined,
         };
       } catch (e: any) {
         lastError = e;
-        console.warn(`[AiAskAction] JSON解析第${parseAttempt}次失败，策略: ${strategy}，错误: ${e.message}`);
+        console.warn(
+          `[AiAskAction] JSON解析第${parseAttempt}次失败，策略: ${strategy}，错误: ${e.message}`
+        );
 
         if (parseAttempt >= MAX_PARSE_RETRY) {
           // 重试耗尽，使用降级策略
@@ -898,7 +924,8 @@ ${historyText}
     const defaultMetrics = this.getDefaultMetrics();
 
     return {
-      information_completeness: metrics.information_completeness || defaultMetrics.information_completeness,
+      information_completeness:
+        metrics.information_completeness || defaultMetrics.information_completeness,
       user_engagement: metrics.user_engagement || defaultMetrics.user_engagement,
       emotional_intensity: metrics.emotional_intensity || defaultMetrics.emotional_intensity,
       reply_relevance: metrics.reply_relevance || defaultMetrics.reply_relevance,
@@ -910,7 +937,12 @@ ${historyText}
    */
   private extractProgressSuggestion(llmOutput: AskLLMOutput): ProgressSuggestion {
     const suggestion = llmOutput.progress_suggestion;
-    const validSuggestions: ProgressSuggestion[] = ['continue_needed', 'completed', 'blocked', 'off_topic'];
+    const validSuggestions: ProgressSuggestion[] = [
+      'continue_needed',
+      'completed',
+      'blocked',
+      'off_topic',
+    ];
 
     if (suggestion && validSuggestions.includes(suggestion as ProgressSuggestion)) {
       return suggestion as ProgressSuggestion;
@@ -918,9 +950,11 @@ ${historyText}
 
     // 默认返回 continue_needed
     if (suggestion && !validSuggestions.includes(suggestion as ProgressSuggestion)) {
-      console.warn(`[AiAskAction] 非法的progress_suggestion值: ${suggestion}，使用默认值: continue_needed`);
+      console.warn(
+        `[AiAskAction] 非法的progress_suggestion值: ${suggestion}，使用默认值: continue_needed`
+      );
     }
-    
+
     return 'continue_needed';
   }
 }

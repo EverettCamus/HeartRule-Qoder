@@ -213,16 +213,21 @@
 
 **验收标准**:
 
-- [ ] ai_ask能根据用户回复风格调整話术
-- [ ] 开放式/选择式提问自动切换
-- [ ] 話术调整不改变提问的根本目标
-- [ ] debugInfo记录話术适配决策过程
-- [ ] 单元测试覆盖各种回复风格场景
+- [x] ai_ask能根据用户回复风格调整話术
+- [x] 开放式/选择式提问自动切换
+- [x] 话术调整不改变提问的根本目标
+- [x] debugInfo记录話术适配决策过程
+- [x] 单元测试覆盖各种回复风格场景
 
-**实现状态**: ⚠️ 未实现
+**实现状态**: ✅ 已完成（2026-02-15）
 
-- ai_ask的实现存在（ai-ask-action.ts）
-- 当前为基础执行，缺少动态話术适配能力
+- ai_ask_v1.md模板已添加话术风格自适应规则
+- 模板定义了三种提问风格：开放式、选择式、示例引导式
+- 根据用户回复长度自动选择合适的提问方式（<30字→选择式，>100字→开放式）
+- metadata.style_adaptation字段记录話术适配决策信息
+- AiAskAction提取并暴露style_adaptation元数据到ActionResult
+- 现有单元测试全部通过（10个测试用例）
+- 完成日期: 2026-02-15
 
 **优先级**: P0 - 高  
 **预估工作量**: 5 Story Points  
@@ -1157,8 +1162,8 @@
 
 **验收标准**:
 
-- [x] 完Session/Phase/Topic/Action四层JSON Schema定义
-- [x] 脚本编辑器支持实Schema验证,编辑时显示错误提示
+- [x] 完成Session/Phase/Topic/Action四层JSON Schema定义
+- [x] 脚本编辑器支持实时Schema验证,编辑时显示错误提示
 - [x] API上传接口集成Schema验证,返回详细错误信息
 - [x] ScriptParser加载时自动验证,无效配置抛出明确异常
 - [x] Schema约束可导出为LLM Prompt格式,用于AI生成
@@ -1167,7 +1172,7 @@
 - [x] 单元测试覆盖各层Schema验证逻辑
 - [x] 文档说明Schema规范和验证机制
 
-**实现状态**: ✅ 已完成（2026-02-14）
+**实现状态**: ✅ 已完成（2026-02-15）
 
 - JSON Schema文件定义已完成（core-engine/src/adapters/inbound/script-schema/）
 - SchemaValidator类实现了完整的验证体系（validators/schema-validator.ts）
