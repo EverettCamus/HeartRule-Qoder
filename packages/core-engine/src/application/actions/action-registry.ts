@@ -4,10 +4,10 @@
  * 参照: legacy-python/src/actions/registry.py
  */
 
-import { AiAskAction } from './ai-ask-action.js';
-import { AiSayAction } from './ai-say-action.js';
-import { AiThinkAction } from './ai-think-action.js';
-import { BaseAction } from './base-action.js';
+import { AiAskAction } from '../../domain/actions/ai-ask-action.js';
+import { AiSayAction } from '../../domain/actions/ai-say-action.js';
+import { AiThinkAction } from '../../domain/actions/ai-think-action.js';
+import { BaseAction } from '../../domain/actions/base-action.js';
 
 export type ActionClass = new (actionId: string, config: Record<string, any>) => BaseAction;
 

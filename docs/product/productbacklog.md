@@ -364,38 +364,39 @@
 
 **优先级**: P0 - 最高(核心价值层)
 
-### Story 2.1: Topic的默认Action模板定义
+### Story 2.1: Topic的默认Action模板语义与策略定义
 
-**Story描述**: 作为脚本编写者,我希望为Topic定义一个"理想的默认Action序列模板",作为最佳实践路径
+**Story描述**: 作为脚本编写者,我希望在现有脚本语法下,每个Topic节点下的`actions`列表被明确视为该Topic的"默认Action执行序列"(理想路径),同时可以补充`strategy`描述,让Topic引擎在进入该Topic时,以这组预置actions+strategy作为"执行基准",再结合会谈上下文做后续的动态规划与调整(由后续Story承担)。
 
 **详细需求**:
 
-- Topic YAML支持`default_action_template`字段,定义理想的Action序列
-- 模板中Action可包含占位符(如`{抚养者称呼}`)
-- Topic配置支持`strategy`字段,描述完成目标的策略
-- 模板作为Topic的"执行基准",用于后续动态调整
+- 沿用现有脚本语法,Topic节点通过`actions`列表定义预置的Action序列,该列表在语义上被视为该Topic的"默认Action模板/理想执行队列",无需新增`default_action_template`字段
+- Topic下的每个Action可使用脚本层变量占位符(如`{抚养者称呼}`、`{目标情绪}`),Topic引擎后续可以基于这些占位符进行实例化或循环展开(由Story 2.2等实现)
+- Topic配置支持`strategy`字段,用于描述完成该Topic目标的策略要点(例如优先收集哪些信息、遇到强情绪时如何取舍、信息不足时优先保哪一类变量)
+- ScriptParser/SchemaValidator在加载Topic时,需要以"模板视角"暴露`topic.actions`和`topic.strategy`:提供结构化访问能力(保持原始顺序、Action类型、占位符信息等),并对Action配置做基础校验
+- 为后续Topic规划逻辑(Story 2.2/2.4/2.6)提供统一的"默认计划视图":TopicPlanner可以基于`actions`+`strategy`生成当前会话下的实际执行队列(插入/展开/裁剪/重排)
 
 **验收标准**:
 
-- [ ] Topic可定义default_action_template
-- [ ] 模板中Action支持变量占位符
-- [ ] Topic.strategy字段可描述策略要点
-- [ ] 解析器正确加载模板到内存
-- [ ] 模板验证(Action类型有效、占位符合法)
+- [ ] Topic可仅通过`actions`列表定义默认执行序列,系统不强制要求`default_action_template`等额外字段
+- [ ] `actions`中的Action类型、必填字段、占位符格式均通过Schema验证,与现有YAML验证体系(Story 7.5)一致
+- [ ] Topic.strategy字段可描述策略要点,并在执行时可被Topic层规划逻辑读取
+- [ ] 解析器正确加载`topic.actions`与`topic.strategy`到内存,并以结构化形式提供给TopicPlanner/Orchestrator使用
+- [ ] 现有会谈脚本中已存在的`topic`+`actions`结构在本Story完成后无需改写即可作为默认Action模板被使用
 
 **优先级**: P0 - 高  
 **预估工作量**: 5 Story Points  
-**依赖关系**: 依赖现有YAML解析器
+**依赖关系**: 依赖现有YAML解析器和YAML Schema验证体系
 
 ---
 
 ### Story 2.2: Topic根据用户输入动态展开Action队列
 
-**Story描述**: 作为Topic,当用户提到"父亲、母亲、奶奶"三位抚养者时,我需要将"收集抚养者记忆"的模板实例化为三个并行子任务流
+**Story描述**: 作为Topic,当用户提到"父亲、母亲、奶奶"三位抚养者时,我需要将"收集抚养者记忆"的预置Action模板(来自该Topic下的`actions`序列)实例化为三个并行子任务流
 
 **详细需求**:
 
-- Topic引擎检测到用户输入包含多个实体时,触发动态展开
+- Topic引擎检测到用户输入包含多个实体时,触发基于预置`actions`模板的动态展开
 - 将模板中的`{抚养者称呼}`替换为"父亲"/"母亲"/"奶奶"
 - 生成3组Action序列(每组包含问询、记录、情感探索等步骤)
 - 动态生成的Action插入到当前执行队列
@@ -416,7 +417,7 @@
 **技术实现要点**:
 
 - 新建`TopicPlanner`类(位于engines/topic-planning/)
-- 实现`expandTemplate(template, entities)`方法
+- 实现`expandTemplate(templateActions, entities)`方法,其中`templateActions`源自Topic的`actions`列表
 - 在ScriptExecutor.executeTopic()中调用规划逻辑
 - 动态生成的Action加入topic.actions数组
 
@@ -970,27 +971,27 @@
 
 ### Story 6.2: Topic默认模板的可视化编辑
 
-**Story描述**: 作为脚本编写者,我希望在编辑Topic时可视化定义默认Action模板,包含占位符管理
+**Story描述**: 作为脚本编写者,我希望在编辑Topic时,可以可视化地编辑该Topic下的默认Action队列(即`actions`列表),包含占位符管理,以便更直观地配置"理想执行路径",而无需直接手写YAML。
 
 **详细需求**:
 
-- Topic属性面板显示"默认模板"标签页
-- 可拖拽添加Action到模板
-- Action配置中可插入变量占位符(下拉选择)
-- 预览模板展开效果(模拟输入实体)
-- 验证模板合法性
+- Topic属性面板显示"默认模板"标签页,该标签页对应当前Topic的`actions`列表(语义上视为默认Action模板)
+- 可在该视图中拖拽添加Action到模板、删除Action、调整顺序,并实时同步到`actions`列表
+- 在每个Action配置中可通过下拉选择插入变量占位符(如`{抚养者称呼}`),并提供占位符合法性提示
+- 支持预览模板展开效果(模拟输入实体列表,展示TopicPlanner基于当前`actions`模板展开后的Action队列示意),以帮助脚本编写者验证循环展开逻辑(依赖Story 2.2的实现)
+- 保存时对`actions`配置做基本校验(字段完整性、Action类型、占位符格式),与YAML Schema验证规则保持一致
 
 **验收标准**:
 
-- [ ] Topic属性面板支持编辑默认模板
-- [ ] 可拖拽添加Action到模板
-- [ ] 占位符通过下拉菜单插入
-- [ ] 实时预览模板展开
-- [ ] 保存时验证模板语法
+- [ ] Topic属性面板支持以图形化方式编辑默认Action队列(`actions`列表)
+- [ ] 支持通过拖拽调整Action顺序,并实时同步到YAML中的`actions`定义
+- [ ] 占位符通过下拉菜单插入,并在非法占位符情况下给出明确提示
+- [ ] 可在编辑器中预览基于当前`actions`模板的展开效果(至少支持模拟1-3个实体),用于验证Story 2.2的动态展开
+- [ ] 保存时对`actions`的配置进行语法/结构校验,不合规时阻止保存并给出错误信息
 
 **优先级**: P2 - 中低  
 **预估工作量**: 8 Story Points  
-**依赖关系**: 依赖Story 6.1的编辑器
+**依赖关系**: 依赖Story 6.1的编辑器,以及Story 2.1/2.2对Topic默认模板与动态展开语义的定义
 
 ---
 

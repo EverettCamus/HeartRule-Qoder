@@ -14,16 +14,19 @@
  * - Executor only reads/writes state to Session, without maintaining it
  */
 
-import type { VariableStore } from '@heartrule/shared-types';
+import type { VariableStore, TopicPlan } from '@heartrule/shared-types';
 
 import { ExecutionResultHandler } from '../../application/handlers/execution-result-handler.js';
 import { MonitorOrchestrator } from '../../application/orchestrators/monitor-orchestrator.js';
+import {
+  BasicTopicPlanner,
+  type ITopicPlanner,
+} from '../../application/planning/topic-planner.js';
 import { ActionStateManager } from '../../application/state/action-state-manager.js';
-import { DefaultActionFactory, type ActionFactory } from '../../domain/actions/action-factory.js';
+import { DefaultActionFactory, type ActionFactory } from '../../application/actions/action-factory.js';
 import type { BaseAction, ActionContext, ActionResult } from '../../domain/actions/base-action.js';
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
-import { VolcanoDeepSeekProvider } from '../llm-orchestration/volcano-provider.js';
 import type { TemplateProvider } from '../prompt-template/template-provider.js';
 import { VariableScopeResolver } from '../variable-scope/variable-scope-resolver.js';
 
@@ -81,6 +84,14 @@ export interface ExecutionState {
   currentActionType?: string;
   // LLM debug info (from last LLM call)
   lastLLMDebugInfo?: LLMDebugInfo;
+
+  /**
+   * 当前Topic的实例化规划 (Story 2.1)
+   * - 进入新Topic时由TopicPlanner生成
+   * - 存储实例化后的Action队列
+   * - undefined表示使用脚本原始actions(向后兼容)
+   */
+  currentTopicPlan?: TopicPlan;
 }
 
 /**
@@ -91,6 +102,7 @@ export interface ExecutionState {
  * [Phase 5] Supports MonitorOrchestrator dependency injection
  * [Phase 6] Supports ActionStateManager dependency injection
  * [Phase 8] Supports ExecutionResultHandler dependency injection
+ * [Story 2.1] Supports TopicPlanner dependency injection
  */
 export class ScriptExecutor {
   private llmOrchestrator: LLMOrchestrator;
@@ -98,13 +110,15 @@ export class ScriptExecutor {
   private monitorOrchestrator: MonitorOrchestrator; // [Phase 5] Added
   private actionStateManager: ActionStateManager; // [Phase 6] Added
   private resultHandler: ExecutionResultHandler; // [Phase 8] Added
+  private topicPlanner: ITopicPlanner; // [Story 2.1] Added
 
   constructor(
     llmOrchestrator?: LLMOrchestrator,
     actionFactory?: ActionFactory, // [Phase 2] New parameter
     monitorOrchestrator?: MonitorOrchestrator, // [Phase 5] New parameter
     actionStateManager?: ActionStateManager, // [Phase 6] New parameter
-    resultHandler?: ExecutionResultHandler // [Phase 8] New parameter
+    resultHandler?: ExecutionResultHandler, // [Phase 8] New parameter
+    topicPlanner?: ITopicPlanner // [Story 2.1] New parameter
   ) {
     // [Phase 1] Dependency injection first, keep default creation logic (backward compatible)
     if (llmOrchestrator) {
@@ -157,49 +171,32 @@ export class ScriptExecutor {
       );
       console.log('[ScriptExecutor] ✅ Created default ExecutionResultHandler');
     }
+
+    // [Story 2.1] TopicPlanner initialization
+    if (topicPlanner) {
+      this.topicPlanner = topicPlanner;
+      console.log('[ScriptExecutor] ✅ Using injected TopicPlanner');
+    } else {
+      // Default creation (backward compatible)
+      this.topicPlanner = new BasicTopicPlanner();
+      console.log('[ScriptExecutor] ✅ Created default BasicTopicPlanner');
+    }
   }
 
   /**
-   * Create default LLM Orchestrator (backward compatible)
+   * Create default LLM Orchestrator (deprecated)
+   * 
+   * NOTE: This method is deprecated in Phase 4.2 DDD refactoring.
+   * LLM providers have been moved to api-server as adapters.
+   * Please inject LLMOrchestrator via constructor instead.
+   * This method will be removed in Phase 4.3.
    */
   private createDefaultLLM(): LLMOrchestrator {
-    // Initialize LLM Orchestrator
-    // Configure LLM provider: supports Volcano, VOLCENGINE, ARK
-    const apiKey =
-      process.env.VOLCENGINE_API_KEY ||
-      process.env.VOLCANO_API_KEY ||
-      process.env.ARK_API_KEY ||
-      '';
-    const endpointId =
-      process.env.VOLCENGINE_MODEL || process.env.VOLCANO_ENDPOINT_ID || 'deepseek-v3-250324';
-    const baseUrl =
-      process.env.VOLCENGINE_BASE_URL ||
-      process.env.VOLCANO_BASE_URL ||
-      'https://ark.cn-beijing.volces.com/api/v3';
-
-    // Create Volcano DeepSeek Provider
-    const provider = new VolcanoDeepSeekProvider(
-      {
-        model: endpointId,
-        temperature: 0.7,
-        maxTokens: 2000,
-      },
-      apiKey,
-      endpointId,
-      baseUrl
+    throw new Error(
+      '[ScriptExecutor] createDefaultLLM is deprecated. ' +
+      'LLM providers have been moved to api-server as hexagonal adapters. ' +
+      'Please inject LLMOrchestrator via constructor dependency injection.'
     );
-
-    // Create LLM Orchestrator
-    const orchestrator = new LLMOrchestrator(provider, 'volcano');
-
-    console.log('[ScriptExecutor] ✅ LLM Orchestrator initialized:', {
-      provider: 'volcano',
-      endpointId,
-      hasApiKey: !!apiKey,
-      baseUrl,
-    });
-
-    return orchestrator;
   }
   /**
    * Execute session flow script
@@ -556,6 +553,93 @@ export class ScriptExecutor {
   }
 
   /**
+   * 判断是否需要(重新)规划Topic
+   * Story 2.1: Topic默认Action模板语义与策略定义
+   *
+   * @param state - 执行状态
+   * @param topicId - 当前Topic ID
+   * @returns 是否需要规划
+   */
+  private shouldPlanTopic(state: ExecutionState, topicId: string): boolean {
+    // 情兵1: 首次进入Topic(无规划记录)
+    if (!state.currentTopicPlan) {
+      return true;
+    }
+
+    // 情兵2: 进入了不同的Topic
+    if (state.currentTopicPlan.topicId !== topicId) {
+      return true;
+    }
+
+    // 情兵3: 已有规划且Topic未变,继续使用现有规划
+    return false;
+  }
+
+  /**
+   * 规划当前Topic
+   * Story 2.1: Topic默认Action模板语义与策略定义
+   *
+   * @param topicConfig - Topic配置
+   * @param executionState - 执行状态
+   * @param sessionId - 会话ID
+   * @param phaseId - Phase ID
+   */
+  private async planCurrentTopic(
+    topicConfig: any,
+    executionState: ExecutionState,
+    sessionId: string,
+    phaseId: string
+  ): Promise<void> {
+    const context = {
+      topicConfig: {
+        topic_id: topicConfig.topic_id,
+        actions: topicConfig.actions,
+        strategy: topicConfig.strategy,
+      },
+      variableStore: executionState.variableStore!,
+      sessionContext: {
+        sessionId,
+        phaseId,
+        conversationHistory: executionState.conversationHistory,
+      },
+    };
+
+    const topicPlan = await this.topicPlanner.plan(context);
+
+    // 存储规划结果到ExecutionState
+    executionState.currentTopicPlan = topicPlan;
+
+    // 重置Action索引,从实例化队列的第一个Action开始执行
+    executionState.currentActionIdx = 0;
+
+    console.log(`[ScriptExecutor] ✅ Topic planned:`, {
+      topicId: topicPlan.topicId,
+      actionCount: topicPlan.instantiatedActions.length,
+      plannedAt: topicPlan.plannedAt,
+      hasStrategy: !!topicConfig.strategy,
+    });
+  }
+
+  /**
+   * 获取Topic的Actions(优先使用实例化队列)
+   * Story 2.1: Topic默认Action模板语义与策略定义
+   *
+   * @param topicConfig - Topic配置
+   * @param executionState - 执行状态
+   * @returns Action配置列表
+   */
+  private getTopicActions(topicConfig: any, executionState: ExecutionState): any[] {
+    // 优先使用实例化队列
+    const plan = executionState.currentTopicPlan;
+    if (plan && plan.topicId === topicConfig.topic_id) {
+      return plan.instantiatedActions;
+    }
+
+    // 回退: 使用脚本原始actions(向后兼容)
+    return topicConfig.actions;
+  }
+
+  /**
    * Execute Phase
    */
   private async executePhase(
@@ -625,7 +709,18 @@ export class ScriptExecutor {
     userInput?: string | null
   ): Promise<void> {
     const topicId = topic.topic_id;
-    const actions = topic.actions;
+
+    // [Story 2.1] 检测是否需要(重新)规划Topic
+    const needsPlanning = this.shouldPlanTopic(executionState, topicId);
+
+    if (needsPlanning) {
+      console.log(`[ScriptExecutor] 🧠 Planning topic: ${topicId}`);
+      await this.planCurrentTopic(topic, executionState, sessionId, phaseId);
+    }
+
+    // [Story 2.1] 从实例化队列读取Actions(优先于脚本模板)
+    const actions = this.getTopicActions(topic, executionState);
+
     console.log(
       `[ScriptExecutor] 🔵 Executing topic: ${topicId}, actions count: ${actions.length}, currentActionIdx: ${executionState.currentActionIdx}`
     );

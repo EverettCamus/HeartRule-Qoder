@@ -4,7 +4,7 @@
 
 import { describe, test, expect, beforeEach } from 'vitest';
 
-import { PromptTemplateManager } from '../../src/engines/prompt-template/template-manager.js';
+import { PromptTemplateManager } from '../../../src/engines/prompt-template/template-manager.js';
 
 describe('PromptTemplateManager', () => {
   let manager: PromptTemplateManager;

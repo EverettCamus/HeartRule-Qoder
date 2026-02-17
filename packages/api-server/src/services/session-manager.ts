@@ -21,6 +21,7 @@ import {
   type NewVariable,
 } from '../db/schema.js';
 import { buildDetailedError } from '../utils/error-handler.js';
+import { container } from '../ioc/container.js';
 
 import { DatabaseTemplateProvider } from './database-template-provider.js';
 
@@ -78,7 +79,8 @@ export class SessionManager {
   private templateProvider: TemplateProvider;
 
   constructor() {
-    this.scriptExecutor = new ScriptExecutor();
+    // Phase 4: 使用依赖注入容器获取 ScriptExecutor
+    this.scriptExecutor = container.getScriptExecutor();
     this.templateProvider = new DatabaseTemplateProvider();
   }
 

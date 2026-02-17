@@ -11,7 +11,7 @@ import { VariableScope } from '@heartrule/shared-types';
 import type { VariableStore, Position } from '@heartrule/shared-types';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { VariableScopeResolver } from '../../src/engines/variable-scope/variable-scope-resolver.js';
+import { VariableScopeResolver } from '../../../src/engines/variable-scope/variable-scope-resolver.js';
 
 describe('变量作用域结构验证', () => {
   let variableStore: VariableStore;

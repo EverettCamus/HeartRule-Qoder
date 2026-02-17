@@ -11,8 +11,8 @@ import path from 'path';
 
 import { describe, it, expect, beforeAll } from 'vitest';
 
-import { PromptTemplateManager } from '../../src/engines/prompt-template/template-manager.js';
-import { TemplateResolver } from '../../src/engines/prompt-template/template-resolver.js';
+import { PromptTemplateManager } from '../../../src/engines/prompt-template/template-manager.js';
+import { TemplateResolver } from '../../../src/engines/prompt-template/template-resolver.js';
 
 describe('TemplateResolver - 两层模板路径解析', () => {
   let resolver: TemplateResolver;

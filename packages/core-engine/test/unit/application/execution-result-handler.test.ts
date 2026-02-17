@@ -11,13 +11,13 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { ExecutionResultHandler } from '../../src/application/handlers/execution-result-handler.js';
-import { MonitorOrchestrator } from '../../src/application/orchestrators/monitor-orchestrator.js';
-import { ActionStateManager } from '../../src/application/state/action-state-manager.js';
-import { DefaultActionFactory } from '../../src/domain/actions/action-factory.js';
-import type { ActionResult } from '../../src/domain/actions/base-action.js';
-import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
-import { VolcanoDeepSeekProvider } from '../../src/engines/llm-orchestration/volcano-provider.js';
+import { ExecutionResultHandler } from '../../../src/application/handlers/execution-result-handler.js';
+import { MonitorOrchestrator } from '../../../src/application/orchestrators/monitor-orchestrator.js';
+import { ActionStateManager } from '../../../src/application/state/action-state-manager.js';
+import { DefaultActionFactory } from '../../../src/application/actions/action-factory.js';
+import type { ActionResult } from '../../../src/domain/actions/base-action.js';
+import { LLMOrchestrator } from '../../../src/engines/llm-orchestration/orchestrator.js';
+import type { ILLMProvider } from '../../../src/application/ports/outbound/llm-provider.port.js';
 
 describe('Phase 8 重构：ExecutionResultHandler 执行结果处理器分离', () => {
   let handler: ExecutionResultHandler;
@@ -26,14 +26,31 @@ describe('Phase 8 重构：ExecutionResultHandler 执行结果处理器分离', 
   let mockLLM: LLMOrchestrator;
 
   beforeEach(() => {
-    mockLLM = new LLMOrchestrator(
-      new VolcanoDeepSeekProvider(
-        { model: 'test-model', temperature: 0.7, maxTokens: 2000 },
-        'test-key',
-        'test-model',
-        'https://test.api.com'
-      )
-    );
+    // Create mock provider
+    const mockProvider: ILLMProvider = {
+      getModel: vi.fn().mockReturnValue({
+        doGenerate: vi.fn().mockResolvedValue({
+          text: 'mock response',
+          finishReason: 'stop',
+        }),
+      }),
+      generateText: vi.fn().mockResolvedValue({
+        text: 'mock response',
+        debugInfo: {
+          prompt: 'test',
+          response: {},
+          model: 'test-model',
+          config: {},
+          timestamp: new Date().toISOString(),
+        },
+      }),
+      streamText: vi.fn().mockReturnValue((async function* () {
+        yield 'mock';
+        yield ' response';
+      })()),
+    };
+
+    mockLLM = new LLMOrchestrator(mockProvider);
 
     const actionFactory = new DefaultActionFactory(mockLLM);
     const mockMonitorHandler = {

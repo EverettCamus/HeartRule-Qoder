@@ -112,7 +112,7 @@ export * from './domain/variable.js';
 export * from './domain/actions/base-action.js';
 
 // ActionRegistry: 动作执行器注册表，支持运行时动态创建执行器实例
-export * from './domain/actions/action-registry.js';
+export * from './application/actions/action-registry.js';
 
 // 具体动作执行器实现
 export * from './domain/actions/ai-say-action.js'; // AI 讲解/介绍动作执行器
@@ -146,6 +146,10 @@ export * from './application/handlers/execution-result-handler.js';
 
 // LLMOrchestrator: LLM 编排引擎，封装与 LLM 的交互与结构化输出
 export * from './engines/llm-orchestration/index.js';
+
+// 导出 LLM Provider 端口接口与基础类（Phase 4: 六边形架构）
+export type { ILLMProvider, LLMConfig, LLMDebugInfo, LLMGenerateResult } from './application/ports/outbound/llm-provider.port.js';
+export { BaseLLMProvider } from './engines/llm-orchestration/orchestrator.js';
 
 // VariableExtractor: 变量提取引擎，从对话与 LLM 输出中抽取变量
 export * from './engines/variable-extraction/index.js';

@@ -1,6 +1,6 @@
 import type { LanguageModel } from 'ai';
-import type { LLMConfig } from '@heartrule/core-engine';
-import { BaseLLMProvider } from './base-provider';
+
+import { BaseLLMProvider, type LLMConfig } from '@heartrule/core-engine';
 
 /**
  * Volcengine自定义Provider

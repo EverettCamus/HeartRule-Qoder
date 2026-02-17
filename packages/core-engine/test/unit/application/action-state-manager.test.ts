@@ -8,14 +8,14 @@
  * 4. 状态序列化/反序列化测试
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { DefaultActionFactory } from '../../src/domain/actions/action-factory.js';
-import type { BaseAction } from '../../src/domain/actions/base-action.js';
-import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
-import { VolcanoDeepSeekProvider } from '../../src/engines/llm-orchestration/volcano-provider.js';
-import { ScriptExecutor } from '../../src/engines/script-execution/script-executor.js';
-import { ActionStateManager } from '../../src/application/state/action-state-manager.js';
+import { DefaultActionFactory } from '../../../src/application/actions/action-factory.js';
+import type { BaseAction } from '../../../src/domain/actions/base-action.js';
+import { LLMOrchestrator } from '../../../src/engines/llm-orchestration/orchestrator.js';
+import type { ILLMProvider } from '../../../src/application/ports/outbound/llm-provider.port.js';
+import { ScriptExecutor } from '../../../src/engines/script-execution/script-executor.js';
+import { ActionStateManager } from '../../../src/application/state/action-state-manager.js';
 
 describe('Phase 6 重构：ActionStateManager 状态管理能力分离', () => {
   let actionFactory: DefaultActionFactory;
@@ -23,14 +23,31 @@ describe('Phase 6 重构：ActionStateManager 状态管理能力分离', () => {
   let mockLLM: LLMOrchestrator;
 
   beforeEach(() => {
-    mockLLM = new LLMOrchestrator(
-      new VolcanoDeepSeekProvider(
-        { model: 'test-model', temperature: 0.7, maxTokens: 2000 },
-        'test-key',
-        'test-model',
-        'https://test.api.com'
-      )
-    );
+    // Create mock provider
+    const mockProvider: ILLMProvider = {
+      getModel: vi.fn().mockReturnValue({
+        doGenerate: vi.fn().mockResolvedValue({
+          text: 'mock response',
+          finishReason: 'stop',
+        }),
+      }),
+      generateText: vi.fn().mockResolvedValue({
+        text: 'mock response',
+        debugInfo: {
+          prompt: 'test',
+          response: {},
+          model: 'test-model',
+          config: {},
+          timestamp: new Date().toISOString(),
+        },
+      }),
+      streamText: vi.fn().mockReturnValue((async function* () {
+        yield 'mock';
+        yield ' response';
+      })()),
+    };
+    
+    mockLLM = new LLMOrchestrator(mockProvider);
     actionFactory = new DefaultActionFactory(mockLLM);
     stateManager = new ActionStateManager(actionFactory);
   });
@@ -226,15 +243,15 @@ describe('Phase 6 重构：ActionStateManager 状态管理能力分离', () => {
 
   describe('4. ScriptExecutor 集成测试', () => {
     it('ScriptExecutor 应该使用 ActionStateManager', () => {
-      const executor = new ScriptExecutor();
+      const executor = new ScriptExecutor(mockLLM);
 
       // 验证私有属性（通过日志输出）
       expect(executor).toBeDefined();
     });
 
-    it('ScriptExecutor 应该接受注入的 ActionStateManager', () => {
+    it('ScriptExecutor 应该接受 注入的 ActionStateManager', () => {
       const customStateManager = new ActionStateManager(actionFactory);
-      const executor = new ScriptExecutor(undefined, undefined, undefined, customStateManager);
+      const executor = new ScriptExecutor(mockLLM, undefined, undefined, customStateManager);
 
       expect(executor).toBeDefined();
     });
@@ -242,7 +259,7 @@ describe('Phase 6 重构：ActionStateManager 状态管理能力分离', () => {
 
   describe('5. 向后兼容性测试', () => {
     it('无参构造应创建默认 ActionStateManager', () => {
-      const executor = new ScriptExecutor();
+      const executor = new ScriptExecutor(mockLLM);
 
       expect(executor).toBeDefined();
       // 默认创建逻辑通过日志验证

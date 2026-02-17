@@ -12,7 +12,7 @@ import { VariableScope } from '@heartrule/shared-types';
 import type { VariableStore, VariableDefinition, Position } from '@heartrule/shared-types';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { VariableScopeResolver } from '../../src/engines/variable-scope/variable-scope-resolver.js';
+import { VariableScopeResolver } from '../../../src/engines/variable-scope/variable-scope-resolver.js';
 
 describe('变量提取与作用域存储', () => {
   let variableStore: VariableStore;

@@ -10,7 +10,7 @@
  * - Setup session metadata
  */
 
-import type { ActionFactory } from '../../domain/actions/action-factory.js';
+import type { ActionFactory } from '../actions/action-factory.js';
 import type { BaseAction } from '../../domain/actions/base-action.js';
 import type { TemplateProvider } from '../../engines/prompt-template/template-provider.js';
 import type { ExecutionState } from '../../engines/script-execution/script-executor.js';

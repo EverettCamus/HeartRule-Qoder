@@ -8,9 +8,56 @@
  * 4. 执行状态的正确更新
  */
 
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 
 import { ScriptExecutor, ExecutionStatus } from '../script-executor.js';
+import { LLMOrchestrator } from '../../llm-orchestration/orchestrator.js';
+import type { ILLMProvider } from '../../../application/ports/outbound/llm-provider.port.js';
+
+// 创建 mock LLM provider
+function createMockLLM(): LLMOrchestrator {
+  const mockProvider: ILLMProvider = {
+    getModel: vi.fn().mockReturnValue({
+      doGenerate: vi.fn().mockResolvedValue({
+        text: '模拟的AI响应',
+        finishReason: 'stop',
+      }),
+    }),
+    generateText: vi.fn().mockImplementation(async (prompt: string) => {
+      // 根据prompt内容返回更智能的响应
+      let text = '模拟的AI响应';
+      
+      // 优先检测变量替换后的内容（更具体）
+      if (prompt.includes('小明') && prompt.includes('Dr. Smith')) {
+        text = '你好小明，我是Dr. Smith。';
+      } else if (prompt.includes('小明')) {
+        text = '你好小明。';
+      } else if (prompt.includes('Dr. Smith')) {
+        text = '你好，我是Dr. Smith。';
+      } else if (prompt.includes('欢迎') || prompt.includes('咨询')) {
+        text = '你好，欢迎来到心理咨询。我是AI咨询助手，会陪伴你完成今天的会谈。';
+      } else if (prompt.includes('ABC模型')) {
+        text = '今天我们来学习ABC模型。';
+      }
+      
+      return {
+        text,
+        debugInfo: {
+          prompt: 'test',
+          response: {},
+          model: 'test-model',
+          config: {},
+          timestamp: new Date().toISOString(),
+        },
+      };
+    }),
+    streamText: vi.fn().mockReturnValue((async function* () {
+      yield '模拟';
+      yield '响应';
+    })()),
+  };
+  return new LLMOrchestrator(mockProvider);
+}
 
 describe('AiSayAction 集成测试 - 会话初始化', () => {
   test('【回归测试】第一个 ai_say (max_rounds:1) 应正常输出', { timeout: 10000 }, async () => {
@@ -44,7 +91,7 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
       },
     });
 
-    const executor = new ScriptExecutor();
+    const executor = new ScriptExecutor(createMockLLM());
     const initialState = ScriptExecutor.createInitialState();
     const sessionId = 'test-session-123';
 
@@ -105,7 +152,7 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
         },
       });
 
-      const executor = new ScriptExecutor();
+      const executor = new ScriptExecutor(createMockLLM());
       const initialState = ScriptExecutor.createInitialState();
       const sessionId = '329f3f58-bf48-4c92-add3-7a11da0d3ec3';
 
@@ -161,7 +208,7 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
         },
       });
 
-      const executor = new ScriptExecutor();
+      const executor = new ScriptExecutor(createMockLLM());
       const initialState = ScriptExecutor.createInitialState();
 
       const result = await executor.executeSession(scriptContent, 'session-1', initialState, null);
@@ -205,7 +252,7 @@ describe('AiSayAction 集成测试 - 会话初始化', () => {
       },
     });
 
-    const executor = new ScriptExecutor();
+    const executor = new ScriptExecutor(createMockLLM());
     const initialState = ScriptExecutor.createInitialState();
     initialState.variables = {
       用户名: '小明',
@@ -256,7 +303,7 @@ describe('AiSayAction 集成测试 - 多轮对话', () => {
       },
     });
 
-    const executor = new ScriptExecutor();
+    const executor = new ScriptExecutor(createMockLLM());
     const initialState = ScriptExecutor.createInitialState();
 
     // 第一轮：输出信息
@@ -313,7 +360,7 @@ describe('AiSayAction 集成测试 - 多轮对话', () => {
       },
     });
 
-    const executor = new ScriptExecutor();
+    const executor = new ScriptExecutor(createMockLLM());
     const initialState = ScriptExecutor.createInitialState();
 
     const result = await executor.executeSession(scriptContent, 'session-1', initialState, null);
@@ -343,7 +390,7 @@ describe('AiSayAction 集成测试 - 错误处理', () => {
       },
     });
 
-    const executor = new ScriptExecutor();
+    const executor = new ScriptExecutor(createMockLLM());
     const initialState = ScriptExecutor.createInitialState();
 
     const result = await executor.executeSession(scriptContent, 'session-1', initialState, null);
@@ -376,7 +423,7 @@ describe('AiSayAction 集成测试 - 错误处理', () => {
       },
     });
 
-    const executor = new ScriptExecutor();
+    const executor = new ScriptExecutor(createMockLLM());
     const initialState = ScriptExecutor.createInitialState();
 
     await expect(

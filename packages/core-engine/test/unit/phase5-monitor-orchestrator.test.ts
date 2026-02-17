@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MonitorOrchestrator } from '../../src/application/orchestrators/monitor-orchestrator.js';
 import type { ActionResult } from '../../src/domain/actions/base-action.js';
 import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
-import { VolcanoDeepSeekProvider } from '../../src/engines/llm-orchestration/volcano-provider.js';
+import type { ILLMProvider } from '../../src/application/ports/outbound/llm-provider.port.js';
 import { ScriptExecutor } from '../../src/engines/script-execution/script-executor.js';
 import type { ExecutionState } from '../../src/engines/script-execution/script-executor.js';
 
@@ -21,14 +21,30 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
   let llmOrchestrator: LLMOrchestrator;
 
   beforeEach(() => {
-    // 创建测试用的 LLM Orchestrator
-    const provider = new VolcanoDeepSeekProvider(
-      { model: 'test-model', temperature: 0.7, maxTokens: 2000 },
-      'test-key',
-      'test-model',
-      'https://test.api.com'
-    );
-    llmOrchestrator = new LLMOrchestrator(provider);
+    // Create mock provider
+    const mockProvider: ILLMProvider = {
+      getModel: vi.fn().mockReturnValue({
+        doGenerate: vi.fn().mockResolvedValue({
+          text: 'mock response',
+          finishReason: 'stop',
+        }),
+      }),
+      generateText: vi.fn().mockResolvedValue({
+        text: 'mock response',
+        debugInfo: {
+          prompt: 'test',
+          response: {},
+          model: 'test-model',
+          config: {},
+          timestamp: new Date().toISOString(),
+        },
+      }),
+      streamText: vi.fn().mockReturnValue((async function* () {
+        yield 'mock';
+        yield ' response';
+      })()),
+    };
+    llmOrchestrator = new LLMOrchestrator(mockProvider);
   });
 
   describe('1. MonitorOrchestrator 独立性测试', () => {
@@ -192,7 +208,7 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
     it('应该在无参数时创建默认 MonitorOrchestrator', () => {
       const consoleLogSpy = vi.spyOn(console, 'log');
 
-      new ScriptExecutor();
+      new ScriptExecutor(llmOrchestrator);
 
       expect(consoleLogSpy).toHaveBeenCalledWith(
         expect.stringContaining('Created default MonitorOrchestrator')
@@ -216,13 +232,13 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
     it('应该保持 Phase 1-4 的功能', () => {
       const consoleLogSpy = vi.spyOn(console, 'log');
 
-      new ScriptExecutor();
+      new ScriptExecutor(llmOrchestrator);
 
       // 应该同时看到 LLM、ActionFactory 和 MonitorOrchestrator 的创建日志
       // 检查日志数量
       const logCalls = consoleLogSpy.mock.calls;
       const hasLLMLog = logCalls.some((call) =>
-        call.some((arg) => typeof arg === 'string' && arg.includes('LLM Orchestrator initialized'))
+        call.some((arg) => typeof arg === 'string' && arg.includes('Using injected LLM Orchestrator'))
       );
       const hasActionFactoryLog = logCalls.some((call) =>
         call.some((arg) => typeof arg === 'string' && arg.includes('Created default ActionFactory'))

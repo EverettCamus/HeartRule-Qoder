@@ -27,13 +27,18 @@
       "maxLength": 1000,
       "description": "话题描述"
     },
+    "strategy": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Topic执行策略描述,供TopicPlanner规划时参考 (Story 2.1新增)"
+    },
     "actions": {
       "type": "array",
       "minItems": 1,
       "items": {
         "$ref": "action-base.schema.json"
       },
-      "description": "动作列表"
+      "description": "默认Action执行序列(模板)"
     }
   },
   "additionalProperties": false

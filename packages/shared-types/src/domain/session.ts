@@ -85,3 +85,65 @@ export const CreateSessionInputSchema = z.object({
   scriptId: z.string().uuid(),
   initialVariables: z.record(z.unknown()).optional(),
 });
+
+/**
+ * Action配置(解析后/实例化后)
+ * Story 2.1: Topic默认Action模板语义与策略定义
+ */
+export interface ActionConfig {
+  action_id: string;
+  action_type: string;
+  config?: Record<string, any>;
+  // 其他字段保持与现有schema一致
+  [key: string]: any;
+}
+
+/**
+ * Action配置 Schema
+ */
+export const ActionConfigSchema = z.object({
+  action_id: z.string(),
+  action_type: z.string(),
+  config: z.record(z.any()).optional(),
+}).passthrough(); // 允许额外字段
+
+/**
+ * Topic实例化规划结果
+ * Story 2.1: 存储进入Topic时生成的实际执行队列
+ */
+export interface TopicPlan {
+  /** Topic ID */
+  topicId: string;
+
+  /** 规划生成时间戳 */
+  plannedAt: string;
+
+  /** 实例化后的Action配置列表 */
+  instantiatedActions: ActionConfig[];
+
+  /** 规划上下文快照(用于调试) */
+  planningContext?: {
+    /** 触发规划的变量状态 */
+    variableSnapshot: Record<string, any>;
+    /** 使用的strategy文本 */
+    strategyUsed: string;
+    /** 规划决策日志(可选,调试用) */
+    planningLog?: string[];
+  };
+}
+
+/**
+ * Topic规划 Schema
+ */
+export const TopicPlanSchema = z.object({
+  topicId: z.string(),
+  plannedAt: z.string(),
+  instantiatedActions: z.array(ActionConfigSchema),
+  planningContext: z
+    .object({
+      variableSnapshot: z.record(z.any()),
+      strategyUsed: z.string(),
+      planningLog: z.array(z.string()).optional(),
+    })
+    .optional(),
+});

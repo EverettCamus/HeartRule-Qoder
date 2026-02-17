@@ -2,14 +2,43 @@
  * P0-1 测试：ExecutionState 扩展与数据迁移
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { ScriptExecutor, ExecutionStatus } from '../../src/engines/script-execution/script-executor.js';
 import type { ExecutionState } from '../../src/engines/script-execution/script-executor.js';
+import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
+import type { ILLMProvider } from '../../src/application/ports/outbound/llm-provider.port.js';
+
+// 创建 mock LLM provider
+function createMockLLM(): LLMOrchestrator {
+  const mockProvider: ILLMProvider = {
+    getModel: vi.fn().mockReturnValue({
+      doGenerate: vi.fn().mockResolvedValue({
+        text: '模拟的AI响应',
+        finishReason: 'stop',
+      }),
+    }),
+    generateText: vi.fn().mockResolvedValue({
+      text: '模拟的AI响应',
+      debugInfo: {
+        prompt: 'test',
+        response: {},
+        model: 'test-model',
+        config: {},
+        timestamp: new Date().toISOString(),
+      },
+    }),
+    streamText: vi.fn().mockReturnValue((async function* () {
+      yield '模拟';
+      yield '响应';
+    })()),
+  };
+  return new LLMOrchestrator(mockProvider);
+}
 
 describe('P0-1: ExecutionState 扩展与迁移逻辑', () => {
   it('应该将旧的 variables 迁移到 variableStore.session', async () => {
-    const executor = new ScriptExecutor();
+    const executor = new ScriptExecutor(createMockLLM());
     
     // 创建一个带有旧 variables 的 ExecutionState
     const executionState: ExecutionState = {
@@ -76,7 +105,7 @@ describe('P0-1: ExecutionState 扩展与迁移逻辑', () => {
   });
 
   it('应该保持 variableStore 如果已经存在', async () => {
-    const executor = new ScriptExecutor();
+    const executor = new ScriptExecutor(createMockLLM());
     
     // 创建一个已有 variableStore 的 ExecutionState
     const executionState: ExecutionState = {
@@ -134,7 +163,7 @@ describe('P0-1: ExecutionState 扩展与迁移逻辑', () => {
   });
 
   it('应该正确推断类型', async () => {
-    const executor = new ScriptExecutor();
+    const executor = new ScriptExecutor(createMockLLM());
     
     const executionState: ExecutionState = {
       status: ExecutionStatus.RUNNING,

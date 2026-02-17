@@ -7,9 +7,9 @@
 import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
 
 import { createAction } from './action-registry.js';
-import { AiAskAction } from './ai-ask-action.js';
-import { AiSayAction } from './ai-say-action.js';
-import type { BaseAction } from './base-action.js';
+import { AiAskAction } from '../../domain/actions/ai-ask-action.js';
+import { AiSayAction } from '../../domain/actions/ai-say-action.js';
+import type { BaseAction } from '../../domain/actions/base-action.js';
 
 /**
  * Action工厂接口

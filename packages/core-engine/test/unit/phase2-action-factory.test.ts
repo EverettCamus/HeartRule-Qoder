@@ -10,9 +10,38 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { DefaultActionFactory, type ActionFactory } from '../../src/domain/actions/action-factory.js';
+import { DefaultActionFactory, type ActionFactory } from '../../src/application/actions/action-factory.js';
 import type { BaseAction } from '../../src/domain/actions/base-action.js';
 import { ScriptExecutor } from '../../src/engines/script-execution/script-executor.js';
+import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
+import type { ILLMProvider } from '../../src/application/ports/outbound/llm-provider.port.js';
+
+// 创建 mock LLM provider
+function createMockLLM(): LLMOrchestrator {
+  const mockProvider: ILLMProvider = {
+    getModel: vi.fn().mockReturnValue({
+      doGenerate: vi.fn().mockResolvedValue({
+        text: '模拟的AI响应',
+        finishReason: 'stop',
+      }),
+    }),
+    generateText: vi.fn().mockResolvedValue({
+      text: '模拟的AI响应',
+      debugInfo: {
+        prompt: 'test',
+        response: {},
+        model: 'test-model',
+        config: {},
+        timestamp: new Date().toISOString(),
+      },
+    }),
+    streamText: vi.fn().mockReturnValue((async function* () {
+      yield '模拟';
+      yield '响应';
+    })()),
+  };
+  return new LLMOrchestrator(mockProvider);
+}
 
 describe('Phase 2 重构：Action工厂重构', () => {
   beforeEach(() => {
@@ -28,7 +57,7 @@ describe('Phase 2 重构：Action工厂重构', () => {
         } as any),
       };
 
-      const executor = new ScriptExecutor(undefined, mockFactory);
+      const executor = new ScriptExecutor(createMockLLM(), mockFactory);
       expect(executor).toBeInstanceOf(ScriptExecutor);
     });
 
@@ -42,7 +71,7 @@ describe('Phase 2 重构：Action工厂重构', () => {
         } as any),
       };
 
-      new ScriptExecutor(undefined, mockFactory);
+      new ScriptExecutor(createMockLLM(), mockFactory);
 
       // 验证日志包含工厂注入信息
       const logCalls = consoleSpy.mock.calls;
@@ -78,7 +107,7 @@ describe('Phase 2 重构：Action工厂重构', () => {
     it('应该在无参数时创建默认ActionFactory', () => {
       const consoleSpy = vi.spyOn(console, 'log');
 
-      new ScriptExecutor();
+      new ScriptExecutor(createMockLLM());
 
       // 验证日志包含默认工厂创建信息
       const logCalls = consoleSpy.mock.calls;
@@ -181,7 +210,7 @@ describe('Phase 2 重构：Action工厂重构', () => {
         create: vi.fn().mockReturnValue(mockAction),
       };
 
-      const executor = new ScriptExecutor(undefined, customFactory);
+      const executor = new ScriptExecutor(createMockLLM(), customFactory);
       expect(executor).toBeInstanceOf(ScriptExecutor);
     });
 
@@ -195,7 +224,7 @@ describe('Phase 2 重构：Action工厂重构', () => {
         create: createSpy,
       };
 
-      new ScriptExecutor(undefined, customFactory);
+      new ScriptExecutor(createMockLLM(), customFactory);
 
       // 注意：这里只是验证工厂被正确注入
       // 实际的Action创建会在script执行时发生
@@ -205,13 +234,13 @@ describe('Phase 2 重构：Action工厂重构', () => {
 
   describe('5. 边界情况测试', () => {
     it('应该处理undefined的ActionFactory参数', () => {
-      const executor = new ScriptExecutor(undefined, undefined);
+      const executor = new ScriptExecutor(createMockLLM(), undefined);
       expect(executor).toBeInstanceOf(ScriptExecutor);
     });
 
     it('应该处理null的ActionFactory参数（类型检查）', () => {
       // TypeScript会阻止传入null，但运行时可以测试
-      const executor = new ScriptExecutor(undefined, null as any);
+      const executor = new ScriptExecutor(createMockLLM(), null as any);
       expect(executor).toBeInstanceOf(ScriptExecutor);
     });
 
@@ -225,18 +254,18 @@ describe('Phase 2 重构：Action工厂重构', () => {
         } as any),
       };
 
-      new ScriptExecutor(undefined, mockFactory);
+      new ScriptExecutor(createMockLLM(), mockFactory);
 
-      // 应该同时看到默认LLM创建和工厂注入的日志
+      // 现在已经提供LLM，不会看到默认LLM创廻的日志
       const logCalls = consoleSpy.mock.calls;
-      const hasLLMInit = logCalls.some((call) =>
-        call[0]?.toString().includes('LLM Orchestrator initialized')
+      const hasLLMInjection = logCalls.some((call) =>
+        call[0]?.toString().includes('Using injected LLM Orchestrator')
       );
       const hasFactoryInjection = logCalls.some((call) =>
         call[0]?.toString().includes('Using injected ActionFactory')
       );
 
-      expect(hasLLMInit).toBe(true);
+      expect(hasLLMInjection).toBe(true);
       expect(hasFactoryInjection).toBe(true);
 
       consoleSpy.mockRestore();
@@ -278,7 +307,7 @@ describe('Phase 2 重构：Action工厂重构', () => {
         })),
       };
 
-      const executor = new ScriptExecutor(undefined, mockFactory);
+      const executor = new ScriptExecutor(createMockLLM(), mockFactory);
       expect(executor).toBeInstanceOf(ScriptExecutor);
       expect(mockFactory.create).toBeDefined();
     });
@@ -293,7 +322,7 @@ describe('Phase 2 重构：Action工厂重构', () => {
         create: createSpy,
       };
 
-      new ScriptExecutor(undefined, mockFactory);
+      new ScriptExecutor(createMockLLM(), mockFactory);
 
       // Mock工厂已就绪，可在后续测试中验证调用
       expect(createSpy).toBeDefined();
