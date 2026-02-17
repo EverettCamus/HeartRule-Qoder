@@ -219,52 +219,86 @@ export class ScriptExecutor {
       ...extractedVariables,
     };
 
-    // New logic: use VariableScopeResolver to write hierarchical variables
-    if (executionState.variableStore) {
-      const logPrefix = isFromContinue ? '(continueAction)' : '';
-      console.log(
-        `[ScriptExecutor] 🔍 Processing extracted variables ${logPrefix}:`,
-        extractedVariables
-      );
-      console.log(`[ScriptExecutor] 🔍 Current position:`, position);
-
-      const scopeResolver = new VariableScopeResolver(executionState.variableStore);
-
-      for (const [varName, varValue] of Object.entries(extractedVariables)) {
-        console.log(`[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`, varValue);
-
-        // Determine target scope
-        const targetScope = scopeResolver.determineScope(varName);
-        console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
-
-        // Write variable
-        scopeResolver.setVariable(varName, varValue, targetScope, position, position.actionId);
-        console.log(`[ScriptExecutor] ✅ Set variable "${varName}" to ${targetScope} scope`);
-      }
-
-      // Verify variables are actually written successfully
-      console.log(`[ScriptExecutor] 🔍 Verifying variableStore after writing ${logPrefix}:`);
-      console.log(`[ScriptExecutor] - Global:`, Object.keys(executionState.variableStore.global));
-      console.log(`[ScriptExecutor] - Session:`, Object.keys(executionState.variableStore.session));
-      if (position.phaseId) {
-        console.log(
-          `[ScriptExecutor] - Phase[${position.phaseId}]:`,
-          executionState.variableStore.phase[position.phaseId]
-            ? Object.keys(executionState.variableStore.phase[position.phaseId])
-            : 'undefined'
-        );
-      }
-      if (position.topicId) {
-        console.log(
-          `[ScriptExecutor] - Topic[${position.topicId}]:`,
-          executionState.variableStore.topic[position.topicId]
-            ? Object.keys(executionState.variableStore.topic[position.topicId])
-            : 'undefined'
-        );
-      }
-    } else {
+    if (!executionState.variableStore) {
       console.warn(
         `[ScriptExecutor] ⚠️ variableStore is not initialized, cannot write variables to scopes`
+      );
+      return;
+    }
+
+    this.writeVariablesToScopes(executionState, extractedVariables, position, isFromContinue);
+  }
+
+  /**
+   * Write variables to their appropriate scopes
+   */
+  private writeVariablesToScopes(
+    executionState: ExecutionState,
+    extractedVariables: Record<string, any>,
+    position: { phaseId?: string; topicId?: string; actionId: string },
+    isFromContinue: boolean
+  ): void {
+    const logPrefix = isFromContinue ? '(continueAction)' : '';
+    console.log(
+      `[ScriptExecutor] 🔍 Processing extracted variables ${logPrefix}:`,
+      extractedVariables
+    );
+    console.log(`[ScriptExecutor] 🔍 Current position:`, position);
+
+    const scopeResolver = new VariableScopeResolver(executionState.variableStore!);
+
+    for (const [varName, varValue] of Object.entries(extractedVariables)) {
+      this.writeVariableToScope(scopeResolver, varName, varValue, position);
+    }
+
+    this.verifyVariablesWritten(executionState, position, logPrefix);
+  }
+
+  /**
+   * Write a single variable to its target scope
+   */
+  private writeVariableToScope(
+    scopeResolver: VariableScopeResolver,
+    varName: string,
+    varValue: any,
+    position: { phaseId?: string; topicId?: string; actionId: string }
+  ): void {
+    console.log(`[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`, varValue);
+
+    const targetScope = scopeResolver.determineScope(varName);
+    console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
+
+    scopeResolver.setVariable(varName, varValue, targetScope, position, position.actionId);
+    console.log(`[ScriptExecutor] ✅ Set variable "${varName}" to ${targetScope} scope`);
+  }
+
+  /**
+   * Verify variables are written successfully
+   */
+  private verifyVariablesWritten(
+    executionState: ExecutionState,
+    position: { phaseId?: string; topicId?: string; actionId: string },
+    logPrefix: string
+  ): void {
+    console.log(`[ScriptExecutor] 🔍 Verifying variableStore after writing ${logPrefix}:`);
+    console.log(`[ScriptExecutor] - Global:`, Object.keys(executionState.variableStore!.global));
+    console.log(`[ScriptExecutor] - Session:`, Object.keys(executionState.variableStore!.session));
+
+    if (position.phaseId) {
+      console.log(
+        `[ScriptExecutor] - Phase[${position.phaseId}]:`,
+        executionState.variableStore!.phase[position.phaseId]
+          ? Object.keys(executionState.variableStore!.phase[position.phaseId])
+          : 'undefined'
+      );
+    }
+
+    if (position.topicId) {
+      console.log(
+        `[ScriptExecutor] - Topic[${position.topicId}]:`,
+        executionState.variableStore!.topic[position.topicId]
+          ? Object.keys(executionState.variableStore!.topic[position.topicId])
+          : 'undefined'
       );
     }
   }
@@ -281,146 +315,244 @@ export class ScriptExecutor {
     templateProvider?: TemplateProvider
   ): Promise<ExecutionState> {
     try {
-      // Progressive migration: migrate data from variables to variableStore if not exists
-      VariableScopeResolver.migrateIfNeeded(executionState);
-
-      // Parse script
-      const parsed = JSON.parse(scriptContent);
-      const sessionData = parsed.session;
-      const phases = sessionData.phases;
-
-      // Setup session metadata
-      this.actionStateManager.setupSessionMetadata(
+      const phases = this.initializeSession(
+        scriptContent,
         executionState,
-        sessionData,
         projectId,
         templateProvider
       );
 
-      // Restore action state if exists
-      this.actionStateManager.restoreActionIfNeeded(executionState);
-
-      // If current Action is executing, continue it
-      if (executionState.currentAction) {
-        // Restore position ID information
-        this.actionStateManager.restorePositionIds(executionState, phases);
-
-        console.log('[ScriptExecutor] 🔄 Continuing current action:', {
-          actionId: executionState.currentAction.actionId,
-          actionIdx: executionState.currentActionIdx,
-          phaseId: executionState.currentPhaseId,
-          topicId: executionState.currentTopicId,
-        });
-        const result = await this.continueAction(
-          executionState.currentAction,
-          executionState,
-          sessionId,
-          userInput
-        );
-
-        if (!result.completed) {
-          // Action not completed, handle intermediate state
-          await this.resultHandler.handleIncomplete(
-            executionState,
-            result,
-            sessionId,
-            executionState.currentPhaseId || '',
-            executionState.currentTopicId || '',
-            (state, vars) => {
-              const position = {
-                phaseId: state.currentPhaseId,
-                topicId: state.currentTopicId,
-                actionId: state.currentAction!.actionId,
-              };
-              this.updateVariablesWithScope(state, vars, position, true);
-            }
-          );
-          console.log('[ScriptExecutor] ⏸️ Action still not completed, waiting for more input');
-          return executionState;
-        }
-
-        // Action completed, handle result
-        console.log('[ScriptExecutor] ✅ Action completed via continue:', {
-          actionId: executionState.currentAction.actionId,
-          hasAiMessage: !!result.aiMessage,
-        });
-        this.resultHandler.handleCompleted(executionState, result, (state, vars) => {
-          const position = {
-            phaseId: state.currentPhaseId,
-            topicId: state.currentTopicId,
-            actionId: state.currentAction!.actionId,
-          };
-          this.updateVariablesWithScope(state, vars, position, true);
-        });
-
-        if (!result.success) {
-          return executionState;
-        }
-
-        // Prepare next action
-        this.resultHandler.prepareNext(executionState, phases);
-
-        // ⚠️ After Action completes, continue executing next action
-        // This way ai_say can immediately execute next action after completion
-        // Note: Do not return, let code continue to executePhase below
-        console.log('[ScriptExecutor] ✅ Action completed, continuing to execute next actions');
+      // Handle resuming current action if exists
+      const shouldContinue = await this.resumeCurrentActionIfNeeded(
+        executionState,
+        sessionId,
+        userInput,
+        phases
+      );
+      if (!shouldContinue) {
+        return executionState;
       }
 
-      // Execute script flow
-      while (executionState.currentPhaseIdx < phases.length) {
-        const phase = phases[executionState.currentPhaseIdx];
-        executionState.currentPhaseId = phase.phase_id;
+      // Execute all phases
+      await this.executeAllPhases(executionState, phases, sessionId, userInput);
 
-        // Execute Phase
-        await this.executePhase(phase, sessionId, executionState, userInput);
-
-        if (executionState.status === ExecutionStatus.WAITING_INPUT) {
-          return executionState;
-        }
-
-        // Phase completed, enter next
-        executionState.currentPhaseIdx += 1;
-        executionState.currentTopicIdx = 0;
-        executionState.currentActionIdx = 0;
-
-        if (executionState.currentPhaseIdx < phases.length) {
-          const nextPhase = phases[executionState.currentPhaseIdx];
-          executionState.currentPhaseId = nextPhase.phase_id;
-          if (nextPhase.topics && nextPhase.topics.length > 0) {
-            const firstTopic = nextPhase.topics[0];
-            executionState.currentTopicId = firstTopic.topic_id;
-            if (firstTopic.actions && firstTopic.actions.length > 0) {
-              const firstActionConfig = firstTopic.actions[0];
-              executionState.currentActionId = firstActionConfig.action_id;
-              executionState.currentActionType = firstActionConfig.action_type;
-              console.log(
-                `[ScriptExecutor] ➡️ Moving to next phase: ${nextPhase.phase_id}, first action: ${firstActionConfig.action_id}`
-              );
-            } else {
-              executionState.currentActionId = undefined;
-              executionState.currentActionType = undefined;
-            }
-          } else {
-            executionState.currentTopicId = undefined;
-            executionState.currentActionId = undefined;
-            executionState.currentActionType = undefined;
-          }
-        } else {
-          executionState.currentPhaseId = undefined;
-          executionState.currentTopicId = undefined;
-          executionState.currentActionId = undefined;
-          executionState.currentActionType = undefined;
-        }
+      // Only set COMPLETED if not waiting for input
+      if (executionState.status !== ExecutionStatus.WAITING_INPUT) {
+        executionState.status = ExecutionStatus.COMPLETED;
       }
-
-      // All Phases execution completed
-      executionState.status = ExecutionStatus.COMPLETED;
       return executionState;
     } catch (e: any) {
       executionState.status = ExecutionStatus.ERROR;
       executionState.metadata.error = e.message;
       throw new Error(`Script execution failed: ${e.message}`);
     }
+  }
+
+  /**
+   * Initialize session: parse script, setup metadata, restore state
+   */
+  private initializeSession(
+    scriptContent: string,
+    executionState: ExecutionState,
+    projectId?: string,
+    templateProvider?: TemplateProvider
+  ): any[] {
+    VariableScopeResolver.migrateIfNeeded(executionState);
+
+    const parsed = JSON.parse(scriptContent);
+    const sessionData = parsed.session;
+    const phases = sessionData.phases;
+
+    this.actionStateManager.setupSessionMetadata(
+      executionState,
+      sessionData,
+      projectId,
+      templateProvider
+    );
+    this.actionStateManager.restoreActionIfNeeded(executionState);
+
+    return phases;
+  }
+
+  /**
+   * Resume current action if it's not completed yet
+   * Returns true if should continue executing, false if should wait for input
+   */
+  private async resumeCurrentActionIfNeeded(
+    executionState: ExecutionState,
+    sessionId: string,
+    userInput: string | null | undefined,
+    phases: any[]
+  ): Promise<boolean> {
+    if (!executionState.currentAction) {
+      return true; // No action to resume, continue normally
+    }
+
+    this.actionStateManager.restorePositionIds(executionState, phases);
+
+    console.log('[ScriptExecutor] 🔄 Continuing current action:', {
+      actionId: executionState.currentAction.actionId,
+      actionIdx: executionState.currentActionIdx,
+      phaseId: executionState.currentPhaseId,
+      topicId: executionState.currentTopicId,
+    });
+
+    const result = await this.continueAction(
+      executionState.currentAction,
+      executionState,
+      sessionId,
+      userInput
+    );
+
+    if (!result.completed) {
+      await this.handleIncompleteAction(executionState, result, sessionId);
+      return false; // Wait for more input
+    }
+
+    this.handleCompletedAction(executionState, result);
+
+    if (!result.success) {
+      return false; // Stop execution on error
+    }
+
+    this.resultHandler.prepareNext(executionState, phases);
+    console.log('[ScriptExecutor] ✅ Action completed, continuing to execute next actions');
+    return true; // Continue to next actions
+  }
+
+  /**
+   * Handle incomplete action result
+   */
+  private async handleIncompleteAction(
+    executionState: ExecutionState,
+    result: ActionResult,
+    sessionId: string
+  ): Promise<void> {
+    await this.resultHandler.handleIncomplete(
+      executionState,
+      result,
+      sessionId,
+      executionState.currentPhaseId || '',
+      executionState.currentTopicId || '',
+      (state, vars) => {
+        const position = {
+          phaseId: state.currentPhaseId,
+          topicId: state.currentTopicId,
+          actionId: state.currentAction!.actionId,
+        };
+        this.updateVariablesWithScope(state, vars, position, true);
+      }
+    );
+    console.log('[ScriptExecutor] ⏸️ Action still not completed, waiting for more input');
+  }
+
+  /**
+   * Handle completed action result
+   */
+  private handleCompletedAction(executionState: ExecutionState, result: ActionResult): void {
+    console.log('[ScriptExecutor] ✅ Action completed via continue:', {
+      actionId: executionState.currentAction!.actionId,
+      hasAiMessage: !!result.aiMessage,
+    });
+
+    this.resultHandler.handleCompleted(executionState, result, (state, vars) => {
+      const position = {
+        phaseId: state.currentPhaseId,
+        topicId: state.currentTopicId,
+        actionId: state.currentAction!.actionId,
+      };
+      this.updateVariablesWithScope(state, vars, position, true);
+    });
+  }
+
+  /**
+   * Execute all phases in the script
+   */
+  private async executeAllPhases(
+    executionState: ExecutionState,
+    phases: any[],
+    sessionId: string,
+    userInput: string | null | undefined
+  ): Promise<void> {
+    while (executionState.currentPhaseIdx < phases.length) {
+      const phase = phases[executionState.currentPhaseIdx];
+      executionState.currentPhaseId = phase.phase_id;
+
+      await this.executePhase(phase, sessionId, executionState, userInput);
+
+      if (executionState.status === ExecutionStatus.WAITING_INPUT) {
+        return; // Exit and wait for input
+      }
+
+      this.moveToNextPhase(executionState, phases);
+    }
+  }
+
+  /**
+   * Move execution position to next phase
+   */
+  private moveToNextPhase(executionState: ExecutionState, phases: any[]): void {
+    executionState.currentPhaseIdx += 1;
+    executionState.currentTopicIdx = 0;
+    executionState.currentActionIdx = 0;
+
+    if (executionState.currentPhaseIdx < phases.length) {
+      this.updatePositionForNextPhase(executionState, phases[executionState.currentPhaseIdx]);
+    } else {
+      this.clearPositionIds(executionState);
+    }
+  }
+
+  /**
+   * Update position IDs for next phase
+   */
+  private updatePositionForNextPhase(executionState: ExecutionState, nextPhase: any): void {
+    executionState.currentPhaseId = nextPhase.phase_id;
+
+    if (nextPhase.topics && nextPhase.topics.length > 0) {
+      const firstTopic = nextPhase.topics[0];
+      executionState.currentTopicId = firstTopic.topic_id;
+
+      if (firstTopic.actions && firstTopic.actions.length > 0) {
+        const firstActionConfig = firstTopic.actions[0];
+        executionState.currentActionId = firstActionConfig.action_id;
+        executionState.currentActionType = firstActionConfig.action_type;
+        console.log(
+          `[ScriptExecutor] ➡️ Moving to next phase: ${nextPhase.phase_id}, first action: ${firstActionConfig.action_id}`
+        );
+      } else {
+        this.clearActionIds(executionState);
+      }
+    } else {
+      this.clearTopicAndActionIds(executionState);
+    }
+  }
+
+  /**
+   * Clear all position IDs
+   */
+  private clearPositionIds(executionState: ExecutionState): void {
+    executionState.currentPhaseId = undefined;
+    executionState.currentTopicId = undefined;
+    executionState.currentActionId = undefined;
+    executionState.currentActionType = undefined;
+  }
+
+  /**
+   * Clear action IDs only
+   */
+  private clearActionIds(executionState: ExecutionState): void {
+    executionState.currentActionId = undefined;
+    executionState.currentActionType = undefined;
+  }
+
+  /**
+   * Clear topic and action IDs
+   */
+  private clearTopicAndActionIds(executionState: ExecutionState): void {
+    executionState.currentTopicId = undefined;
+    executionState.currentActionId = undefined;
+    executionState.currentActionType = undefined;
   }
 
   /**
@@ -446,29 +578,39 @@ export class ScriptExecutor {
         return;
       }
 
-      // Topic completed, enter next
-      executionState.currentTopicIdx += 1;
-      executionState.currentActionIdx = 0;
+      this.moveToNextTopic(executionState, topics);
+    }
+  }
 
-      if (executionState.currentTopicIdx < topics.length) {
-        const nextTopic = topics[executionState.currentTopicIdx];
-        executionState.currentTopicId = nextTopic.topic_id;
-        if (nextTopic.actions && nextTopic.actions.length > 0) {
-          const firstActionConfig = nextTopic.actions[0];
-          executionState.currentActionId = firstActionConfig.action_id;
-          executionState.currentActionType = firstActionConfig.action_type;
-          console.log(
-            `[ScriptExecutor] ➡️ Moving to next topic: ${nextTopic.topic_id}, first action: ${firstActionConfig.action_id}`
-          );
-        } else {
-          executionState.currentActionId = undefined;
-          executionState.currentActionType = undefined;
-        }
-      } else {
-        executionState.currentTopicId = undefined;
-        executionState.currentActionId = undefined;
-        executionState.currentActionType = undefined;
-      }
+  /**
+   * Move execution position to next topic
+   */
+  private moveToNextTopic(executionState: ExecutionState, topics: any[]): void {
+    executionState.currentTopicIdx += 1;
+    executionState.currentActionIdx = 0;
+
+    if (executionState.currentTopicIdx < topics.length) {
+      this.updatePositionForNextTopic(executionState, topics[executionState.currentTopicIdx]);
+    } else {
+      this.clearTopicAndActionIds(executionState);
+    }
+  }
+
+  /**
+   * Update position IDs for next topic
+   */
+  private updatePositionForNextTopic(executionState: ExecutionState, nextTopic: any): void {
+    executionState.currentTopicId = nextTopic.topic_id;
+
+    if (nextTopic.actions && nextTopic.actions.length > 0) {
+      const firstActionConfig = nextTopic.actions[0];
+      executionState.currentActionId = firstActionConfig.action_id;
+      executionState.currentActionType = firstActionConfig.action_type;
+      console.log(
+        `[ScriptExecutor] ➡️ Moving to next topic: ${nextTopic.topic_id}, first action: ${firstActionConfig.action_id}`
+      );
+    } else {
+      this.clearActionIds(executionState);
     }
   }
 
@@ -528,141 +670,13 @@ export class ScriptExecutor {
 
       // Handle execution result
       if (!result.completed) {
-        console.log(`[ScriptExecutor] ⏸️ Action not completed, waiting for input`);
-
-        if (result.aiMessage) {
-          executionState.lastAiMessage = result.aiMessage;
-          // 也添加到对话历史
-          executionState.conversationHistory.push({
-            role: 'assistant',
-            content: result.aiMessage,
-            actionId: action.actionId,
-            metadata: result.metadata,
-          });
-        }
-        // Save LLM debug info (even if Action not completed)
-        if (result.debugInfo) {
-          executionState.lastLLMDebugInfo = result.debugInfo;
-          console.log('[ScriptExecutor] 💾 Saved LLM debug info (action not completed):', {
-            hasPrompt: !!result.debugInfo.prompt,
-            hasResponse: !!result.debugInfo.response,
-          });
-        }
-        // Need to wait for user input
-        executionState.status = ExecutionStatus.WAITING_INPUT;
-
-        executionState.metadata.actionState = this.actionStateManager.serialize(action);
-        console.log(`[ScriptExecutor] 🔴 Returning to wait for user input`);
+        this.handleActionNotCompleted(executionState, result, action);
         return;
       }
 
-      // Action completed, handle result
-      console.log(`[ScriptExecutor] ? Action completed successfully`);
+      // Action completed
       if (result.success) {
-        if (result.extractedVariables) {
-          executionState.variables = {
-            ...executionState.variables,
-            ...result.extractedVariables,
-          };
-
-          // New logic: use VariableScopeResolver to write variables to the correct scope
-          if (executionState.variableStore) {
-            console.log(
-              `[ScriptExecutor] 🔍 Processing extracted variables:`,
-              result.extractedVariables
-            );
-            console.log(`[ScriptExecutor] 🔍 Current position:`, {
-              phaseId,
-              topicId,
-              actionId: action.actionId,
-            });
-
-            const scopeResolver = new VariableScopeResolver(executionState.variableStore);
-            const position = {
-              phaseId,
-              topicId,
-              actionId: action.actionId,
-            };
-
-            for (const [varName, varValue] of Object.entries(result.extractedVariables)) {
-              console.log(
-                `[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`,
-                varValue
-              );
-
-              // Determine the target scope for the variable
-              const targetScope = scopeResolver.determineScope(varName);
-              console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
-
-              // 写入变量
-              scopeResolver.setVariable(varName, varValue, targetScope, position, action.actionId);
-              console.log(`[ScriptExecutor] ? Set variable "${varName}" to ${targetScope} scope`);
-            }
-
-            // Verify that the variables are written successfully
-            console.log(`[ScriptExecutor] 🔍 Verifying variableStore after writing:`);
-            console.log(
-              `[ScriptExecutor] - Global:`,
-              Object.keys(executionState.variableStore.global)
-            );
-            console.log(
-              `[ScriptExecutor] - Session:`,
-              Object.keys(executionState.variableStore.session)
-            );
-            console.log(
-              `[ScriptExecutor] - Phase[${phaseId}]:`,
-              executionState.variableStore.phase[phaseId]
-                ? Object.keys(executionState.variableStore.phase[phaseId])
-                : 'undefined'
-            );
-            console.log(
-              `[ScriptExecutor] - Topic[${topicId}]:`,
-              executionState.variableStore.topic[topicId]
-                ? Object.keys(executionState.variableStore.topic[topicId])
-                : 'undefined'
-            );
-          } else {
-            console.warn(
-              `[ScriptExecutor] ⚠️ variableStore is not initialized, cannot write variables to scopes`
-            );
-          }
-        }
-
-        // Add to conversation history
-        if (result.aiMessage) {
-          executionState.conversationHistory.push({
-            role: 'assistant',
-            content: result.aiMessage,
-            actionId: action.actionId,
-            metadata: result.metadata,
-          });
-          executionState.lastAiMessage = result.aiMessage;
-        }
-
-        // Save LLM debug info if available
-        if (result.debugInfo) {
-          executionState.lastLLMDebugInfo = result.debugInfo;
-          console.log('[ScriptExecutor] 💾 Saved LLM debug info:', {
-            hasPrompt: !!result.debugInfo.prompt,
-            hasResponse: !!result.debugInfo.response,
-            model: result.debugInfo.model,
-          });
-        }
-
-        // Save round info if available
-        if (
-          result.metadata?.currentRound !== undefined ||
-          result.metadata?.maxRounds !== undefined
-        ) {
-          executionState.metadata.lastActionRoundInfo = {
-            currentRound: result.metadata.currentRound,
-            maxRounds: result.metadata.maxRounds,
-          };
-          console.log(
-            '[ScriptExecutor] 🔄 Saved action round info:',
-            executionState.metadata.lastActionRoundInfo
-          );
-        }
+        this.handleActionCompleted(executionState, result, phaseId, topicId, action);
       } else {
         executionState.status = ExecutionStatus.ERROR;
         executionState.metadata.error = result.error;
@@ -670,30 +684,185 @@ export class ScriptExecutor {
       }
 
       // Move to next Action
-      executionState.currentAction = null;
-      executionState.currentActionIdx += 1;
-
-      delete executionState.metadata.actionState;
-
-      // Prepare for next Action
-      if (executionState.currentActionIdx < actions.length) {
-        const nextActionConfig = actions[executionState.currentActionIdx];
-        executionState.currentActionId = nextActionConfig.action_id;
-        executionState.currentActionType = nextActionConfig.action_type;
-        console.log(
-          `[ScriptExecutor] ➡️ Moving to next action: ${nextActionConfig.action_id} (${nextActionConfig.action_type})`
-        );
-      } else {
-        // Topic has no more Actions
-        executionState.currentActionId = undefined;
-        executionState.currentActionType = undefined;
-        console.log(`[ScriptExecutor] ➡️ No more actions in this topic`);
-      }
+      this.moveToNextAction(executionState, actions);
     }
 
     // Topic all Actions executed
     console.log(`[ScriptExecutor] ? Topic completed: ${topicId}`);
     executionState.status = ExecutionStatus.RUNNING;
+  }
+
+  /**
+   * 处理未完成的 action
+   */
+  private handleActionNotCompleted(
+    executionState: ExecutionState,
+    result: ActionResult,
+    action: BaseAction
+  ): void {
+    console.log(`[ScriptExecutor] ⏸️ Action not completed, waiting for input`);
+
+    if (result.aiMessage) {
+      executionState.lastAiMessage = result.aiMessage;
+      executionState.conversationHistory.push({
+        role: 'assistant',
+        content: result.aiMessage,
+        actionId: action.actionId,
+        metadata: result.metadata,
+      });
+    }
+
+    if (result.debugInfo) {
+      executionState.lastLLMDebugInfo = result.debugInfo;
+      console.log('[ScriptExecutor] 💾 Saved LLM debug info (action not completed):', {
+        hasPrompt: !!result.debugInfo.prompt,
+        hasResponse: !!result.debugInfo.response,
+      });
+    }
+
+    executionState.status = ExecutionStatus.WAITING_INPUT;
+    executionState.metadata.actionState = this.actionStateManager.serialize(action);
+    console.log(`[ScriptExecutor] 🔴 Returning to wait for user input`);
+  }
+
+  /**
+   * 处理已完成的 action
+   */
+  private handleActionCompleted(
+    executionState: ExecutionState,
+    result: ActionResult,
+    phaseId: string,
+    topicId: string,
+    action: BaseAction
+  ): void {
+    console.log(`[ScriptExecutor] ? Action completed successfully`);
+
+    // 处理提取的变量
+    if (result.extractedVariables) {
+      executionState.variables = {
+        ...executionState.variables,
+        ...result.extractedVariables,
+      };
+
+      if (executionState.variableStore) {
+        this.processExtractedVariables(
+          executionState,
+          result.extractedVariables,
+          phaseId,
+          topicId,
+          action
+        );
+      }
+    }
+
+    // 添加到对话历史
+    if (result.aiMessage) {
+      executionState.conversationHistory.push({
+        role: 'assistant',
+        content: result.aiMessage,
+        actionId: action.actionId,
+        metadata: result.metadata,
+      });
+      executionState.lastAiMessage = result.aiMessage;
+    }
+
+    // 保存 LLM debug info
+    if (result.debugInfo) {
+      executionState.lastLLMDebugInfo = result.debugInfo;
+      console.log('[ScriptExecutor] 💾 Saved LLM debug info:', {
+        hasPrompt: !!result.debugInfo.prompt,
+        hasResponse: !!result.debugInfo.response,
+        model: result.debugInfo.model,
+      });
+    }
+
+    // 保存 round info
+    if (result.metadata?.currentRound !== undefined || result.metadata?.maxRounds !== undefined) {
+      executionState.metadata.lastActionRoundInfo = {
+        currentRound: result.metadata.currentRound,
+        maxRounds: result.metadata.maxRounds,
+      };
+      console.log(
+        '[ScriptExecutor] 🔄 Saved action round info:',
+        executionState.metadata.lastActionRoundInfo
+      );
+    }
+  }
+
+  /**
+   * 处理提取的变量
+   */
+  private processExtractedVariables(
+    executionState: ExecutionState,
+    extractedVariables: Record<string, any>,
+    phaseId: string,
+    topicId: string,
+    action: BaseAction
+  ): void {
+    if (!executionState.variableStore) {
+      console.warn(
+        `[ScriptExecutor] ⚠️ variableStore is not initialized, cannot write variables to scopes`
+      );
+      return;
+    }
+
+    console.log(`[ScriptExecutor] 🔍 Processing extracted variables:`, extractedVariables);
+    console.log(`[ScriptExecutor] 🔍 Current position:`, {
+      phaseId,
+      topicId,
+      actionId: action.actionId,
+    });
+
+    const scopeResolver = new VariableScopeResolver(executionState.variableStore);
+    const position = { phaseId, topicId, actionId: action.actionId };
+
+    for (const [varName, varValue] of Object.entries(extractedVariables)) {
+      console.log(`[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`, varValue);
+
+      const targetScope = scopeResolver.determineScope(varName);
+      console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
+
+      scopeResolver.setVariable(varName, varValue, targetScope, position, action.actionId);
+      console.log(`[ScriptExecutor] ? Set variable "${varName}" to ${targetScope} scope`);
+    }
+
+    console.log(`[ScriptExecutor] 🔍 Verifying variableStore after writing:`);
+    console.log(`[ScriptExecutor] - Global:`, Object.keys(executionState.variableStore.global));
+    console.log(`[ScriptExecutor] - Session:`, Object.keys(executionState.variableStore.session));
+    console.log(
+      `[ScriptExecutor] - Phase[${phaseId}]:`,
+      executionState.variableStore.phase[phaseId]
+        ? Object.keys(executionState.variableStore.phase[phaseId])
+        : 'undefined'
+    );
+    console.log(
+      `[ScriptExecutor] - Topic[${topicId}]:`,
+      executionState.variableStore.topic[topicId]
+        ? Object.keys(executionState.variableStore.topic[topicId])
+        : 'undefined'
+    );
+  }
+
+  /**
+   * 移动到下一个 action
+   */
+  private moveToNextAction(executionState: ExecutionState, actions: any[]): void {
+    executionState.currentAction = null;
+    executionState.currentActionIdx += 1;
+    delete executionState.metadata.actionState;
+
+    if (executionState.currentActionIdx < actions.length) {
+      const nextActionConfig = actions[executionState.currentActionIdx];
+      executionState.currentActionId = nextActionConfig.action_id;
+      executionState.currentActionType = nextActionConfig.action_type;
+      console.log(
+        `[ScriptExecutor] ➡️ Moving to next action: ${nextActionConfig.action_id} (${nextActionConfig.action_type})`
+      );
+    } else {
+      executionState.currentActionId = undefined;
+      executionState.currentActionType = undefined;
+      console.log(`[ScriptExecutor] ➡️ No more actions in this topic`);
+    }
   }
 
   /**

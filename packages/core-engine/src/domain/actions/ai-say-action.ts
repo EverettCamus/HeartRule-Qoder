@@ -23,7 +23,13 @@ import { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js
 import { PromptTemplateManager, TemplateResolver } from '../../engines/prompt-template/index.js';
 
 import { BaseAction } from './base-action.js';
-import type { ActionContext, ActionResult, ActionMetrics, ProgressSuggestion, ExitReason } from './base-action.js';
+import type {
+  ActionContext,
+  ActionResult,
+  ActionMetrics,
+  ProgressSuggestion,
+  ExitReason,
+} from './base-action.js';
 
 /**
  * LLM 输出格式（支持新旧两种格式）
@@ -168,7 +174,10 @@ export class AiSayAction extends BaseAction {
     let monitorFeedback = '';
     if (context.metadata?.latestMonitorFeedback) {
       monitorFeedback = `\n\n${context.metadata.latestMonitorFeedback}`;
-      console.log('[AiSayAction] 📝 检测到监控反馈,已拼接到提示词:', monitorFeedback.substring(0, 100) + '...');
+      console.log(
+        '[AiSayAction] 📝 检测到监控反馈,已拼接到提示词:',
+        monitorFeedback.substring(0, 100) + '...'
+      );
     }
 
     // 3. 两层变量替换
@@ -286,13 +295,22 @@ export class AiSayAction extends BaseAction {
     context: ActionContext,
     _userInput?: string | null
   ): Promise<ActionResult> {
+    console.log(`[AiSayAction] 🔷 Entering Legacy Mode, currentRound: ${this.currentRound}`);
+
     // 1. 选择原始模板（优先级：content > content_template > prompt_template）
     const rawContent = this.getConfig('content') || this.getConfig('content_template') || '';
+    console.log(`[AiSayAction] 📄 Raw content:`, rawContent.substring(0, 50) + '...');
 
     // 明确检查 require_acknowledgment
     const requireAcknowledgment = this.getConfig('require_acknowledgment', true);
+    console.log(
+      `[AiSayAction] 🔍 require_acknowledgment:`,
+      requireAcknowledgment,
+      `currentRound:`,
+      this.currentRound
+    );
 
-    // 需要确认的情况 - 检查是否是第二轮
+    // 需要确认的情况 - 检查是否是第二轮（第一轮是0，第二轮是1）
     if (requireAcknowledgment && this.currentRound > 0) {
       console.log(`[AiSayAction] ✅ User acknowledged, action completed`);
       this.currentRound = 0;
@@ -346,6 +364,10 @@ export class AiSayAction extends BaseAction {
     // 需要确认的情况
     if (requireAcknowledgment) {
       this.currentRound += 1;
+      console.log(
+        `[AiSayAction] ⏸️ Waiting for acknowledgment, returning completed=false, currentRound:`,
+        this.currentRound
+      );
       return {
         success: true,
         completed: false,
@@ -360,6 +382,7 @@ export class AiSayAction extends BaseAction {
     }
 
     // 不需要确认
+    console.log(`[AiSayAction] ✅ No acknowledgment needed, returning completed=true`);
     return {
       success: true,
       completed: true,
@@ -516,11 +539,7 @@ export class AiSayAction extends BaseAction {
     };
   } {
     const MAX_PARSE_RETRY = 3;
-    const RETRY_STRATEGIES = [
-      'direct_parse',
-      'trim_and_parse',
-      'extract_json_block'
-    ];
+    const RETRY_STRATEGIES = ['direct_parse', 'trim_and_parse', 'extract_json_block'];
 
     let parseAttempt = 0;
     let lastError: Error | null = null;
@@ -528,27 +547,34 @@ export class AiSayAction extends BaseAction {
 
     for (const strategy of RETRY_STRATEGIES) {
       parseAttempt++;
-      
+
       try {
         cleanedResponse = this.applyParseStrategy(rawResponse, strategy);
         const output = JSON.parse(cleanedResponse) as MainLineOutput;
 
         if (parseAttempt > 1) {
-          console.warn(`[AiSayAction] JSON解析在第${parseAttempt}次尝试成功，使用策略: ${strategy}`);
+          console.warn(
+            `[AiSayAction] JSON解析在第${parseAttempt}次尝试成功，使用策略: ${strategy}`
+          );
         }
 
         return {
           output,
           cleanedResponse,
-          parseError: parseAttempt > 1 ? {
-            retryCount: parseAttempt,
-            strategies: RETRY_STRATEGIES.slice(0, parseAttempt),
-            finalError: '',
-          } : undefined,
+          parseError:
+            parseAttempt > 1
+              ? {
+                  retryCount: parseAttempt,
+                  strategies: RETRY_STRATEGIES.slice(0, parseAttempt),
+                  finalError: '',
+                }
+              : undefined,
         };
       } catch (e: any) {
         lastError = e;
-        console.warn(`[AiSayAction] JSON解析第${parseAttempt}次失败，策略: ${strategy}，错误: ${e.message}`);
+        console.warn(
+          `[AiSayAction] JSON解析第${parseAttempt}次失败，策略: ${strategy}，错误: ${e.message}`
+        );
 
         if (parseAttempt >= MAX_PARSE_RETRY) {
           console.error('[AiSayAction] JSON解析重试耗尽，使用降级默认值');
@@ -645,16 +671,23 @@ export class AiSayAction extends BaseAction {
    */
   private extractProgressSuggestion(llmOutput: MainLineOutput): ProgressSuggestion {
     const suggestion = llmOutput.progress_suggestion;
-    const validSuggestions: ProgressSuggestion[] = ['continue_needed', 'completed', 'blocked', 'off_topic'];
+    const validSuggestions: ProgressSuggestion[] = [
+      'continue_needed',
+      'completed',
+      'blocked',
+      'off_topic',
+    ];
 
     if (suggestion && validSuggestions.includes(suggestion as ProgressSuggestion)) {
       return suggestion as ProgressSuggestion;
     }
 
     if (suggestion && !validSuggestions.includes(suggestion as ProgressSuggestion)) {
-      console.warn(`[AiSayAction] 非法的progress_suggestion值: ${suggestion}，使用默认值: continue_needed`);
+      console.warn(
+        `[AiSayAction] 非法的progress_suggestion值: ${suggestion}，使用默认值: continue_needed`
+      );
     }
-    
+
     return 'continue_needed';
   }
 }
