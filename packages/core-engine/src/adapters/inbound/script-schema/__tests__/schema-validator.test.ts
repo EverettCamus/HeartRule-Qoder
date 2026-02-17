@@ -129,23 +129,26 @@ describe('SchemaValidator', () => {
 
     it('应该检测无法识别的action类型', () => {
       const result = validator.validateSession({
-        session_id: 'test_session',
-        phases: [
-          {
-            phase_id: 'phase_1',
-            topics: [
-              {
-                topic_id: 'topic_1',
-                actions: [
-                  {
-                    action_type: 'unknown_action',
-                    content: 'Test content',
-                  },
-                ],
-              },
-            ],
-          },
-        ],
+        session: {
+          session_id: 'test_session',
+          phases: [
+            {
+              phase_id: 'phase_1',
+              topics: [
+                {
+                  topic_id: 'topic_1',
+                  actions: [
+                    {
+                      action_type: 'unknown_action',
+                      action_id: 'action_1',
+                      config: { content: 'Test content' },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
       });
       expect(result.valid).toBe(false);
       expect(result.errors).toHaveLength(1);

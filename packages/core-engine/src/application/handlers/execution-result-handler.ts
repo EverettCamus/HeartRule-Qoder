@@ -106,7 +106,7 @@ export class ExecutionResultHandler {
     }
 
     // Store metrics and trigger monitor analysis
-    await this.storeMetricsAndTriggerMonitor(executionState, result, sessionId, phaseId, topicId);
+    this.storeMetricsAndTriggerMonitor(executionState, result, sessionId, phaseId, topicId);
   }
 
   /**
@@ -230,13 +230,13 @@ export class ExecutionResultHandler {
   /**
    * Store metrics and trigger monitor analysis
    */
-  private async storeMetricsAndTriggerMonitor(
+  private storeMetricsAndTriggerMonitor(
     executionState: ExecutionState,
     result: ActionResult,
     sessionId: string,
     phaseId: string,
     topicId: string
-  ): Promise<void> {
+  ): void {
     // Ensure metadata exists
     if (!executionState.metadata) {
       executionState.metadata = {};
@@ -255,17 +255,21 @@ export class ExecutionResultHandler {
       });
     }
 
-    // Trigger monitor analysis (only if currentAction and actionType exist)
+    // Trigger monitor analysis asynchronously (do not block main flow)
     if (executionState.currentActionType && executionState.currentAction) {
-      await this.monitorOrchestrator.analyze(
-        executionState.currentActionType,
-        executionState.currentAction.actionId,
-        result,
-        executionState,
-        sessionId,
-        phaseId,
-        topicId
-      );
+      this.monitorOrchestrator
+        .analyze(
+          executionState.currentActionType,
+          executionState.currentAction.actionId,
+          result,
+          executionState,
+          sessionId,
+          phaseId,
+          topicId
+        )
+        .catch((error: any) => {
+          console.error('[ExecutionResultHandler] Monitor analysis error:', error);
+        });
     }
   }
 }

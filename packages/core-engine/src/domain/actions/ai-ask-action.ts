@@ -114,30 +114,7 @@ export class AiAskAction extends BaseAction {
     try {
       // 🔧 首次执行时：预注册 output 变量定义到 scopeResolver
       if (this.currentRound === 0 && context.scopeResolver && this.config.output) {
-        console.log(`[AiAskAction] 🔧 Registering output variables to scopeResolver`);
-        const outputConfig = this.config.output || [];
-
-        for (const varConfig of outputConfig) {
-          const varName = varConfig.get;
-          if (!varName) continue;
-
-          // 检查是否已经在 variableStore 中定义
-          const existingDef = context.scopeResolver.getVariableDefinition(varName);
-
-          if (!existingDef) {
-            // 未定义，自动在 topic 作用域中注册
-            context.scopeResolver.setVariableDefinition({
-              name: varName,
-              scope: VariableScope.TOPIC,
-              define: varConfig.define || `Auto-registered from ai_ask output: ${varName}`,
-            });
-            console.log(`[AiAskAction] ✅ Auto-registered variable "${varName}" in topic scope`);
-          } else {
-            console.log(
-              `[AiAskAction] ℹ️ Variable "${varName}" already defined in ${existingDef.scope} scope`
-            );
-          }
-        }
+        this.registerOutputVariables(context);
       }
 
       // 统一使用模板驱动执行
@@ -333,206 +310,30 @@ export class AiAskAction extends BaseAction {
     context: ActionContext,
     templateType: AskTemplateType
   ): Promise<ActionResult> {
-    // 1. 从 session 配置读取 template_scheme
-    const sessionConfig = {
-      template_scheme: context.metadata?.sessionConfig?.template_scheme,
-    };
+    // 1. 加载模板
+    const { resolution, template } = await this.loadTemplate(context);
 
-    console.log('[AiAskAction] 📄 Loading template with config:', {
-      template_scheme: sessionConfig.template_scheme,
-      projectId: context.metadata?.projectId,
-      hasTemplateProvider: !!context.metadata?.templateProvider,
-    });
-
-    // 2. 🎯 WI-3: 从 context 中提取 projectId 和 templateProvider
-    const projectId = context.metadata?.projectId;
-    const templateProvider = context.metadata?.templateProvider;
-
-    // 3. 初始化 TemplateResolver（延迟初始化）
-    if (!this.templateResolver) {
-      // 💉 使用 projectId 初始化，如果有 templateProvider 则注入
-      const projectRoot = this.resolveProjectRoot(context);
-      console.log('[AiAskAction] 📂 Using project root:', projectRoot);
-
-      if (projectId && templateProvider) {
-        console.log('[AiAskAction] 💉 Initializing TemplateResolver with projectId and provider');
-        this.templateResolver = new TemplateResolver(projectId, templateProvider);
-      } else {
-        console.log(
-          '[AiAskAction] 📂 Initializing TemplateResolver with project path (fallback mode)'
-        );
-        this.templateResolver = new TemplateResolver(projectRoot);
-      }
-    }
-
-    // 💉 如果 TemplateManager 未初始化 provider，重新初始化
-    if (projectId && templateProvider && !this.templateManager['templateProvider']) {
-      console.log('[AiAskAction] 💉 Re-initializing TemplateManager with projectId and provider');
-      // 🚨 关键修复：清除旧缓存，避免 custom/default 模板缓存冲突
-      this.templateManager.clearCache();
-      this.templateManager = new PromptTemplateManager(projectId, templateProvider);
-    }
-
-    // 4. 解析模板路径（使用两层解析）
-    const resolution = await this.templateResolver.resolveTemplatePath(
-      'ai_ask', // 注意：模板文件名为 ai_ask_v1.md
-      sessionConfig
-    );
-
-    console.log(`[AiAskAction] 📝 Template resolved:`, {
-      path: resolution.path,
-      layer: resolution.layer,
-      scheme: resolution.scheme,
-      exists: resolution.exists,
-    });
-
-    // 5. 加载模板
-    //    - 数据库模式：直接使用相对路径（resolution.path）
-    //    - 文件系统模式：拼接完整路径
-    let template;
-    if (projectId && templateProvider) {
-      // 数据库模式：TemplateManager 会使用 templateProvider.getTemplate()
-      console.log(`[AiAskAction] 📂 Loading template from database:`, resolution.path);
-      template = await this.templateManager.loadTemplate(resolution.path);
-    } else {
-      // 文件系统模式：需要拼接项目根目录
-      const projectRoot = this.resolveProjectRoot(context);
-      const fullPath = path.join(projectRoot, resolution.path);
-      console.log(`[AiAskAction] 📂 Loading template from filesystem:`, fullPath);
-      template = await this.templateManager.loadTemplate(fullPath);
-    }
-
-    // 5. 准备变量
+    // 2. 准备变量
     const scriptVariables = this.extractScriptVariables(context);
     const systemVariables = this.buildSystemVariables(context);
+    const monitorFeedback = this.getMonitorFeedback(context);
 
-    // 5.1 🔥 新增: 从 metadata 读取监控反馈并拼接到提示词
-    let monitorFeedback = '';
-    if (context.metadata?.latestMonitorFeedback) {
-      monitorFeedback = `\n\n${context.metadata.latestMonitorFeedback}`;
-      console.log(
-        '[AiAskAction] 📝 检测到监控反馈,已拼接到提示词:',
-        monitorFeedback.substring(0, 100) + '...'
-      );
-    }
-
-    // 4. 替换变量
-    let prompt = this.templateManager.substituteVariables(
+    // 3. 构造提示词
+    const prompt = this.buildPrompt(
       template.content,
       scriptVariables,
-      systemVariables
+      systemVariables,
+      monitorFeedback
     );
 
-    // 5.2 🔥 新增: 将监控反馈拼接到提示词末尾
-    if (monitorFeedback) {
-      prompt = prompt + monitorFeedback;
-    }
+    // 4. 调用 LLM
+    const llmResult = await this.callLLM(prompt);
 
-    console.log(`[AiAskAction] 📝 Prompt prepared (${prompt.length} chars)`);
-
-    // 5. 调用 LLM
-    const llmResult = await this.llmOrchestrator!.generateText(prompt, {
-      temperature: 0.7,
-      maxTokens: 800,
-    });
-
-    // 6. 安全边界检测
+    // 5. 安全检测
     const safetyCheck = this.checkSafetyBoundary(llmResult.text);
-    if (!safetyCheck.passed) {
-      console.warn(`[AiAskAction] ⚠️ Safety boundary violations detected:`, safetyCheck.violations);
-    }
 
-    // 7. 解析响应
-    if (templateType === AskTemplateType.SIMPLE) {
-      // 简单模式：解析 JSON 响应并提取 content 字段
-      const jsonText = this.cleanJsonOutput(llmResult.text);
-      let llmOutput: any;
-      try {
-        llmOutput = JSON.parse(jsonText);
-      } catch (error) {
-        // 如果解析失败，直接使用原始文本
-        console.warn(`[AiAskAction] ⚠️  Failed to parse simple-mode JSON, using raw text`);
-        llmOutput = { content: llmResult.text.trim() };
-      }
-
-      // 提取 content 字段
-      const aiMessage = llmOutput.content || llmResult.text.trim();
-
-      return {
-        success: true,
-        completed: false,
-        aiMessage,
-        debugInfo: llmResult.debugInfo,
-        metadata: {
-          actionType: AiAskAction.actionType,
-          currentRound: this.currentRound,
-          template_path: resolution.path,
-          template_layer: resolution.layer,
-          template_scheme: resolution.scheme,
-          safety_check: safetyCheck,
-        },
-      };
-    } else {
-      // 多轮模式：解析 JSON 响应（支持3次重试机制）
-      const parseResult = this.parseMultiRoundOutput(llmResult.text);
-      const llmOutput = parseResult.output;
-
-      // 🔧 立即提取 output 中配置的变量
-      const extractedVariables = this.extractVariablesFromJson(llmOutput);
-
-      // 提取 metrics 和 progress_suggestion
-      const metrics = this.extractMetrics(llmOutput);
-      const progressSuggestion = this.extractProgressSuggestion(llmOutput);
-
-      // 判断是否退出
-      const shouldExit = llmOutput.EXIT === 'true';
-
-      // 提取 AI 消息：优先使用 content 字段（新格式），兼容旧格式
-      const aiRole = this.getConfig('ai_role', '咨询师');
-      const aiMessage = llmOutput.content || llmOutput[aiRole] || llmOutput.response || '';
-
-      // 提取安全风险信息
-      const safetyRisk = llmOutput.safety_risk || {
-        detected: false,
-        risk_type: null,
-        confidence: 'high',
-        reason: null,
-      };
-
-      // 提取元数据
-      const llmMetadata = llmOutput.metadata || {};
-
-      // 提取话术风格适配信息
-      const styleAdaptation = llmMetadata.style_adaptation;
-
-      return {
-        success: true,
-        completed: false,
-        aiMessage,
-        extractedVariables:
-          Object.keys(extractedVariables).length > 0 ? extractedVariables : undefined,
-        metrics, // 新增：精细化状态指标
-        progress_suggestion: progressSuggestion, // 新增：进度建议
-        debugInfo: llmResult.debugInfo,
-        metadata: {
-          actionType: AiAskAction.actionType,
-          shouldExit,
-          brief: llmOutput.BRIEF,
-          currentRound: this.currentRound,
-          llmRawOutput: parseResult.cleanedResponse,
-          template_path: resolution.path,
-          template_layer: resolution.layer,
-          template_scheme: resolution.scheme,
-          safety_check: safetyCheck,
-          safety_risk: safetyRisk,
-          llm_metadata: llmMetadata,
-          style_adaptation: styleAdaptation, // 新增：话术风格适配信息
-          parseError: (parseResult.parseError?.retryCount || 0) > 1, // 是否发生过解析失败
-          parseRetryCount: parseResult.parseError?.retryCount || 0, // 重试次数
-          parseErrorDetails: parseResult.parseError, // 解析错误详情
-        },
-      };
-    }
+    // 6. 解析响应
+    return this.parseLLMResponse(llmResult, templateType, resolution, safetyCheck);
   }
 
   /**
@@ -956,5 +757,258 @@ ${historyText}
     }
 
     return 'continue_needed';
+  }
+
+  /**
+   * 注册 output 变量到 scopeResolver
+   */
+  private registerOutputVariables(context: ActionContext): void {
+    console.log(`[AiAskAction] 🔧 Registering output variables to scopeResolver`);
+    const outputConfig = this.config.output || [];
+
+    for (const varConfig of outputConfig) {
+      const varName = varConfig.get;
+      if (!varName) continue;
+
+      // 检查是否已经在 variableStore 中定义
+      const existingDef = context.scopeResolver!.getVariableDefinition(varName);
+
+      if (!existingDef) {
+        // 未定义，自动在 topic 作用域中注册
+        context.scopeResolver!.setVariableDefinition({
+          name: varName,
+          scope: VariableScope.TOPIC,
+          define: varConfig.define || `Auto-registered from ai_ask output: ${varName}`,
+        });
+        console.log(`[AiAskAction] ✅ Auto-registered variable "${varName}" in topic scope`);
+      } else {
+        console.log(
+          `[AiAskAction] ℹ️ Variable "${varName}" already defined in ${existingDef.scope} scope`
+        );
+      }
+    }
+  }
+
+  /**
+   * 加载模板
+   */
+  private async loadTemplate(context: ActionContext): Promise<{ resolution: any; template: any }> {
+    // 1. 从 session 配置读取 template_scheme
+    const sessionConfig = {
+      template_scheme: context.metadata?.sessionConfig?.template_scheme,
+    };
+
+    console.log('[AiAskAction] 📄 Loading template with config:', {
+      template_scheme: sessionConfig.template_scheme,
+      projectId: context.metadata?.projectId,
+      hasTemplateProvider: !!context.metadata?.templateProvider,
+    });
+
+    // 2. 🎯 WI-3: 从 context 中提取 projectId 和 templateProvider
+    const projectId = context.metadata?.projectId;
+    const templateProvider = context.metadata?.templateProvider;
+
+    // 3. 初始化 TemplateResolver（延迟初始化）
+    if (!this.templateResolver) {
+      // 💉 使用 projectId 初始化，如果有 templateProvider 则注入
+      const projectRoot = this.resolveProjectRoot(context);
+      console.log('[AiAskAction] 📂 Using project root:', projectRoot);
+
+      if (projectId && templateProvider) {
+        console.log('[AiAskAction] 💉 Initializing TemplateResolver with projectId and provider');
+        this.templateResolver = new TemplateResolver(projectId, templateProvider);
+      } else {
+        console.log(
+          '[AiAskAction] 📂 Initializing TemplateResolver with project path (fallback mode)'
+        );
+        this.templateResolver = new TemplateResolver(projectRoot);
+      }
+    }
+
+    // 💉 如果 TemplateManager 未初始化 provider，重新初始化
+    if (projectId && templateProvider && !this.templateManager['templateProvider']) {
+      console.log('[AiAskAction] 💉 Re-initializing TemplateManager with projectId and provider');
+      // 🚨 关键修复：清除旧缓存，避免 custom/default 模板缓存冲突
+      this.templateManager.clearCache();
+      this.templateManager = new PromptTemplateManager(projectId, templateProvider);
+    }
+
+    // 4. 解析模板路径（使用两层解析）
+    const resolution = await this.templateResolver.resolveTemplatePath(
+      'ai_ask', // 注意：模板文件名为 ai_ask_v1.md
+      sessionConfig
+    );
+
+    console.log(`[AiAskAction] 📝 Template resolved:`, {
+      path: resolution.path,
+      layer: resolution.layer,
+      scheme: resolution.scheme,
+      exists: resolution.exists,
+    });
+
+    // 5. 加载模板
+    //    - 数据库模式：直接使用相对路径（resolution.path）
+    //    - 文件系统模式：拼接完整路径
+    let template;
+    if (projectId && templateProvider) {
+      // 数据库模式：TemplateManager 会使用 templateProvider.getTemplate()
+      console.log(`[AiAskAction] 📂 Loading template from database:`, resolution.path);
+      template = await this.templateManager.loadTemplate(resolution.path);
+    } else {
+      // 文件系统模式：需要拼接项目根目录
+      const projectRoot = this.resolveProjectRoot(context);
+      const fullPath = path.join(projectRoot, resolution.path);
+      console.log(`[AiAskAction] 📂 Loading template from filesystem:`, fullPath);
+      template = await this.templateManager.loadTemplate(fullPath);
+    }
+
+    return { resolution, template };
+  }
+
+  /**
+   * 获取监控反馈
+   */
+  private getMonitorFeedback(context: ActionContext): string {
+    let monitorFeedback = '';
+    if (context.metadata?.latestMonitorFeedback) {
+      monitorFeedback = `\n\n${context.metadata.latestMonitorFeedback}`;
+      console.log(
+        '[AiAskAction] 📝 检测到监控反馈,已拼接到提示词:',
+        monitorFeedback.substring(0, 100) + '...'
+      );
+    }
+    return monitorFeedback;
+  }
+
+  /**
+   * 构造提示词
+   */
+  private buildPrompt(
+    templateContent: string,
+    scriptVariables: Record<string, any>,
+    systemVariables: Record<string, any>,
+    monitorFeedback: string
+  ): string {
+    let prompt = this.templateManager.substituteVariables(
+      templateContent,
+      new Map(Object.entries(scriptVariables)),
+      new Map(Object.entries(systemVariables))
+    );
+    if (monitorFeedback) {
+      prompt = prompt + monitorFeedback;
+    }
+    console.log(`[AiAskAction] 📝 Prompt prepared (${prompt.length} chars)`);
+    return prompt;
+  }
+
+  /**
+   * 调用 LLM
+   */
+  private async callLLM(prompt: string) {
+    return await this.llmOrchestrator!.generateText(prompt, {
+      temperature: 0.7,
+      maxTokens: 800,
+    });
+  }
+
+  /**
+   * 解析 LLM 响应
+   */
+  private parseLLMResponse(
+    llmResult: any,
+    templateType: AskTemplateType,
+    resolution: any,
+    safetyCheck: any
+  ): ActionResult {
+    if (templateType === AskTemplateType.SIMPLE) {
+      // 简单模式：解析 JSON 响应并提取 content 字段
+      const jsonText = this.cleanJsonOutput(llmResult.text);
+      let llmOutput: any;
+      try {
+        llmOutput = JSON.parse(jsonText);
+      } catch (error) {
+        // 如果解析失败，直接使用原始文本
+        console.warn(`[AiAskAction] ⚠️  Failed to parse simple-mode JSON, using raw text`);
+        llmOutput = { content: llmResult.text.trim() };
+      }
+
+      // 提取 content 字段
+      const aiMessage = llmOutput.content || llmResult.text.trim();
+
+      return {
+        success: true,
+        completed: false,
+        aiMessage,
+        debugInfo: llmResult.debugInfo,
+        metadata: {
+          actionType: AiAskAction.actionType,
+          currentRound: this.currentRound,
+          template_path: resolution.path,
+          template_layer: resolution.layer,
+          template_scheme: resolution.scheme,
+          safety_check: safetyCheck,
+        },
+      };
+    } else {
+      // 多轮模式：解析 JSON 响应（支持3次重试机制）
+      const parseResult = this.parseMultiRoundOutput(llmResult.text);
+      const llmOutput = parseResult.output;
+
+      // 🔧 立即提取 output 中配置的变量
+      const extractedVariables = this.extractVariablesFromJson(llmOutput);
+
+      // 提取 metrics 和 progress_suggestion
+      const metrics = this.extractMetrics(llmOutput);
+      const progressSuggestion = this.extractProgressSuggestion(llmOutput);
+
+      // 判断是否退出
+      const shouldExit = llmOutput.EXIT === 'true';
+
+      // 提取 AI 消息：优先使用 content 字段（新格式），兼容旧格式
+      const aiRole = this.getConfig('ai_role', '咨询师');
+      const aiMessage = llmOutput.content || llmOutput[aiRole] || llmOutput.response || '';
+
+      // 提取安全风险信息
+      const safetyRisk = llmOutput.safety_risk || {
+        detected: false,
+        risk_type: null,
+        confidence: 'high',
+        reason: null,
+      };
+
+      // 提取元数据
+      const llmMetadata = llmOutput.metadata || {};
+
+      // 提取话术风格适配信息
+      const styleAdaptation = llmMetadata.style_adaptation;
+
+      return {
+        success: true,
+        completed: false,
+        aiMessage,
+        extractedVariables:
+          Object.keys(extractedVariables).length > 0 ? extractedVariables : undefined,
+        metrics, // 新增：精细化状态指标
+        progress_suggestion: progressSuggestion, // 新增：进度建议
+        debugInfo: llmResult.debugInfo,
+        metadata: {
+          actionType: AiAskAction.actionType,
+          shouldExit,
+          brief: llmOutput.BRIEF,
+          currentRound: this.currentRound,
+          llmRawOutput: parseResult.cleanedResponse,
+          template_path: resolution.path,
+          template_layer: resolution.layer,
+          template_scheme: resolution.scheme,
+          safety_check: safetyCheck,
+          safety_risk: safetyRisk,
+          llm_metadata: llmMetadata,
+          style_adaptation: styleAdaptation, // 新增：话术风格适配信息
+          parseError: (parseResult.parseError?.retryCount || 0) > 1, // 是否发生过解析失败
+          parseRetryCount: parseResult.parseError?.retryCount || 0, // 重试次数
+          parseErrorDetails: parseResult.parseError, // 解析错误详情
+        },
+      };
+    }
   }
 }
