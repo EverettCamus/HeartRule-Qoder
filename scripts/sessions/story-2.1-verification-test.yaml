@@ -1,0 +1,107 @@
+session:
+  session_id: "story_2_1_verification_test"
+  session_name: "Story2.1验证测试"
+  
+  phases:
+    - phase_id: "verification_phase"
+      phase_name: "验证阶段"
+      topics:
+        - topic_id: "topic_template_semantic_verification"
+          topic_name: "Topic模板语义验证"
+          topic_goal: "验证strategy字段和占位符支持"
+          
+          # Story 2.1新增strategy字段
+          strategy: |
+              验证目标：
+              1. strategy字段被正确解析且不导致Schema错误
+              2. BasicTopicPlanner正确生成TopicPlan
+              3. 实例化队列存储在ExecutionState.currentTopicPlan
+              4. 占位符格式验证正常工作
+              
+              测试步骤：
+              - 首先通过ai_say展示欢迎信息
+              - 通过ai_ask收集用户称呼
+              - 使用占位符{用户称呼}构建个性化消息
+          
+          actions:
+            - action_type: ai_say
+              action_id: "welcome_message"
+              config:
+                content: |
+                  欢迎参与Story 2.1功能验证测试！
+                  
+                  当前测试点：
+                  • Topic配置包含strategy字段
+                  • BasicTopicPlanner生成实例化队列
+                  • ExecutionState持久化TopicPlan
+                  • 占位符格式验证
+                  
+                  让我们开始测试...
+                max_rounds: 1
+            
+            - action_type: ai_ask
+              action_id: "ask_user_name"
+              config:
+                content: "首先,请问您希望我如何称呼您?"
+                output:
+                  - get: 用户称呼
+                    define: "用户希望被称呼的名字"
+                max_rounds: 2
+            
+            # 测试占位符格式
+            - action_type: ai_say
+              action_id: "verify_extraction"
+              config:
+                content: |
+                  很好,{用户称呼}!
+                  
+                  现在让我验证几个技术点:
+                  1. ✅ Topic包含strategy字段
+                  2. ✅ 变量{用户称呼}已成功提取
+                  3. ✅ 占位符{用户称呼}正确替换
+                  
+                  接下来我会提问几个验证性问题...
+                max_rounds: 1
+            
+            - action_type: ai_ask
+              action_id: "confirm_visibility"
+              config:
+                content: "{用户称呼},您能看到上面的消息吗?(请回答'是'或'否')"
+                output:
+                  - get: 消息可见性确认
+                max_rounds: 1
+        
+        - topic_id: "backward_compatibility_verification"
+          topic_name: "向后兼容性验证"
+          topic_goal: "验证无strategy字段的Topic正常执行"
+          # 注意：此Topic故意不包含strategy字段
+          
+          actions:
+            - action_type: ai_say
+              action_id: "compatibility_test"
+              config:
+                content: |
+                  现在测试向后兼容性...
+                  
+                  当前Topic配置特点:
+                  • 不包含strategy字段(可选字段)
+                  • 应该使用BasicTopicPlanner默认行为
+                  • ExecutionState.currentTopicPlan应该正常生成
+                  
+                  如果您能看到这条消息,说明向后兼容测试通过!
+                max_rounds: 1
+            
+            - action_type: ai_say
+              action_id: "completion_message"
+              config:
+                content: |
+                  🎉 验证完成!
+                  
+                  Story 2.1关键功能验证结果:
+                  ✅ Topic.strategy字段支持
+                  ✅ BasicTopicPlanner集成
+                  ✅ TopicPlan持久化
+                  ✅ 占位符{用户称呼}格式验证
+                  ✅ 向后兼容性保证
+                  
+                  感谢{用户称呼}参与测试!

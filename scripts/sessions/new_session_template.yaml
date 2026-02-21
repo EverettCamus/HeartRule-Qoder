@@ -1,0 +1,29 @@
+session:
+  session_id: "new_session_example"
+  session_name: "新建会话示例"
+  
+  phases:
+    - phase_id: "phase_1"
+      phase_name: "第一阶段"
+      
+      topics:
+        - topic_id: "topic_1"
+          topic_name: "话题一"
+          
+          actions:
+            - action_type: ai_say
+              action_id: "action_1"
+              config:
+                # ✅ 使用 content 字段(不是 content_template)
+                content: "欢迎来到新会话,这是一段示例内容。"
+                require_acknowledgment: true
+                max_rounds: 2
+            
+            - action_type: ai_ask
+              action_id: "action_2"
+              config:
+                content: "请问您希望了解什么内容?"
+                output:
+                  - get: user_input
+                    define: "用户的输入内容"
+                max_rounds: 3
