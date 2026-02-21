@@ -73,7 +73,7 @@ export class BasicTopicPlanner implements ITopicPlanner {
    * @returns Topic规划结果
    */
   async plan(context: TopicPlanningContext): Promise<TopicPlan> {
-    const { topicConfig, variableStore, sessionContext } = context;
+    const { topicConfig, variableStore } = context;
 
     // Story 2.1: 基础实现,直接使用模板actions
     // Story 2.2: 此处增加LLM调用逻辑,根据上下文动态生成队列

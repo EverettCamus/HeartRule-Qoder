@@ -18,7 +18,7 @@ async function testAiSayMaxRounds() {
     const sessionId = uuidv4();
 
     // 1. 创建测试项目和脚本
-    const projectId = '4ba2d417-6cc7-4f23-bf47-6b207f741612'; // hello-world项目
+    const _projectId = '4ba2d417-6cc7-4f23-bf47-6b207f741612'; // hello-world项目
     const scriptId = 'ef45f366-b271-4696-870c-44db13d465f7'; // hello-world.yaml
 
     // 2. 创建会话
@@ -59,7 +59,9 @@ async function testAiSayMaxRounds() {
       orderBy: (fields, { asc }) => [asc(fields.timestamp)],
     });
     console.log('\n📋 数据库消息（第1轮后）:', messagesAfterRound1.length);
-    const aiMsgs1 = messagesAfterRound1.filter(m => m.role === 'assistant' && m.actionId === 'say_welcome');
+    const aiMsgs1 = messagesAfterRound1.filter(
+      (m) => m.role === 'assistant' && m.actionId === 'say_welcome'
+    );
     console.log(`   say_welcome AI 消息: ${aiMsgs1.length} 条`);
 
     // 5. 第2轮：用户回复（触发 ai_say 第2次）
@@ -84,15 +86,17 @@ async function testAiSayMaxRounds() {
       orderBy: (fields, { asc }) => [asc(fields.timestamp)],
     });
     console.log('\n📋 数据库消息（第2轮后）:', messagesAfterRound2.length);
-    const aiMsgs2 = messagesAfterRound2.filter(m => m.role === 'assistant' && m.actionId === 'say_welcome');
+    const aiMsgs2 = messagesAfterRound2.filter(
+      (m) => m.role === 'assistant' && m.actionId === 'say_welcome'
+    );
     console.log(`   say_welcome AI 消息: ${aiMsgs2.length} 条`);
     aiMsgs2.forEach((m, i) => {
-      console.log(`   [消息${i+1}]: ${m.content.substring(0, 40)}...`);
+      console.log(`   [消息${i + 1}]: ${m.content.substring(0, 40)}...`);
     });
 
     // 关键验证：应该有2条 say_welcome 的 AI 消息
     const sayWelcomeMessages = messagesAfterRound2.filter(
-      m => m.actionId === 'say_welcome' && m.role === 'assistant'
+      (m) => m.actionId === 'say_welcome' && m.role === 'assistant'
     );
     console.log(`\n🔍 say_welcome 的 AI 消息数量: ${sayWelcomeMessages.length}`);
     if (sayWelcomeMessages.length !== 2) {
@@ -105,9 +109,11 @@ async function testAiSayMaxRounds() {
       orderBy: (fields, { asc }) => [asc(fields.timestamp)],
     });
     console.log('\n📋 数据库消息（第3轮前）:', messagesBeforeRound3.length);
-    const aiMsgs3 = messagesBeforeRound3.filter(m => m.role === 'assistant' && m.actionId === 'say_welcome');
+    const aiMsgs3 = messagesBeforeRound3.filter(
+      (m) => m.role === 'assistant' && m.actionId === 'say_welcome'
+    );
     console.log(`   say_welcome AI 消息: ${aiMsgs3.length} 条`);
-    
+
     // 8. 第3轮：客户端确认，执行下一个 action (ai_ask)
     console.log('\n📊 【第3轮】客户端确认，执行 ai_ask');
     console.log('⚠️  注意：这个请求应该加载 conversationHistory，包含 2条 say_welcome 消息');
@@ -131,13 +137,12 @@ async function testAiSayMaxRounds() {
     console.log(`\n🔍 ai_ask 提示词中的 AI 消息数量: ${aiMessageCount}`);
     console.log(`\n🔍 提示词前200字符:`);
     console.log(prompt.substring(0, 200));
-    
+
     console.log('\n✅ 测试通过！SessionManager 修复成功！');
     console.log('   - 第1轮：AI说话，等待用户');
     console.log('   - 第2轮：用户回复，AI说话（第2次），等待确认');
     console.log('   - 第3轮：执行 ai_ask，conversationHistory 包含2条 say_welcome 消息');
     console.log('\n⚠️  注意：模板变量替换问题（{{chat}} 未被替换）属于另一个问题，需要单独修复');
-
   } catch (error) {
     console.error('\n❌ 测试失败:', error);
     process.exit(1);

@@ -1,9 +1,9 @@
 /**
  * TDD Test Suite: AiSayAction max_rounds behavior
- * 
+ *
  * 测试目标：验证 ai_say 动作的 max_rounds 参数行为
  * 核心规律：AI发送次数 = 用户回复次数 + 1（AI先说AI收尾）
- * 
+ *
  * 测试场景：
  * 1. max_rounds=1：AI发送1次，0次用户交互，立即完成并流转
  * 2. max_rounds=2：AI发送2次，1次用户交互，第2次后完成
@@ -11,10 +11,14 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+
+import type {
+  ILLMProvider,
+  LLMGenerateResult,
+} from '../../src/application/ports/outbound/llm-provider.port.js';
 import { AiSayAction } from '../../src/domain/actions/ai-say-action.js';
-import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
 import type { ActionContext } from '../../src/domain/actions/base-action.js';
-import type { ILLMProvider, LLMGenerateResult } from '../../src/application/ports/outbound/llm-provider.port.js';
+import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
 
 // Mock LLM Provider
 class MockLLMProvider implements ILLMProvider {
@@ -32,15 +36,15 @@ class MockLLMProvider implements ILLMProvider {
             understanding_level: 50,
             has_questions: false,
             expressed_understanding: false,
-            reasoning: '测试评估'
-          }
+            reasoning: '测试评估',
+          },
         },
         metrics: {
           user_engagement: '高',
           emotional_intensity: '中',
-          understanding_level: '良好'
+          understanding_level: '良好',
         },
-        progress_suggestion: 'continue_needed'
+        progress_suggestion: 'continue_needed',
       }),
       debugInfo: {
         prompt,
@@ -48,12 +52,12 @@ class MockLLMProvider implements ILLMProvider {
         model: 'mock-model',
         tokensUsed: 100,
         config: config || {},
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+      },
     };
   }
 
-  async *streamText(prompt: string, config?: any): AsyncIterable<string> {
+  async *streamText(_prompt: string, _config?: any): AsyncIterable<string> {
     yield 'mock stream';
   }
 }
@@ -80,13 +84,13 @@ describe('AiSayAction max_rounds behavior', () => {
         global: {},
         session: {},
         phase: {},
-        topic: {}
+        topic: {},
       },
       conversationHistory: [],
       metadata: {
         projectId: 'test-project',
-        sessionConfig: {}
-      }
+        sessionConfig: {},
+      },
     };
   });
 
@@ -119,7 +123,7 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_hello',
         {
           content: '欢迎',
-          max_rounds: 2
+          max_rounds: 2,
         },
         mockLLM
       );
@@ -142,7 +146,7 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_hello',
         {
           content: '欢迎',
-          max_rounds: 2
+          max_rounds: 2,
         },
         mockLLM
       );
@@ -167,7 +171,7 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_hello',
         {
           content: '欢迎',
-          max_rounds: 2
+          max_rounds: 2,
         },
         mockLLM
       );
@@ -191,7 +195,7 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_hello',
         {
           content: '欢迎',
-          max_rounds: 3
+          max_rounds: 3,
         },
         mockLLM
       );
@@ -209,7 +213,7 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_hello',
         {
           content: '欢迎',
-          max_rounds: 3
+          max_rounds: 3,
         },
         mockLLM
       );
@@ -231,7 +235,7 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_hello',
         {
           content: '欢迎',
-          max_rounds: 3
+          max_rounds: 3,
         },
         mockLLM
       );
@@ -254,7 +258,7 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_hello',
         {
           content: '欢迎',
-          max_rounds: 3
+          max_rounds: 3,
         },
         mockLLM
       );
@@ -295,7 +299,7 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_hello',
         {
           content: '欢迎',
-          max_rounds: 0
+          max_rounds: 0,
         },
         mockLLM
       );
@@ -309,7 +313,7 @@ describe('AiSayAction max_rounds behavior', () => {
       const action = new AiSayAction(
         'say_hello',
         {
-          content: '欢迎'
+          content: '欢迎',
           // 不设置 max_rounds
         },
         mockLLM
@@ -325,7 +329,7 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_hello',
         {
           content: '欢迎',
-          max_rounds: 1
+          max_rounds: 1,
         },
         mockLLM
       );
@@ -349,7 +353,7 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_hello',
         {
           content: '欢迎',
-          max_rounds: 1
+          max_rounds: 1,
         },
         mockLLM
       );
@@ -358,7 +362,7 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_next',
         {
           content: '下一个消息',
-          max_rounds: 1
+          max_rounds: 1,
         },
         mockLLM
       );
@@ -384,13 +388,13 @@ describe('AiSayAction max_rounds behavior', () => {
         'say_hello',
         {
           content: '欢迎',
-          max_rounds: 2
+          max_rounds: 2,
         },
         mockLLM
       );
 
       const result1 = await action.execute(baseContext);
-      
+
       // ScriptExecutor 应该检查 completed=false 并等待
       expect(result1.completed).toBe(false);
       // 此时不应该执行下一个 action
@@ -400,20 +404,22 @@ describe('AiSayAction max_rounds behavior', () => {
   describe('Action状态序列化与恢复：currentRound保持', () => {
     /**
      * 核心场景：多轮对话中，action 实例的 currentRound 必须被正确序列化和恢复
-     * 
+     *
      * 问题场景：
      * 1. 第1轮：currentRound=1，completed=false，序列化状态
      * 2. 用户输入后，反序列化恢复 action，currentRound 应该仍然是 1
      * 3. 第2轮：currentRound 递增到 2，isLastRound=true，completed=true
-     * 
+     *
      * 如果没有正确恢复，currentRound 会重置为 0，导致第2轮变成 currentRound=1，
      * 永远不会达到 isLastRound，可以无限对话。
      */
 
     it('应该正确序列化 action 状态（包括 currentRound）', async () => {
-      const { ActionStateManager } = await import('../../src/application/state/action-state-manager.js');
-      const { DefaultActionFactory } = await import('../../src/application/actions/action-factory.js');
-      
+      const { ActionStateManager } =
+        await import('../../src/application/state/action-state-manager.js');
+      const { DefaultActionFactory } =
+        await import('../../src/application/actions/action-factory.js');
+
       const factory = new DefaultActionFactory(mockLLM);
       const stateManager = new ActionStateManager(factory);
 
@@ -433,7 +439,7 @@ describe('AiSayAction max_rounds behavior', () => {
 
       // 序列化状态
       const snapshot = stateManager.serialize(action);
-      
+
       expect(snapshot).toBeDefined();
       expect(snapshot.actionId).toBe('say_hello');
       expect(snapshot.actionType).toBe('ai_say');
@@ -442,9 +448,11 @@ describe('AiSayAction max_rounds behavior', () => {
     });
 
     it('应该正确反序列化并恢复 action 状态', async () => {
-      const { ActionStateManager } = await import('../../src/application/state/action-state-manager.js');
-      const { DefaultActionFactory } = await import('../../src/application/actions/action-factory.js');
-      
+      const { ActionStateManager } =
+        await import('../../src/application/state/action-state-manager.js');
+      const { DefaultActionFactory } =
+        await import('../../src/application/actions/action-factory.js');
+
       const factory = new DefaultActionFactory(mockLLM);
       const stateManager = new ActionStateManager(factory);
 
@@ -473,9 +481,11 @@ describe('AiSayAction max_rounds behavior', () => {
     });
 
     it('整个多轮对话流程：序列化 -> 反序列化 -> 继续执行', async () => {
-      const { ActionStateManager } = await import('../../src/application/state/action-state-manager.js');
-      const { DefaultActionFactory } = await import('../../src/application/actions/action-factory.js');
-      
+      const { ActionStateManager } =
+        await import('../../src/application/state/action-state-manager.js');
+      const { DefaultActionFactory } =
+        await import('../../src/application/actions/action-factory.js');
+
       const factory = new DefaultActionFactory(mockLLM);
       const stateManager = new ActionStateManager(factory);
 
@@ -490,7 +500,7 @@ describe('AiSayAction max_rounds behavior', () => {
       );
 
       const result1 = await action1.execute(baseContext);
-      
+
       console.log('[Test] Round 1 result:', {
         completed: result1.completed,
         currentRound: action1.currentRound,
@@ -503,14 +513,14 @@ describe('AiSayAction max_rounds behavior', () => {
 
       // ========== 序列化：模拟 ScriptExecutor 保存状态 ==========
       const snapshot = stateManager.serialize(action1);
-      
+
       console.log('[Test] Serialized snapshot:', snapshot);
-      
+
       expect(snapshot.currentRound).toBe(1);
 
       // ========== 反序列化：模拟第2次请求时恢复 ==========
       const action2 = stateManager.deserialize(snapshot);
-      
+
       console.log('[Test] Deserialized action:', {
         actionId: action2.actionId,
         currentRound: action2.currentRound,
@@ -521,7 +531,7 @@ describe('AiSayAction max_rounds behavior', () => {
 
       // ========== 第2轮：用户输入后继续执行 ==========
       const result2 = await action2.execute(baseContext, '用户的回复');
-      
+
       console.log('[Test] Round 2 result:', {
         completed: result2.completed,
         currentRound: action2.currentRound,

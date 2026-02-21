@@ -16,9 +16,9 @@ import { scripts } from './src/db/schema.js';
 
 async function main() {
   try {
-    const projectId = '4ba2d417-6cc7-4f23-bf47-6b207f741612';
+    // const _projectId = '4ba2d417-6cc7-4f23-bf47-6b207f741612';
     const scriptId = 'ef45f366-b271-4696-870c-44db13d465f7';
-    
+
     const script = await db.query.scripts.findFirst({
       where: eq(scripts.id, scriptId),
     });
