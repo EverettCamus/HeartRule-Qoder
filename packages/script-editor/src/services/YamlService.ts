@@ -20,6 +20,8 @@ export interface TopicWithActions {
   topic_id: string;
   topic_name?: string;
   description?: string;
+  topic_goal?: string; // Story 2.1: Topic目标描述
+  strategy?: string; // Story 2.1: Topic执行策略
   localVariables?: Array<{ name: string; type?: string; description?: string }>;
   actions: Action[];
 }
@@ -174,6 +176,8 @@ class YamlService {
               topic_id: topic.topic_id,
               topic_name: topic.topic_name,
               description: topic.description,
+              topic_goal: topic.topic_goal, // Story 2.1: Topic目标
+              strategy: topic.strategy, // Story 2.1: 执行策略
               localVariables: topic.declare || [],
               actions,
             });
@@ -311,6 +315,7 @@ class YamlService {
             description: phase.description,
             topics: phase.topics.map((topic, ti) => {
               const originalTopic = originalPhase.topics?.[ti] || {};
+              // 先展开 originalTopic，但后续会覆盖 topic_goal 和 strategy
               const topicResult: any = {
                 ...originalTopic,
                 topic_id: topic.topic_id,
@@ -426,9 +431,35 @@ class YamlService {
                 }),
               };
 
+              // Story 2.1: 支持topic_goal和strategy字段
+              // 修复：使用 !== undefined 判断，允许清空字段（空字符串）
+              // 如果字段存在但为空字符串，删除该字段；如果有值，则设置该字段
+              if (topic.topic_goal !== undefined) {
+                if (topic.topic_goal) {
+                  topicResult.topic_goal = topic.topic_goal;
+                } else {
+                  // 显式删除空字段，避免被 originalTopic 覆盖
+                  delete topicResult.topic_goal;
+                }
+              }
+              if (topic.strategy !== undefined) {
+                if (topic.strategy) {
+                  topicResult.strategy = topic.strategy;
+                  console.log(
+                    `[syncPhasesToYaml] Topic ${topic.topic_id} strategy 长度: ${topic.strategy.length}`
+                  );
+                } else {
+                  // 显式删除空字段，避免被 originalTopic 覆盖
+                  delete topicResult.strategy;
+                }
+              }
+
               // 只在 declare 非空时才添加
               if (topic.localVariables && topic.localVariables.length > 0) {
                 topicResult.declare = topic.localVariables;
+              } else {
+                // 显式删除空数组，避免生成空的 declare 字段
+                delete topicResult.declare;
               }
 
               return topicResult;
@@ -726,13 +757,13 @@ class YamlService {
       quotingType: '"',
       forceQuotes: false,
     };
-  
+
     const finalOptions = { ...defaultOptions, ...options };
-  
+
     try {
       let contentToFormat = yamlContent;
       let autoFixed = false;
-  
+
       // 第一步：尝试智能修复缩进错误
       try {
         yaml.load(yamlContent);
@@ -740,7 +771,7 @@ class YamlService {
       } catch (parseError) {
         console.log('[FormatYAML] YAML 解析失败，尝试智能修复缩进...', parseError);
         contentToFormat = this.fixYamlIndentation(yamlContent);
-  
+
         // 验证修复后是否可以解析
         try {
           yaml.load(contentToFormat);
@@ -753,10 +784,10 @@ class YamlService {
           );
         }
       }
-  
+
       // 第二步：解析并重新格式化
       const parsedYaml = yaml.load(contentToFormat);
-  
+
       const formattedYaml = yaml.dump(parsedYaml, {
         indent: finalOptions.indent,
         lineWidth: finalOptions.lineWidth,
@@ -765,7 +796,7 @@ class YamlService {
         quotingType: finalOptions.quotingType,
         forceQuotes: finalOptions.forceQuotes,
       });
-  
+
       console.log('[FormatYAML] 格式化完成');
       return {
         formatted: formattedYaml,
@@ -781,7 +812,7 @@ class YamlService {
       };
     }
   }
-  
+
   /**
    * 提取Session配置
    * 支持新格式 (session) 和旧格式 (script)
@@ -794,7 +825,7 @@ class YamlService {
   } | null {
     try {
       const parsed = yaml.load(yamlContent) as any;
-        
+
       // 新格式: session 字段
       if (parsed?.session) {
         return {
@@ -804,7 +835,7 @@ class YamlService {
           template_scheme: parsed.session.template_scheme,
         };
       }
-        
+
       // 旧格式: script 字段 (向后兼容)
       if (parsed?.script) {
         return {
@@ -814,7 +845,7 @@ class YamlService {
           template_scheme: parsed.script.template_scheme,
         };
       }
-        
+
       console.warn('无法提取Session配置：没有找到 session 或 script 字段');
       return null;
     } catch (error) {
@@ -822,7 +853,7 @@ class YamlService {
       return null;
     }
   }
-  
+
   /**
    * 更新Session配置
    * 保留原有的phases等字段，只更新基本信息
@@ -838,13 +869,13 @@ class YamlService {
   ): string {
     try {
       const parsed = yaml.load(yamlContent) as any;
-        
+
       // 新格式: 更新 session 字段
       if (parsed?.session) {
         parsed.session.session_name = sessionConfig.name;
         parsed.session.description = sessionConfig.description;
         parsed.session.version = sessionConfig.version;
-          
+
         // 处理 template_scheme
         if (sessionConfig.template_scheme) {
           parsed.session.template_scheme = sessionConfig.template_scheme;
@@ -858,7 +889,7 @@ class YamlService {
         parsed.script.name = sessionConfig.name;
         parsed.script.description = sessionConfig.description;
         parsed.script.version = sessionConfig.version;
-          
+
         if (sessionConfig.template_scheme) {
           parsed.script.template_scheme = sessionConfig.template_scheme;
         } else {
@@ -875,12 +906,12 @@ class YamlService {
           version: sessionConfig.version,
           phases: parsed.phases || [],
         };
-          
+
         if (sessionConfig.template_scheme) {
           parsed.session.template_scheme = sessionConfig.template_scheme;
         }
       }
-        
+
       // 转回YAML
       return yaml.dump(parsed, {
         lineWidth: -1,

@@ -158,6 +158,179 @@ session:
       expect(result.success).toBe(true);
       expect(result.script.session.metadata).toEqual({ version: '1.0' });
     });
+
+    // Story 2.1: 测试 topic_goal 和 strategy 字段的添加和清空
+    it('应该能正确处理 topic_goal 和 strategy 字段', () => {
+      const baseScript = {
+        session: {
+          session_id: 'test',
+          phases: [
+            {
+              phase_id: 'p1',
+              topics: [
+                {
+                  topic_id: 't1',
+                  topic_goal: '收集用户信息',
+                  strategy: '优先收集姓名',
+                  actions: [],
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      const phases = [
+        {
+          phase_id: 'p1',
+          topics: [
+            {
+              topic_id: 't1',
+              topic_goal: '更新后的目标',
+              strategy: '更新后的策略',
+              actions: [
+                {
+                  type: 'ai_say' as const,
+                  ai_say: 'Test',
+                  action_id: 'a1',
+                  _raw: {
+                    action_id: 'a1',
+                    action_type: 'ai_say',
+                    config: { content: 'Test' },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const result = yamlService.syncPhasesToYaml({
+        phases,
+        baseScript,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.script.session.phases[0].topics[0].topic_goal).toBe('更新后的目标');
+      expect(result.script.session.phases[0].topics[0].strategy).toBe('更新后的策略');
+    });
+
+    it('应该能正确清空 topic_goal 和 strategy 字段', () => {
+      const baseScript = {
+        session: {
+          session_id: 'test',
+          phases: [
+            {
+              phase_id: 'p1',
+              topics: [
+                {
+                  topic_id: 't1',
+                  topic_goal: '原有的目标',
+                  strategy: '原有的策略',
+                  actions: [],
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      // 用户将字段清空（空字符串）
+      const phases = [
+        {
+          phase_id: 'p1',
+          topics: [
+            {
+              topic_id: 't1',
+              topic_goal: '', // 清空
+              strategy: '', // 清空
+              actions: [
+                {
+                  type: 'ai_say' as const,
+                  ai_say: 'Test',
+                  action_id: 'a1',
+                  _raw: {
+                    action_id: 'a1',
+                    action_type: 'ai_say',
+                    config: { content: 'Test' },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const result = yamlService.syncPhasesToYaml({
+        phases,
+        baseScript,
+      });
+
+      expect(result.success).toBe(true);
+      // 关键验证：清空后字段应该被删除，不是保留原值
+      expect(result.script.session.phases[0].topics[0].topic_goal).toBeUndefined();
+      expect(result.script.session.phases[0].topics[0].strategy).toBeUndefined();
+
+      // 验证 YAML 中也不应该包含这些字段
+      expect(result.yaml).not.toContain('topic_goal');
+      expect(result.yaml).not.toContain('strategy');
+    });
+
+    it('应该能正确处理部分清空的情况', () => {
+      const baseScript = {
+        session: {
+          session_id: 'test',
+          phases: [
+            {
+              phase_id: 'p1',
+              topics: [
+                {
+                  topic_id: 't1',
+                  topic_goal: '原有的目标',
+                  strategy: '原有的策略',
+                  actions: [],
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      // 只清空 topic_goal，保留 strategy
+      const phases = [
+        {
+          phase_id: 'p1',
+          topics: [
+            {
+              topic_id: 't1',
+              topic_goal: '', // 清空
+              strategy: '保留的策略', // 保留
+              actions: [
+                {
+                  type: 'ai_say' as const,
+                  ai_say: 'Test',
+                  action_id: 'a1',
+                  _raw: {
+                    action_id: 'a1',
+                    action_type: 'ai_say',
+                    config: { content: 'Test' },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const result = yamlService.syncPhasesToYaml({
+        phases,
+        baseScript,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.script.session.phases[0].topics[0].topic_goal).toBeUndefined();
+      expect(result.script.session.phases[0].topics[0].strategy).toBe('保留的策略');
+    });
   });
 
   describe('fixYamlIndentation', () => {

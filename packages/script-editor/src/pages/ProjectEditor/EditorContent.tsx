@@ -341,6 +341,14 @@ const EditorContent: React.FC<EditorContentProps> = ({
                             currentPhases[selectedTopicPath.phaseIndex].topics[
                               selectedTopicPath.topicIndex
                             ].description,
+                          topic_goal:
+                            currentPhases[selectedTopicPath.phaseIndex].topics[
+                              selectedTopicPath.topicIndex
+                            ].topic_goal,
+                          strategy:
+                            currentPhases[selectedTopicPath.phaseIndex].topics[
+                              selectedTopicPath.topicIndex
+                            ].strategy,
                           localVariables:
                             currentPhases[selectedTopicPath.phaseIndex].topics[
                               selectedTopicPath.topicIndex

@@ -16,6 +16,8 @@ interface PhaseTopicData {
   id: string;
   name?: string;
   description?: string;
+  topic_goal?: string; // Story 2.1: Topic目标描述
+  strategy?: string; // Story 2.1: Topic执行策略
   localVariables?: Variable[];
 }
 
@@ -33,59 +35,148 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
   const [form] = Form.useForm();
   const [localVariables, setLocalVariables] = useState<Variable[]>([]);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastDataIdRef = useRef<string | null>(null); // 仅存储data.id，用于判断是否切换了对象
+  const isSavingRef = useRef<boolean>(false); // 标记是否正在保存中（包括保存后的数据回流）
 
   useEffect(() => {
     if (data) {
-      form.setFieldsValue({
-        id: data.id,
-        name: data.name || '',
-        description: data.description || '',
+      // 如果正在执行自动保存或保存后数据回流中，跳过表单更新以避免清空用户输入
+      if (autoSaveTimerRef.current !== null || isSavingRef.current) {
+        console.log('[PhaseTopicPropertyPanel] ⏳ 保存进行中，跳过表单更新', {
+          hasTimer: autoSaveTimerRef.current !== null,
+          isSaving: isSavingRef.current,
+        });
+        return;
+      }
+
+      // 关键修复：只有当data.id变化时才更新表单（切换Topic/Phase）
+      // 或者是Undo后的数据恢复（通过比较topic_goal/strategy字段）
+      const idChanged = data.id !== lastDataIdRef.current;
+      const currentFormGoal = form.getFieldValue('topic_goal') || '';
+      const currentFormStrategy = form.getFieldValue('strategy') || '';
+      const dataGoal = data.topic_goal || '';
+      const dataStrategy = data.strategy || '';
+      const contentChanged =
+        type === 'topic' && (currentFormGoal !== dataGoal || currentFormStrategy !== dataStrategy);
+
+      console.log('[PhaseTopicPropertyPanel] useEffect检查:', {
+        dataId: data.id,
+        lastDataId: lastDataIdRef.current,
+        idChanged,
+        contentChanged,
+        currentFormGoal,
+        dataGoal,
+        currentFormStrategy,
+        dataStrategy,
       });
-      setLocalVariables(data.localVariables || []);
+
+      if (idChanged || contentChanged) {
+        console.log(
+          '[PhaseTopicPropertyPanel] 🔄 更新表单，原因:',
+          idChanged ? 'ID变化' : 'Content变化'
+        );
+        form.setFieldsValue({
+          id: data.id,
+          name: data.name || '',
+          description: data.description || '',
+          topic_goal: data.topic_goal || '',
+          strategy: data.strategy || '',
+        });
+        setLocalVariables(data.localVariables || []);
+        lastDataIdRef.current = data.id;
+      }
     } else {
       form.resetFields();
       setLocalVariables([]);
+      lastDataIdRef.current = null;
     }
-  }, [data, form]);
+  }, [data, form, type]);
 
   // 保存函数
   const handleSave = useCallback(() => {
-    form.validateFields().then((values) => {
-      if (data) {
-        // 检查数据是否真的变化了，避免无意义的更新
-        const hasChanged = 
-          values.id !== data.id ||
-          values.name !== data.name ||
-          values.description !== data.description ||
-          JSON.stringify(localVariables) !== JSON.stringify(data.localVariables || []);
-        
-        if (hasChanged) {
-          onSave({
-            id: values.id,
-            name: values.name,
-            description: values.description,
-            localVariables: localVariables,
+    console.log('[PhaseTopicPropertyPanel] 💾 开始保存...');
+    isSavingRef.current = true; // 标记保存开始
+
+    form
+      .validateFields()
+      .then((values) => {
+        if (data) {
+          // 检查数据是否真的变化了，避免无意义的更新
+          const hasChanged =
+            values.id !== data.id ||
+            values.name !== data.name ||
+            values.description !== data.description ||
+            values.topic_goal !== data.topic_goal ||
+            values.strategy !== data.strategy ||
+            JSON.stringify(localVariables) !== JSON.stringify(data.localVariables || []);
+
+          console.log('[PhaseTopicPropertyPanel] 保存检查:', {
+            hasChanged,
+            formTopicGoal: values.topic_goal,
+            dataTopicGoal: data.topic_goal,
+            formStrategy: values.strategy,
+            dataStrategy: data.strategy,
           });
+
+          if (hasChanged) {
+            const savedData: PhaseTopicData = {
+              id: values.id,
+              name: values.name,
+              description: values.description,
+              localVariables: localVariables,
+            };
+
+            // 只在Topic类型且有值时才包含topic_goal和strategy
+            if (type === 'topic') {
+              // 使用 !== undefined 检查,允许空字符串
+              if (values.topic_goal !== undefined) savedData.topic_goal = values.topic_goal;
+              if (values.strategy !== undefined) savedData.strategy = values.strategy;
+            }
+
+            console.log('[PhaseTopicPropertyPanel] ✅ 调用 onSave，保存数据:', savedData);
+            onSave(savedData);
+
+            // 延迟清除保存标志，给足够时间让数据回流完成
+            // 200ms足以让 syncPhasesToYaml → setFileContent → 父组件重渲染 完成
+            setTimeout(() => {
+              isSavingRef.current = false;
+              console.log('[PhaseTopicPropertyPanel] 🏁 保存标志清除');
+            }, 200);
+          } else {
+            console.log('[PhaseTopicPropertyPanel] ⏭️ 数据未变化，跳过保存');
+            isSavingRef.current = false; // 立即清除标志
+          }
+        } else {
+          isSavingRef.current = false;
         }
-      }
-    });
-  }, [form, data, localVariables, onSave]);
+      })
+      .catch(() => {
+        isSavingRef.current = false; // 验证失败时也清除标志
+      });
+  }, [form, data, localVariables, onSave, type]);
 
   // 自动保存函数
   const triggerAutoSave = useCallback(() => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
-    
+
+    console.log('[PhaseTopicPropertyPanel] ⏰ 触发自动保存（600ms后执行）');
     autoSaveTimerRef.current = setTimeout(() => {
+      console.log('[PhaseTopicPropertyPanel] ⏰ 自动保存定时器触发');
       handleSave();
+      autoSaveTimerRef.current = null; // 清空定时器引用
     }, 600); // 600ms 防抖延迟
   }, [handleSave]);
 
   // 监听 localVariables 变化触发自动保存
   useEffect(() => {
-    // 只有在 data 存在且 localVariables 已初始化后才触发自动保存
-    if (data && localVariables !== data.localVariables) {
+    // 使用 JSON.stringify 深度比较,避免引用比较导致的无限循环
+    const currentVars = JSON.stringify(localVariables);
+    const initialVars = JSON.stringify(data?.localVariables || []);
+
+    // 只有在实际内容变化时才触发自动保存
+    if (data && currentVars !== initialVars) {
       triggerAutoSave();
     }
   }, [localVariables, data, triggerAutoSave]);
@@ -141,6 +232,31 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
           <Form.Item label="说明" name="description">
             <TextArea rows={3} placeholder="描述这个阶段/主题的目的和内容..." />
           </Form.Item>
+
+          {/* Story 2.1: Topic专属字段 */}
+          {type === 'topic' && (
+            <>
+              <Form.Item label="Topic目标" name="topic_goal" tooltip="描述该Topic要达成的具体目标">
+                <TextArea
+                  rows={2}
+                  placeholder="例如: 收集来访者童年期主要抚养者及关系模式"
+                  maxLength={500}
+                />
+              </Form.Item>
+
+              <Form.Item
+                label="执行策略"
+                name="strategy"
+                tooltip="供TopicPlanner规划时参考的策略要点(Story 2.1)"
+              >
+                <TextArea
+                  rows={6}
+                  placeholder={`例如:\n1. 优先收集主要抚养者信息\n2. 每位抚养者需收集:称呼、同住情况、深刻记忆\n3. 时间不足时保证主要抚养者完整信息`}
+                  maxLength={2000}
+                />
+              </Form.Item>
+            </>
+          )}
         </Form>
 
         <Divider />
@@ -219,7 +335,7 @@ export const PhaseTopicPropertyPanel: React.FC<PhaseTopicPropertyPanelProps> = (
                   </Space>
                 </Card>
               ))
-            )}  
+            )}
           </Space>
         </div>
       </div>

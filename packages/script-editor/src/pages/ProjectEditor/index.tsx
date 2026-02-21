@@ -842,6 +842,8 @@ const ProjectEditor: React.FC = () => {
         if (result.success) {
           setFileContent(result.yaml);
           setParsedScript(result.script);
+          // 关键修复：同步更新 currentPhases，确保属性面板显示的数据与保存后的一致
+          setCurrentPhases(phases);
           console.log('[syncPhasesToYaml] YAML 同步成功，phases 数量:', phases.length);
         } else {
           console.error('同步到 YAML 失败:', result.error);
@@ -1861,6 +1863,8 @@ const ProjectEditor: React.FC = () => {
         topic_id: updatedTopicData.id,
         topic_name: updatedTopicData.name,
         description: updatedTopicData.description,
+        topic_goal: updatedTopicData.topic_goal, // Story 2.1: 支持 topic_goal
+        strategy: updatedTopicData.strategy, // Story 2.1: 支持 strategy
         localVariables: updatedTopicData.localVariables,
       };
 

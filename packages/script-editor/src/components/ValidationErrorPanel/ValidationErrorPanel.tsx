@@ -4,9 +4,9 @@
  * 展示脚本验证错误列表
  */
 
-import { ExclamationCircleOutlined, WarningOutlined } from '@ant-design/icons';
+import { ExclamationCircleOutlined, WarningOutlined, CopyOutlined } from '@ant-design/icons';
 import type { ValidationErrorDetail } from '@heartrule/core-engine';
-import { Alert, Collapse, Typography, Tag, Space } from 'antd';
+import { Alert, Collapse, Typography, Tag, Space, Button, message } from 'antd';
 import React from 'react';
 
 const { Panel } = Collapse;
@@ -64,6 +64,40 @@ const getErrorTypeConfig = (errorType: string) => {
 };
 
 /**
+ * 格式化错误信息为文本
+ */
+const formatErrorsAsText = (errors: ValidationErrorDetail[]): string => {
+  return errors
+    .map((error, index) => {
+      const parts: string[] = [
+        `错误 ${index + 1}/${errors.length}`,
+        `类型: ${error.errorType}`,
+        `路径: ${error.path || 'root'}`,
+        `消息: ${error.message}`,
+      ];
+
+      if (error.expected) {
+        parts.push(`期望值: ${error.expected}`);
+      }
+
+      if (error.actual) {
+        parts.push(`实际值: ${error.actual}`);
+      }
+
+      if (error.suggestion) {
+        parts.push(`修复建议: ${error.suggestion}`);
+      }
+
+      if (error.example) {
+        parts.push(`正确示例:\n${error.example}`);
+      }
+
+      return parts.join('\n');
+    })
+    .join('\n\n' + '='.repeat(50) + '\n\n');
+};
+
+/**
  * 验证错误面板组件
  */
 const ValidationErrorPanel: React.FC<ValidationErrorPanelProps> = ({ errors, onClose }) => {
@@ -71,13 +105,32 @@ const ValidationErrorPanel: React.FC<ValidationErrorPanelProps> = ({ errors, onC
     return null;
   }
 
+  /**
+   * 复制所有错误信息到剪贴板
+   */
+  const handleCopyErrors = async () => {
+    try {
+      const text = formatErrorsAsText(errors);
+      await navigator.clipboard.writeText(text);
+      message.success('错误信息已复制到剪贴板');
+    } catch (error) {
+      message.error('复制失败,请手动选择文本复制');
+      console.error('Copy failed:', error);
+    }
+  };
+
   return (
     <div style={{ marginBottom: '16px' }}>
       <Alert
         message={
-          <Space>
-            <ExclamationCircleOutlined />
-            <span>发现 {errors.length} 个脚本验证错误</span>
+          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+            <Space>
+              <ExclamationCircleOutlined />
+              <span>发现 {errors.length} 个脚本验证错误</span>
+            </Space>
+            <Button type="text" size="small" icon={<CopyOutlined />} onClick={handleCopyErrors}>
+              复制错误信息
+            </Button>
           </Space>
         }
         description={
