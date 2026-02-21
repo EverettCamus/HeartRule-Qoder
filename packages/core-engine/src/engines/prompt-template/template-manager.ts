@@ -183,29 +183,42 @@ export class PromptTemplateManager {
   ): string {
     let result = template;
 
-    // 内部辅助函数：支持三种占位符格式 {{var}}, {var}, ${var}
-    const replaceWithAllPatterns = (text: string, key: string, value: any): string => {
+    // 内部辅助函数：脚本变量支持三种占位符格式 {{var}}, {var}, ${var}
+    const replaceScriptVariable = (text: string, key: string, value: any): string => {
+      if (value === undefined) return text;
       const escapedKey = this.escapeRegex(key);
       const patterns = [
         `\\{\\{${escapedKey}\\}\\}`,
         `\\{${escapedKey}\\}`,
-        `\\$\{${escapedKey}\\}`,
+        `\\$\\{${escapedKey}\\}`,
       ];
       let updatedText = text;
       patterns.forEach((patternStr) => {
-        updatedText = updatedText.replace(new RegExp(patternStr, 'g'), String(value ?? ''));
+        updatedText = updatedText.replace(new RegExp(patternStr, 'g'), String(value));
       });
       return updatedText;
     };
 
-    // 第一层：替换系统变量
+    // 内部辅助函数：系统变量支持 {%var%} 与兼容的 {{var}} 格式
+    const replaceSystemVariable = (text: string, key: string, value: any): string => {
+      if (value === undefined) return text;
+      const escapedKey = this.escapeRegex(key);
+      const patterns = [`\\{%${escapedKey}%\\}`, `\\{\\{${escapedKey}\\}\\}`];
+      let updatedText = text;
+      patterns.forEach((patternStr) => {
+        updatedText = updatedText.replace(new RegExp(patternStr, 'g'), String(value));
+      });
+      return updatedText;
+    };
+
+    // 第一层：替换系统变量（只处理 {%var%}）
     Object.entries(systemVariables).forEach(([key, value]) => {
-      result = replaceWithAllPatterns(result, key, value);
+      result = replaceSystemVariable(result, key, value);
     });
 
-    // 第二层：替换脚本变量
+    // 第二层：替换脚本变量（处理 {{var}} / {var} / ${var}）
     scriptVariables.forEach((value, key) => {
-      result = replaceWithAllPatterns(result, key, value);
+      result = replaceScriptVariable(result, key, value);
     });
 
     return result;
@@ -223,7 +236,7 @@ export class PromptTemplateManager {
     const scriptVars: string[] = [];
     const systemVars: string[] = [];
 
-    // 匹配 {{变量名}} 格式的变量
+    // 1) 匹配 {{变量名}} 格式的变量
     const unifiedPattern = /\{\{([^{}]+?)\}\}/g;
     let match;
     while ((match = unifiedPattern.exec(template)) !== null) {
@@ -237,6 +250,15 @@ export class PromptTemplateManager {
         if (!scriptVars.includes(varName)) {
           scriptVars.push(varName);
         }
+      }
+    }
+
+    // 2) 额外匹配 {%变量名%} 格式的系统变量
+    const systemPattern = /\{%([^%]+)%\}/g;
+    while ((match = systemPattern.exec(template)) !== null) {
+      const varName = match[1].trim();
+      if (!systemVars.includes(varName)) {
+        systemVars.push(varName);
       }
     }
 
@@ -270,11 +292,17 @@ export class PromptTemplateManager {
   validateSubstitution(text: string): string[] {
     const unreplacedVars: string[] = [];
 
-    // 检查未替换的统一变量格式 {{变量名}}
+    // 1) 检查未替换的脚本/系统变量统一格式 {{变量名}}
     const unifiedPattern = /\{\{([^{}]+?)\}\}/g;
     let match;
     while ((match = unifiedPattern.exec(text)) !== null) {
       unreplacedVars.push(`{{${match[1].trim()}}}`);
+    }
+
+    // 2) 检查未替换的系统变量 {%变量名%}
+    const systemPattern = /\{%([^%]+)%\}/g;
+    while ((match = systemPattern.exec(text)) !== null) {
+      unreplacedVars.push(`{%${match[1].trim()}%}`);
     }
 
     return unreplacedVars;

@@ -502,7 +502,9 @@ export class AiAskAction extends BaseAction {
       .map((msg) => `${msg.role === 'user' ? user : who}: ${msg.content}`)
       .join('\n');
 
-    console.log(`[AiAskAction] 📊 buildSystemVariables: conversationHistory.length=${context.conversationHistory.length}, chat.length=${chat.length}`);
+    console.log(
+      `[AiAskAction] 📊 buildSystemVariables: conversationHistory.length=${context.conversationHistory.length}, chat.length=${chat.length}`
+    );
 
     // 构建 output_list（多变量输出格式）
     const outputList = this.buildOutputList();
@@ -894,7 +896,7 @@ ${historyText}
     let prompt = this.templateManager.substituteVariables(
       templateContent,
       new Map(Object.entries(scriptVariables)),
-      new Map(Object.entries(systemVariables))
+      systemVariables
     );
     if (monitorFeedback) {
       prompt = prompt + monitorFeedback;

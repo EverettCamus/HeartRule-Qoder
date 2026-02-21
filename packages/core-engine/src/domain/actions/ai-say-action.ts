@@ -144,11 +144,15 @@ export class AiSayAction extends BaseAction {
   ): Promise<ActionResult> {
     // 增加轮次计数
     this.currentRound++;
-    console.log(`[AiSayAction] 🔢 currentRound incremented to ${this.currentRound}, maxRounds=${this.maxRounds}`);
+    console.log(
+      `[AiSayAction] 🔢 currentRound incremented to ${this.currentRound}, maxRounds=${this.maxRounds}`
+    );
 
     // 保护逻辑：防止超过 max_rounds 后继续调用
     if (this.currentRound > this.maxRounds) {
-      console.log(`[AiSayAction] ⚠️ Exceeded max_rounds (${this.maxRounds}), force exit without message`);
+      console.log(
+        `[AiSayAction] ⚠️ Exceeded max_rounds (${this.maxRounds}), force exit without message`
+      );
       return {
         success: true,
         completed: true,
@@ -163,7 +167,7 @@ export class AiSayAction extends BaseAction {
         },
       };
     }
-  
+
     // 1. 加载提示词模板
     const { template, resolution } = await this.loadPromptTemplate(context);
 
@@ -248,14 +252,16 @@ export class AiSayAction extends BaseAction {
     // 8. 返回结果（包含 debugInfo 和模板解析信息）
     // 如果达到最大轮次，强制标记为已完成
     const isLastRound = this.currentRound >= this.maxRounds;
-    console.log(`[AiSayAction] 🎯 isLastRound=${isLastRound} (currentRound=${this.currentRound}, maxRounds=${this.maxRounds})`);
+    console.log(
+      `[AiSayAction] 🎯 isLastRound=${isLastRound} (currentRound=${this.currentRound}, maxRounds=${this.maxRounds})`
+    );
     if (isLastRound) {
       console.log(`[AiSayAction] 🏁 Reached max_rounds (${this.maxRounds}), finishing action`);
     }
 
     // 修正：ai_say 的 completed 逻辑
     // 新语义：round = AI 说话次数，每次 AI 输出后需要用户交互
-    // 
+    //
     // 规则：
     // 1. 如果 LLM 决定提前退出（非 max_rounds 原因），则 completed=true
     // 2. 如果 max_rounds=1：
@@ -267,8 +273,7 @@ export class AiSayAction extends BaseAction {
     let completed: boolean;
 
     // 检查是否是提前退出（非 max_rounds 原因）
-    const isEarlyExit = exitDecision.should_exit && 
-                        exitDecision.decision_source !== 'max_rounds';
+    const isEarlyExit = exitDecision.should_exit && exitDecision.decision_source !== 'max_rounds';
 
     if (isEarlyExit) {
       // LLM 决定提前退出（exit_flag, exit_criteria, llm_suggestion）
@@ -279,13 +284,25 @@ export class AiSayAction extends BaseAction {
       completed = false;
       console.log(`[AiSayAction] ⏸️ Single round mode: waiting for acknowledgment`);
     } else {
-      // 多轮模式：每次 AI 说话都返回 completed=false，等待用户交互
-      // 只有在超过 max_rounds 时才 completed=true（由保护分支处理）
-      completed = false;
-      console.log(`[AiSayAction] ⏸️ Multi-round mode: round ${this.currentRound}/${this.maxRounds}, waiting for user input`);
+      // 多轮模式
+      if (!isLastRound) {
+        // 中间轮次：completed=false（等待用户输入）
+        completed = false;
+        console.log(
+          `[AiSayAction] ⏸️ Multi-round mode: round ${this.currentRound}/${this.maxRounds}, waiting for user input`
+        );
+      } else {
+        // 最后一轮：completed=true（完成并推进）
+        completed = true;
+        console.log(
+          `[AiSayAction] ✅ Multi-round mode: last round ${this.currentRound}/${this.maxRounds}, completing action`
+        );
+      }
     }
 
-    console.log(`[AiSayAction] 🎯 Final completed=${completed}, currentRound=${this.currentRound}, maxRounds=${this.maxRounds}`);
+    console.log(
+      `[AiSayAction] 🎯 Final completed=${completed}, currentRound=${this.currentRound}, maxRounds=${this.maxRounds}`
+    );
 
     // 确定是否需要等待确认
     const shouldWaitForAcknowledgment = aiMessage && !completed;

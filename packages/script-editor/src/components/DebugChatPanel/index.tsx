@@ -363,8 +363,10 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           type: 'llm_prompt',
           timestamp: initialDebugInfo.timestamp || new Date().toISOString(),
           isExpanded: false,
-          actionId: (sessionDetail.position as any)?.sourceActionId || sessionDetail.position?.actionId,
-          actionType: (sessionDetail.position as any)?.sourceActionType || sessionDetail.position?.actionType,
+          actionId:
+            (sessionDetail.position as any)?.sourceActionId || sessionDetail.position?.actionId,
+          actionType:
+            (sessionDetail.position as any)?.sourceActionType || sessionDetail.position?.actionType,
           content: {
             type: 'llm_prompt',
             systemPrompt: '',
@@ -383,8 +385,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             type: 'llm_response',
             timestamp: initialDebugInfo.timestamp || new Date().toISOString(),
             isExpanded: false,
-            actionId: (sessionDetail.position as any)?.sourceActionId || sessionDetail.position?.actionId,
-            actionType: (sessionDetail.position as any)?.sourceActionType || sessionDetail.position?.actionType,
+            actionId:
+              (sessionDetail.position as any)?.sourceActionId || sessionDetail.position?.actionId,
+            actionType:
+              (sessionDetail.position as any)?.sourceActionType ||
+              sessionDetail.position?.actionType,
             content: {
               type: 'llm_response',
               model: initialDebugInfo.model || 'unknown',
@@ -866,9 +871,10 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   // 处理输入框回车
   const handleKeyPress = (e: React.KeyboardEvent) => {
     // 检查是否是 ai_say max_rounds=1 的确认模式
-    const isAcknowledgmentMode = currentPosition?.actionType === 'ai_say' && 
-                                  currentPosition?.maxRounds === 1 && 
-                                  currentPosition?.currentRound === 1;
+    const isAcknowledgmentMode =
+      currentPosition?.actionType === 'ai_say' &&
+      currentPosition?.maxRounds === 1 &&
+      currentPosition?.currentRound === 1;
 
     if (isAcknowledgmentMode) {
       // ai_say 确认模式：空格键触发确认
@@ -888,9 +894,9 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   // 处理 ai_say 确认（不需要文本输入）
   const handleAcknowledgment = async () => {
     console.log('[DebugChat] ⏩ Handling acknowledgment for ai_say');
-    
+
     const currentSessionId = activeSessionId || sessionId;
-    
+
     if (!currentSessionId) {
       console.error('[DebugChat] ❌ No session ID available for acknowledgment');
       return;
@@ -1016,7 +1022,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             maxTokens: debugInfo.config?.maxTokens || 0,
             rawResponse: JSON.stringify(debugInfo.response, null, 2),
             processedResponse: debugInfo.response?.text || response.aiMessage || '',
-            preview: (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
+            preview:
+              (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
           } as LLMResponseBubbleContent,
         };
         addDebugBubble(responseBubble);
@@ -1091,7 +1098,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         };
         setMessages((prev) => [...prev, aiMsg]);
       }
-      
     } catch (err: any) {
       console.error('[DebugChat] ❌ Failed to send acknowledgment:', err);
       if (err.response?.data?.error && typeof err.response.data.error === 'object') {
@@ -1633,12 +1639,14 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         </div>
 
         {/* 输入区域 */}
-        <div 
+        <div
           className="debug-chat-input-area"
           onKeyDown={(e) => {
-            // 检查是否是 ai_say 的确认模式
-            const isAcknowledgmentMode = currentPosition?.actionType === 'ai_say' && 
-                                          currentPosition?.currentRound === currentPosition?.maxRounds;
+            // 检查是否是 ai_say max_rounds=1 的确认模式
+            const isAcknowledgmentMode =
+              currentPosition?.actionType === 'ai_say' &&
+              currentPosition?.maxRounds === 1 &&
+              currentPosition?.currentRound === 1;
 
             if (isAcknowledgmentMode && (e.key === ' ' || e.key === 'Spacebar')) {
               e.preventDefault();
@@ -1647,11 +1655,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           }}
         >
           {(() => {
-            // 检查是否是 ai_say 的确认模式
-            // max_rounds=1: 第1轮后等待确认
-            // max_rounds>1: 最后一轮后等待确认
-            const isAcknowledgmentMode = currentPosition?.actionType === 'ai_say' && 
-                                          currentPosition?.currentRound === currentPosition?.maxRounds;
+            // 检查是否是 ai_say max_rounds=1 的确认模式
+            const isAcknowledgmentMode =
+              currentPosition?.actionType === 'ai_say' &&
+              currentPosition?.maxRounds === 1 &&
+              currentPosition?.currentRound === 1;
 
             if (isAcknowledgmentMode) {
               // ai_say 确认模式：显示提示和下一步按钮
@@ -1659,7 +1667,19 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                 <>
                   <div className="debug-chat-acknowledgment-hint">
                     <span style={{ color: '#666', fontSize: '14px' }}>
-                      💡 按<kbd style={{ padding: '2px 6px', background: '#f0f0f0', border: '1px solid #ccc', borderRadius: '3px', fontFamily: 'monospace' }}>空格</kbd>继续，或点击
+                      💡 按
+                      <kbd
+                        style={{
+                          padding: '2px 6px',
+                          background: '#f0f0f0',
+                          border: '1px solid #ccc',
+                          borderRadius: '3px',
+                          fontFamily: 'monospace',
+                        }}
+                      >
+                        空格
+                      </kbd>
+                      继续，或点击
                     </span>
                   </div>
                   <Button

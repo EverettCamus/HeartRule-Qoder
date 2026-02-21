@@ -16,14 +16,14 @@
 
 import type { VariableStore, TopicPlan } from '@heartrule/shared-types';
 
+import {
+  DefaultActionFactory,
+  type ActionFactory,
+} from '../../application/actions/action-factory.js';
 import { ExecutionResultHandler } from '../../application/handlers/execution-result-handler.js';
 import { MonitorOrchestrator } from '../../application/orchestrators/monitor-orchestrator.js';
-import {
-  BasicTopicPlanner,
-  type ITopicPlanner,
-} from '../../application/planning/topic-planner.js';
+import { BasicTopicPlanner, type ITopicPlanner } from '../../application/planning/topic-planner.js';
 import { ActionStateManager } from '../../application/state/action-state-manager.js';
-import { DefaultActionFactory, type ActionFactory } from '../../application/actions/action-factory.js';
 import type { BaseAction, ActionContext, ActionResult } from '../../domain/actions/base-action.js';
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
@@ -185,7 +185,7 @@ export class ScriptExecutor {
 
   /**
    * Create default LLM Orchestrator (deprecated)
-   * 
+   *
    * NOTE: This method is deprecated in Phase 4.2 DDD refactoring.
    * LLM providers have been moved to api-server as adapters.
    * Please inject LLMOrchestrator via constructor instead.
@@ -194,8 +194,8 @@ export class ScriptExecutor {
   private createDefaultLLM(): LLMOrchestrator {
     throw new Error(
       '[ScriptExecutor] createDefaultLLM is deprecated. ' +
-      'LLM providers have been moved to api-server as hexagonal adapters. ' +
-      'Please inject LLMOrchestrator via constructor dependency injection.'
+        'LLM providers have been moved to api-server as hexagonal adapters. ' +
+        'Please inject LLMOrchestrator via constructor dependency injection.'
     );
   }
   /**
@@ -374,11 +374,13 @@ export class ScriptExecutor {
 
     console.log('[ScriptExecutor] 📊 After restoreActionIfNeeded:', {
       hasCurrentAction: !!executionState.currentAction,
-      currentAction: executionState.currentAction ? {
-        actionId: executionState.currentAction.actionId,
-        currentRound: executionState.currentAction.currentRound,
-        maxRounds: executionState.currentAction.maxRounds,
-      } : null,
+      currentAction: executionState.currentAction
+        ? {
+            actionId: executionState.currentAction.actionId,
+            currentRound: executionState.currentAction.currentRound,
+            maxRounds: executionState.currentAction.maxRounds,
+          }
+        : null,
     });
 
     return phases;
@@ -429,7 +431,7 @@ export class ScriptExecutor {
 
     // 先调用 prepareNext 更新索引
     this.resultHandler.prepareNext(executionState, phases);
-    
+
     // 关键修复：如果 action 完成且有 aiMessage，需要先返回给客户端显示
     // 返回 waiting_input，让客户端显示消息后再继续
     if (result.aiMessage) {
@@ -437,7 +439,7 @@ export class ScriptExecutor {
       executionState.status = ExecutionStatus.WAITING_INPUT; // 等待客户端确认
       return false; // 返回给客户端
     }
-    
+
     console.log('[ScriptExecutor] ✅ Action completed, continuing to execute next actions');
     return true; // Continue to next actions
   }
@@ -743,12 +745,12 @@ export class ScriptExecutor {
 
     if (needsPlanning) {
       console.log(`[ScriptExecutor] 🧠 Planning topic: ${topicId}`);
-      
+
       // 保存当前 actionIdx，因为 planCurrentTopic 不再重置它
       const savedActionIdx = executionState.currentActionIdx;
-      
+
       await this.planCurrentTopic(topic, executionState, sessionId, phaseId);
-      
+
       // 只有在首次进入 topic 时才重置索引
       // 如果 savedActionIdx > 0，说明 topic 已经在执行中，不应该重置
       if (savedActionIdx === 0) {
@@ -1032,6 +1034,7 @@ export class ScriptExecutor {
       topicId,
       actionId: action.actionId,
       variables: { ...executionState.variables },
+      // 暂不在全局上下文层注入 systemVariables，交由各具体 Action 构建
       variableStore: executionState.variableStore,
       scopeResolver,
       conversationHistory: [...executionState.conversationHistory],

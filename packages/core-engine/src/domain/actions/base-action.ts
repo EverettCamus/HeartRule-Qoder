@@ -47,6 +47,8 @@ export interface ActionContext {
   topicId: string;
   actionId: string;
   variables: Record<string, any>;
+  // 新增：系统层变量（如 time, who, user）
+  systemVariables?: Record<string, any>;
   // 新增：分层变量存储
   variableStore?: VariableStore;
   // 新增：作用域解析器
@@ -62,39 +64,39 @@ export interface ActionContext {
 
 /**
  * Action执行状态精细化指标（系统变量）
- * 
+ *
  * 由LLM评估生成，作为字符串描述返回
  * 用于Topic层监控分析和策略决策
  */
 export interface ActionMetrics {
   information_completeness?: string; // 信息完整度描述
-  user_engagement?: string;          // 用户投入度描述
-  emotional_intensity?: string;      // 情绪强度描述
-  reply_relevance?: string;          // 回答相关性描述
-  understanding_level?: string;      // 理解度描述（ai_say专用）
+  user_engagement?: string; // 用户投入度描述
+  emotional_intensity?: string; // 情绪强度描述
+  reply_relevance?: string; // 回答相关性描述
+  understanding_level?: string; // 理解度描述（ai_say专用）
 }
 
 /**
  * 进度建议枚举
- * 
+ *
  * LLM提供的进度建议，指导Topic层下一步动作
  */
-export type ProgressSuggestion = 
-  | 'continue_needed'  // 信息不足，需要继续追问
-  | 'completed'        // 信息已充分收集
-  | 'blocked'          // 用户遇阻，无法继续
-  | 'off_topic';       // 用户回答偏离主题
+export type ProgressSuggestion =
+  | 'continue_needed' // 信息不足，需要继续追问
+  | 'completed' // 信息已充分收集
+  | 'blocked' // 用户遇阻，无法继续
+  | 'off_topic'; // 用户回答偏离主题
 
 /**
  * 退出原因分类
- * 
+ *
  * 代码层对退出原因进行分类，供Topic层选择不同策略
  */
-export type ExitReason = 
+export type ExitReason =
   | 'max_rounds_reached' // 达到最大轮次限制
-  | 'exit_criteria_met'  // 满足退出条件
-  | 'user_blocked'       // 用户遇阻
-  | 'off_topic';         // 用户偏题
+  | 'exit_criteria_met' // 满足退出条件
+  | 'user_blocked' // 用户遇阻
+  | 'off_topic'; // 用户偏题
 
 /**
  * Action 执行结果
@@ -223,13 +225,41 @@ export abstract class BaseAction {
   /**
    * 替换模板中的变量
    *
-   * 支持 {{variable_name}}, {variable_name}, ${variable_name} 格式
-   * 优先使用 scopeResolver 按作用域查找，否则使用旧的 variables
+   * 支持两种格式：
+   * 1. 系统层变量：{%variable_name%} - 引擎自动注入，优先级最高
+   * 2. 脚本层变量：{{variable_name}}, {variable_name}, ${variable_name}
+   *
+   * 系统保留变量：time, who, user
    */
   substituteVariables(template: string, context: ActionContext): string {
-    // 提取模板中的变量名
+    let result = template;
+
+    // 第一步：替换系统层变量 {%var%}
+    if (context.systemVariables) {
+      const systemVarPattern = /\{%([^%]+)%\}/g;
+      const systemMatches = template.matchAll(systemVarPattern);
+      const systemVarNames = new Set<string>();
+
+      for (const match of systemMatches) {
+        const varName = match[1];
+        if (varName) {
+          systemVarNames.add(varName.trim());
+        }
+      }
+
+      for (const varName of systemVarNames) {
+        const varValue = context.systemVariables[varName];
+        if (varValue !== undefined) {
+          const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const pattern = `\\{%${escapedVarName}%\\}`;
+          result = result.replace(new RegExp(pattern, 'g'), String(varValue));
+        }
+      }
+    }
+
+    // 第二步：替换脚本层变量 {{var}}, {var}, ${var}
     const variablePattern = /\{\{([^}]+)\}\}|\{([^}]+)\}|\$\{([^}]+)\}/g;
-    const matches = template.matchAll(variablePattern);
+    const matches = result.matchAll(variablePattern);
     const varNames = new Set<string>();
 
     for (const match of matches) {
@@ -239,8 +269,7 @@ export abstract class BaseAction {
       }
     }
 
-    // 替换变量
-    let result = template;
+    // 替换脚本变量
     for (const varName of varNames) {
       let varValue: any;
 
@@ -258,6 +287,10 @@ export abstract class BaseAction {
         varValue = context.variables[varName];
       }
 
+      if (varValue === undefined) {
+        continue;
+      }
+
       // 转义变量名中的特殊字符用于正则
       const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -269,7 +302,7 @@ export abstract class BaseAction {
       ];
 
       for (const pattern of patterns) {
-        result = result.replace(new RegExp(pattern, 'g'), String(varValue ?? ''));
+        result = result.replace(new RegExp(pattern, 'g'), String(varValue));
       }
     }
 

@@ -22,22 +22,46 @@ describe('PromptTemplateManager', () => {
     });
 
     test('应正确替换系统变量', () => {
-      const template = '当前时间是{{time}}';
+      const template = '当前时间是{%time%}';
       const sysVars = { time: '2025-01-20' };
       const result = manager.substituteVariables(template, new Map(), sysVars);
       expect(result).toBe('当前时间是2025-01-20');
     });
 
     test('应按顺序执行两层替换', () => {
-      const template = '{{用户名}}，现在是{{time}}';
+      const template = '{{用户名}}，现在是{%time%}';
       const scriptVars = new Map([['用户名', '小明']]);
       const sysVars = { time: '10:00' };
       const result = manager.substituteVariables(template, scriptVars, sysVars);
       expect(result).toBe('小明，现在是10:00');
     });
 
+    test('系统变量应同时支持{%var%}和{{var}}格式', () => {
+      // 新格式 {%time%}
+      const template1 = '现时间 {%time%}，你是 {%who%}。请延续对话，生成对 {%user%} 的提问。';
+      const sysVars = { time: '2026-02-21 11:45', who: '心理咨询师', user: '来访者' };
+      const result1 = manager.substituteVariables(template1, new Map(), sysVars);
+      expect(result1).toBe(
+        '现时间 2026-02-21 11:45，你是 心理咨询师。请延续对话，生成对 来访者 的提问。'
+      );
+
+      // 旧格式 {{time}} （兼容）
+      const template2 = '现时间 {{time}}，你是 {{who}}。请延续对话，生成对 {{user}} 的提问。';
+      const result2 = manager.substituteVariables(template2, new Map(), sysVars);
+      expect(result2).toBe(
+        '现时间 2026-02-21 11:45，你是 心理咨询师。请延续对话，生成对 来访者 的提问。'
+      );
+
+      // 混合格式
+      const template3 = '现时间 {%time%}，你是 {{who}}。请延续对话，生成对 {%user%} 的提问。';
+      const result3 = manager.substituteVariables(template3, new Map(), sysVars);
+      expect(result3).toBe(
+        '现时间 2026-02-21 11:45，你是 心理咨询师。请延续对话，生成对 来访者 的提问。'
+      );
+    });
+
     test('应正确提取变量', () => {
-      const template = '欢迎 {{user}}，今天是 {{time}}，您的教育背景是 {{教育背景}}';
+      const template = '欢迎 {%user%}，今天是 {%time%}，您的教育背景是 {{教育背景}}';
       const { scriptVars, systemVars } = manager.extractVariables(template);
 
       expect(scriptVars).toContain('教育背景');
@@ -108,9 +132,9 @@ describe('PromptTemplateManager', () => {
     });
 
     test('应检测未替换的系统变量', () => {
-      const text = '当前时间{{time}}';
+      const text = '当前时间{%time%}';
       const unreplaced = manager.validateSubstitution(text);
-      expect(unreplaced).toEqual(['{{time}}']);
+      expect(unreplaced).toEqual(['{%time%}']);
     });
 
     test('完全替换后不应有未替换变量', () => {
