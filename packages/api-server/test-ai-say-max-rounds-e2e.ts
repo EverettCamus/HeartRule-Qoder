@@ -18,7 +18,7 @@ async function testAiSayMaxRounds() {
     const sessionId = uuidv4();
 
     // 1. 创建测试项目和脚本
-    const _projectId = '4ba2d417-6cc7-4f23-bf47-6b207f741612'; // hello-world项目
+    // const _projectId = '4ba2d417-6cc7-4f23-bf47-6b207f741612'; // hello-world项目
     const scriptId = 'ef45f366-b271-4696-870c-44db13d465f7'; // hello-world.yaml
 
     // 2. 创建会话

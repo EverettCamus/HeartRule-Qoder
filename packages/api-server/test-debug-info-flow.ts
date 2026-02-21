@@ -28,8 +28,8 @@ console.log();
 // 测试 LLMOrchestrator
 console.log('2️⃣ Testing LLMOrchestrator:');
 try {
-  const { LLMOrchestrator } =
-    await import('../core-engine/src/engines/llm-orchestration/orchestrator.js');
+  // const { LLMOrchestrator } =
+  //   await import('../core-engine/src/engines/llm-orchestration/orchestrator.js');
   // const { VolcanoDeepSeekProvider } =
   //   await import('../core-engine/src/engines/llm-orchestration/volcano-provider.js');
 

@@ -20,7 +20,7 @@ async function testAiSayMaxRounds1() {
     const sessionId = uuidv4();
 
     // 1. 使用 hello-world 项目（已经修改为 max_rounds: 1）
-    const _projectId = '4ba2d417-6cc7-4f23-bf47-6b207f741612';
+    // const _projectId = '4ba2d417-6cc7-4f23-bf47-6b207f741612';
     const scriptId = 'ef45f366-b271-4696-870c-44db13d465f7';
 
     // 2. 创建会话
