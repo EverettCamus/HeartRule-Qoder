@@ -39,7 +39,7 @@ describe('PlaceholderValidator', () => {
       const result = validator.validateFormat('这是{123非法}占位符');
       expect(result.valid).toBe(false);
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain('format invalid');
+      expect(result.errors[0]).toContain('格式无效');
     });
 
     test('检测非法占位符格式-包含特殊字符', () => {
@@ -70,16 +70,13 @@ describe('PlaceholderValidator', () => {
       const result = validator.validateReferences('您和{不存在的变量}的关系如何?', []);
       expect(result.valid).toBe(true); // 不阻断
       expect(result.warnings).toHaveLength(1);
-      expect(result.warnings![0]).toContain('undefined variable');
+      expect(result.warnings![0]).toContain('未定义');
     });
 
     test('部分变量未定义', () => {
       const validator = new PlaceholderValidator();
       const availableVars = ['用户名'];
-      const result = validator.validateReferences(
-        '您好{用户名},我们来聊聊{抚养者}',
-        availableVars
-      );
+      const result = validator.validateReferences('您好{用户名},我们来聊聊{抚养者}', availableVars);
       expect(result.valid).toBe(true);
       expect(result.warnings).toHaveLength(1);
       expect(result.warnings![0]).toContain('抚养者');
@@ -108,9 +105,7 @@ describe('PlaceholderValidator', () => {
 
     test('提取重复占位符(保留重复)', () => {
       const validator = new PlaceholderValidator();
-      const placeholders = validator.extractPlaceholders(
-        '{抚养者}和{抚养者}的关系,以及{用户名}'
-      );
+      const placeholders = validator.extractPlaceholders('{抚养者}和{抚养者}的关系,以及{用户名}');
       expect(placeholders).toEqual(['抚养者', '抚养者', '用户名']);
     });
 

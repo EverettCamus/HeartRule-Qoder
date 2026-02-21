@@ -29,3 +29,4 @@ export {
   deprecatedFieldsRegistry,
   type DeprecatedField,
 } from './validators/deprecated-fields-registry.js';
+export { PlaceholderValidator, placeholderValidator } from './validators/placeholder-validator.js';
