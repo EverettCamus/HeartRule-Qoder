@@ -273,6 +273,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           actionIndex: sessionDetail.position.actionIndex || 0,
           actionId: sessionDetail.position.actionId || '',
           actionType: sessionDetail.position.actionType || '',
+          currentRound: sessionDetail.position.currentRound,
+          maxRounds: sessionDetail.position.maxRounds,
         };
         console.log('[DebugChat] Setting initial position from session:', pos);
         setCurrentPosition(pos);
@@ -361,8 +363,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           type: 'llm_prompt',
           timestamp: initialDebugInfo.timestamp || new Date().toISOString(),
           isExpanded: false,
-          actionId: sessionDetail.position?.actionId,
-          actionType: sessionDetail.position?.actionType,
+          actionId: (sessionDetail.position as any)?.sourceActionId || sessionDetail.position?.actionId,
+          actionType: (sessionDetail.position as any)?.sourceActionType || sessionDetail.position?.actionType,
           content: {
             type: 'llm_prompt',
             systemPrompt: '',
@@ -381,8 +383,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             type: 'llm_response',
             timestamp: initialDebugInfo.timestamp || new Date().toISOString(),
             isExpanded: false,
-            actionId: sessionDetail.position?.actionId,
-            actionType: sessionDetail.position?.actionType,
+            actionId: (sessionDetail.position as any)?.sourceActionId || sessionDetail.position?.actionId,
+            actionType: (sessionDetail.position as any)?.sourceActionType || sessionDetail.position?.actionType,
             content: {
               type: 'llm_response',
               model: initialDebugInfo.model || 'unknown',
@@ -499,6 +501,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   }, [messages]);
 
   // 发送消息
+  // 处理发送消息
   const handleSendMessage = async () => {
     // 优先使用 activeSessionId，如果没有则使用 props.sessionId
     const currentSessionId = activeSessionId || sessionId;
@@ -704,8 +707,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           type: 'llm_prompt',
           timestamp: debugInfo.timestamp || new Date().toISOString(),
           isExpanded: false,
-          actionId: response.position?.actionId,
-          actionType: response.position?.actionType,
+          actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
+          actionType: (response.position as any)?.sourceActionType || response.position?.actionType,
           content: {
             type: 'llm_prompt',
             systemPrompt: '', // 服务端暂未返回
@@ -722,8 +725,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           type: 'llm_response',
           timestamp: debugInfo.timestamp || new Date().toISOString(),
           isExpanded: false,
-          actionId: response.position?.actionId,
-          actionType: response.position?.actionType,
+          actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
+          actionType: (response.position as any)?.sourceActionType || response.position?.actionType,
           content: {
             type: 'llm_response',
             model: debugInfo.model || 'unknown',
@@ -750,6 +753,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           actionIndex: response.position.actionIndex || 0,
           actionId: response.position.actionId || '',
           actionType: response.position.actionType || '',
+          currentRound: response.position.currentRound,
+          maxRounds: response.position.maxRounds,
         };
         console.log('[DebugChat] Updating position from response:', pos);
         console.log('[DebugChat] 🔢 Round info from response:', {
@@ -860,9 +865,242 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
   // 处理输入框回车
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
+    // 检查是否是 ai_say max_rounds=1 的确认模式
+    const isAcknowledgmentMode = currentPosition?.actionType === 'ai_say' && 
+                                  currentPosition?.maxRounds === 1 && 
+                                  currentPosition?.currentRound === 1;
+
+    if (isAcknowledgmentMode) {
+      // ai_say 确认模式：空格键触发确认
+      if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        handleAcknowledgment();
+      }
+    } else {
+      // 正常文本输入模式：回车发送
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+      }
+    }
+  };
+
+  // 处理 ai_say 确认（不需要文本输入）
+  const handleAcknowledgment = async () => {
+    console.log('[DebugChat] ⏩ Handling acknowledgment for ai_say');
+    
+    const currentSessionId = activeSessionId || sessionId;
+    
+    if (!currentSessionId) {
+      console.error('[DebugChat] ❌ No session ID available for acknowledgment');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('[DebugChat] 📡 Sending acknowledgment (empty string) to backend');
+
+      // 发送空字符串作为确认
+      const response = await debugApi.sendDebugMessage(currentSessionId, {
+        content: '',
+      });
+
+      console.log('[DebugChat] ✅ Acknowledgment sent, response:', response);
+
+      // 以下复制响应处理逻辑（从 handleSendMessage 中）
+      // 检查响应中是否包含错误信息
+      if (response.error) {
+        const errorData = response.error;
+        setDetailedError(errorData);
+
+        const errorBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          isExpanded: true,
+          actionId: response.position?.actionId,
+          actionType: response.position?.actionType,
+          content: {
+            type: 'error',
+            code: errorData.code || 'UNKNOWN_ERROR',
+            errorType: errorData.errorType || 'execution',
+            message: errorData.message || 'An error occurred',
+            details: errorData.details,
+            position: response.position
+              ? {
+                  phaseId: response.position.phaseId || '',
+                  phaseName: '',
+                  topicId: response.position.topicId || '',
+                  topicName: '',
+                  actionId: response.position.actionId || '',
+                }
+              : undefined,
+            recovery: errorData.recovery,
+            stackTrace: errorData.stackTrace,
+          } as ErrorBubbleContent,
+        };
+        addDebugBubble(errorBubble);
+      }
+
+      // 检查变量变化并创建变量气泡
+      if (response.variables) {
+        const newVariables = response.variables;
+        const globalVariables = response.globalVariables || {};
+        const categorizedVars = response.variableStore
+          ? response.variableStore
+          : categorizeVariablesByScope(newVariables, globalVariables);
+
+        let relevantVariables: { inputVariables: string[]; outputVariables: string[] } | undefined;
+        if (response.position) {
+          const analysis = analyzeActionVariables(
+            navigationTree,
+            response.position.phaseIndex || 0,
+            response.position.topicIndex || 0,
+            response.position.actionIndex || 0
+          );
+          relevantVariables = {
+            inputVariables: analysis.inputVariables,
+            outputVariables: analysis.outputVariables,
+          };
+        }
+
+        const variableBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'variable',
+          timestamp: new Date().toISOString(),
+          isExpanded: false,
+          actionId: response.position?.actionId,
+          actionType: response.position?.actionType,
+          content: {
+            type: 'variable',
+            changedVariables: [],
+            allVariables: categorizedVars,
+            relevantVariables,
+            summary: '变量更新',
+          } as VariableBubbleContent,
+        };
+        addDebugBubble(variableBubble);
+      }
+
+      // 检查 LLM 调试信息并创建 LLM 气泡
+      if (response.debugInfo) {
+        const debugInfo = response.debugInfo;
+        const promptBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'llm_prompt',
+          timestamp: debugInfo.timestamp || new Date().toISOString(),
+          isExpanded: false,
+          actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
+          actionType: (response.position as any)?.sourceActionType || response.position?.actionType,
+          content: {
+            type: 'llm_prompt',
+            systemPrompt: '',
+            userPrompt: debugInfo.prompt || '',
+            conversationHistory: [],
+            preview: (debugInfo.prompt || '').substring(0, 100) + '...',
+          } as LLMPromptBubbleContent,
+        };
+        addDebugBubble(promptBubble);
+
+        const responseBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'llm_response',
+          timestamp: debugInfo.timestamp || new Date().toISOString(),
+          isExpanded: false,
+          actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
+          actionType: (response.position as any)?.sourceActionType || response.position?.actionType,
+          content: {
+            type: 'llm_response',
+            model: debugInfo.model || 'unknown',
+            tokens: debugInfo.tokensUsed || 0,
+            maxTokens: debugInfo.config?.maxTokens || 0,
+            rawResponse: JSON.stringify(debugInfo.response, null, 2),
+            processedResponse: debugInfo.response?.text || response.aiMessage || '',
+            preview: (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
+          } as LLMResponseBubbleContent,
+        };
+        addDebugBubble(responseBubble);
+      }
+
+      // 更新执行位置
+      if (response.position) {
+        const pos: CurrentPosition = {
+          phaseIndex: response.position.phaseIndex || 0,
+          phaseId: response.position.phaseId || '',
+          topicIndex: response.position.topicIndex || 0,
+          topicId: response.position.topicId || '',
+          actionIndex: response.position.actionIndex || 0,
+          actionId: response.position.actionId || '',
+          actionType: response.position.actionType || '',
+          currentRound: response.position.currentRound,
+          maxRounds: response.position.maxRounds,
+        };
+        setCurrentPosition(pos);
+
+        let phaseName = `Phase ${pos.phaseIndex + 1}`;
+        let topicName = `Topic ${pos.topicIndex + 1}`;
+
+        if (navigationTree && navigationTree.phases && navigationTree.phases[pos.phaseIndex]) {
+          const phase = navigationTree.phases[pos.phaseIndex];
+          phaseName = phase.phaseName || phaseName;
+          if (phase.topics && phase.topics[pos.topicIndex]) {
+            const topic = phase.topics[pos.topicIndex];
+            topicName = topic.topicName || topicName;
+          }
+        }
+
+        const positionBubble: DebugBubble = {
+          id: uuidv4(),
+          type: 'position',
+          timestamp: new Date().toISOString(),
+          isExpanded: false,
+          actionId: pos.actionId,
+          actionType: pos.actionType,
+          content: {
+            type: 'position',
+            phase: {
+              index: pos.phaseIndex,
+              id: pos.phaseId,
+              name: phaseName,
+            },
+            topic: {
+              index: pos.topicIndex,
+              id: pos.topicId,
+              name: topicName,
+            },
+            action: {
+              index: pos.actionIndex,
+              id: pos.actionId,
+              type: pos.actionType,
+              currentRound: response.position.currentRound,
+              maxRounds: response.position.maxRounds,
+            },
+            summary: `${phaseName} → ${topicName} → ${pos.actionId}`,
+          } as PositionBubbleContent,
+        };
+        addDebugBubble(positionBubble);
+      }
+
+      // 添加AI回复到消息列表
+      if (response.aiMessage && response.aiMessage.trim() !== '') {
+        const aiMsg: DebugMessage = {
+          messageId: `ai-${Date.now()}`,
+          role: 'ai',
+          content: response.aiMessage,
+          timestamp: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+      }
+      
+    } catch (err: any) {
+      console.error('[DebugChat] ❌ Failed to send acknowledgment:', err);
+      if (err.response?.data?.error && typeof err.response.data.error === 'object') {
+        setDetailedError(err.response.data.error);
+      } else {
+        setError('Failed to send acknowledgment: ' + (err.message || 'Unknown error'));
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -945,6 +1183,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             actionIndex: sessionDetail.position.actionIndex || 0,
             actionId: sessionDetail.position.actionId || '',
             actionType: sessionDetail.position.actionType || '',
+            currentRound: sessionDetail.position.currentRound,
+            maxRounds: sessionDetail.position.maxRounds,
           };
           setCurrentPosition(pos);
           console.log('[DebugChat] ✅ Position updated:', pos);
@@ -1393,26 +1633,75 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         </div>
 
         {/* 输入区域 */}
-        <div className="debug-chat-input-area">
-          <TextArea
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
-            autoSize={{ minRows: 2, maxRows: 4 }}
-            disabled={loading || initialLoading}
-            className="debug-chat-input"
-          />
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={handleSendMessage}
-            loading={loading}
-            disabled={!inputValue.trim() || loading || initialLoading}
-            className="debug-chat-send-btn"
-          >
-            Send
-          </Button>
+        <div 
+          className="debug-chat-input-area"
+          onKeyDown={(e) => {
+            // 检查是否是 ai_say 的确认模式
+            const isAcknowledgmentMode = currentPosition?.actionType === 'ai_say' && 
+                                          currentPosition?.currentRound === currentPosition?.maxRounds;
+
+            if (isAcknowledgmentMode && (e.key === ' ' || e.key === 'Spacebar')) {
+              e.preventDefault();
+              handleAcknowledgment();
+            }
+          }}
+        >
+          {(() => {
+            // 检查是否是 ai_say 的确认模式
+            // max_rounds=1: 第1轮后等待确认
+            // max_rounds>1: 最后一轮后等待确认
+            const isAcknowledgmentMode = currentPosition?.actionType === 'ai_say' && 
+                                          currentPosition?.currentRound === currentPosition?.maxRounds;
+
+            if (isAcknowledgmentMode) {
+              // ai_say 确认模式：显示提示和下一步按钮
+              return (
+                <>
+                  <div className="debug-chat-acknowledgment-hint">
+                    <span style={{ color: '#666', fontSize: '14px' }}>
+                      💡 按<kbd style={{ padding: '2px 6px', background: '#f0f0f0', border: '1px solid #ccc', borderRadius: '3px', fontFamily: 'monospace' }}>空格</kbd>继续，或点击
+                    </span>
+                  </div>
+                  <Button
+                    type="primary"
+                    icon={<SendOutlined />}
+                    onClick={handleAcknowledgment}
+                    loading={loading}
+                    disabled={loading || initialLoading}
+                    className="debug-chat-send-btn"
+                    style={{ minWidth: '100px' }}
+                  >
+                    下一步
+                  </Button>
+                </>
+              );
+            } else {
+              // 正常文本输入模式
+              return (
+                <>
+                  <TextArea
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
+                    autoSize={{ minRows: 2, maxRows: 4 }}
+                    disabled={loading || initialLoading}
+                    className="debug-chat-input"
+                  />
+                  <Button
+                    type="primary"
+                    icon={<SendOutlined />}
+                    onClick={handleSendMessage}
+                    loading={loading}
+                    disabled={!inputValue.trim() || loading || initialLoading}
+                    className="debug-chat-send-btn"
+                  >
+                    Send
+                  </Button>
+                </>
+              );
+            }
+          })()}
         </div>
 
         {/* 错误详情弹窗 */}

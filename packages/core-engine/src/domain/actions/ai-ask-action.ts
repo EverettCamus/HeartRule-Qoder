@@ -502,6 +502,8 @@ export class AiAskAction extends BaseAction {
       .map((msg) => `${msg.role === 'user' ? user : who}: ${msg.content}`)
       .join('\n');
 
+    console.log(`[AiAskAction] 📊 buildSystemVariables: conversationHistory.length=${context.conversationHistory.length}, chat.length=${chat.length}`);
+
     // 构建 output_list（多变量输出格式）
     const outputList = this.buildOutputList();
 
@@ -835,7 +837,7 @@ ${historyText}
 
     // 4. 解析模板路径（使用两层解析）
     const resolution = await this.templateResolver.resolveTemplatePath(
-      'ai_ask', // 注意：模板文件名为 ai_ask_v1.md
+      AiAskAction.actionType, // 使用静态 actionType
       sessionConfig
     );
 

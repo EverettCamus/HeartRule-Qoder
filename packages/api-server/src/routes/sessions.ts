@@ -370,7 +370,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           type: 'object',
           required: ['content'],
           properties: {
-            content: { type: 'string', minLength: 1 },
+            content: { type: 'string' }, // 允许空字符串（用于 ai_say max_rounds=1 确认）
           },
         },
         response: {

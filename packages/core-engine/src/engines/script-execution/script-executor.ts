@@ -320,6 +320,10 @@ export class ScriptExecutor {
       );
 
       // Handle resuming current action if exists
+      console.log('[ScriptExecutor] 🔍 Before resumeCurrentActionIfNeeded:', {
+        hasCurrentAction: !!executionState.currentAction,
+        currentActionId: executionState.currentAction?.actionId,
+      });
       const shouldContinue = await this.resumeCurrentActionIfNeeded(
         executionState,
         sessionId,
@@ -368,6 +372,15 @@ export class ScriptExecutor {
     );
     this.actionStateManager.restoreActionIfNeeded(executionState);
 
+    console.log('[ScriptExecutor] 📊 After restoreActionIfNeeded:', {
+      hasCurrentAction: !!executionState.currentAction,
+      currentAction: executionState.currentAction ? {
+        actionId: executionState.currentAction.actionId,
+        currentRound: executionState.currentAction.currentRound,
+        maxRounds: executionState.currentAction.maxRounds,
+      } : null,
+    });
+
     return phases;
   }
 
@@ -392,6 +405,8 @@ export class ScriptExecutor {
       actionIdx: executionState.currentActionIdx,
       phaseId: executionState.currentPhaseId,
       topicId: executionState.currentTopicId,
+      currentRound: executionState.currentAction.currentRound,
+      maxRounds: executionState.currentAction.maxRounds,
     });
 
     const result = await this.continueAction(
@@ -412,7 +427,17 @@ export class ScriptExecutor {
       return false; // Stop execution on error
     }
 
+    // 先调用 prepareNext 更新索引
     this.resultHandler.prepareNext(executionState, phases);
+    
+    // 关键修复：如果 action 完成且有 aiMessage，需要先返回给客户端显示
+    // 返回 waiting_input，让客户端显示消息后再继续
+    if (result.aiMessage) {
+      console.log('[ScriptExecutor] ✅ Action completed with aiMessage, returning to client');
+      executionState.status = ExecutionStatus.WAITING_INPUT; // 等待客户端确认
+      return false; // 返回给客户端
+    }
+    
     console.log('[ScriptExecutor] ✅ Action completed, continuing to execute next actions');
     return true; // Continue to next actions
   }
@@ -610,7 +635,10 @@ export class ScriptExecutor {
     executionState.currentTopicPlan = topicPlan;
 
     // 重置Action索引,从实例化队列的第一个Action开始执行
-    executionState.currentActionIdx = 0;
+    // 注意：只有在首次规划 topic 时才重置索引
+    // 如果 topic 已经在执行中（currentActionIdx > 0），不应该重置
+    // 这解决了 resumeCurrentActionIfNeeded 后 executeAllPhases 重新执行 topic 的问题
+    // 不重置索引，保持当前的 currentActionIdx
 
     console.log(`[ScriptExecutor] ✅ Topic planned:`, {
       topicId: topicPlan.topicId,
@@ -715,7 +743,22 @@ export class ScriptExecutor {
 
     if (needsPlanning) {
       console.log(`[ScriptExecutor] 🧠 Planning topic: ${topicId}`);
+      
+      // 保存当前 actionIdx，因为 planCurrentTopic 不再重置它
+      const savedActionIdx = executionState.currentActionIdx;
+      
       await this.planCurrentTopic(topic, executionState, sessionId, phaseId);
+      
+      // 只有在首次进入 topic 时才重置索引
+      // 如果 savedActionIdx > 0，说明 topic 已经在执行中，不应该重置
+      if (savedActionIdx === 0) {
+        executionState.currentActionIdx = 0;
+      } else {
+        executionState.currentActionIdx = savedActionIdx;
+        console.log(
+          `[ScriptExecutor] 🔄 Restored actionIdx to ${savedActionIdx} (topic already in progress)`
+        );
+      }
     }
 
     // [Story 2.1] 从实例化队列读取Actions(优先于脚本模板)
@@ -817,6 +860,11 @@ export class ScriptExecutor {
 
     executionState.status = ExecutionStatus.WAITING_INPUT;
     executionState.metadata.actionState = this.actionStateManager.serialize(action);
+    console.log(`[ScriptExecutor] 💾 Serialized action state:`, {
+      actionId: executionState.metadata.actionState.actionId,
+      currentRound: executionState.metadata.actionState.currentRound,
+      maxRounds: executionState.metadata.actionState.maxRounds,
+    });
     console.log(`[ScriptExecutor] 🔴 Returning to wait for user input`);
   }
 

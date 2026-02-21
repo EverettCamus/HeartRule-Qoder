@@ -239,7 +239,9 @@ describe('Phase 8 重构：ExecutionResultHandler 执行结果处理器分离', 
 
       handler.handleCompleted(executionState, result, updateVariablesFn);
 
-      expect(executionState.status).toBe('completed');
+      // handleCompleted 不再设置 executionState.status
+      // 因为它只处理单个 action 的完成，不是整个脚本的完成
+      expect(executionState.status).toBe('running'); // 保持原状态
       expect(updateVariablesFn).toHaveBeenCalledWith(executionState, { output: 'result' });
     });
 

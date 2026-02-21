@@ -128,8 +128,9 @@ export class ExecutionResultHandler {
     }
 
     if (result.success) {
-      // Mark as completed
-      executionState.status = 'completed' as ExecutionStatus;
+      // 注意：不要在这里设置 executionState.status = 'completed'
+      // 因为 handleCompleted 只是处理单个 action 的完成，不是整个脚本的完成
+      // 整个脚本的完成状态由 ScriptExecutor 或 prepareNext 负责设置
 
       // Update variables
       if (result.extractedVariables) {

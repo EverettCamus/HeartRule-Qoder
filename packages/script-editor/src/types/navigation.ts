@@ -63,4 +63,6 @@ export interface CurrentPosition {
   actionIndex: number;
   actionId: string;
   actionType: string;
+  currentRound?: number; // 新增：当前轮次
+  maxRounds?: number;    // 新增：最大轮次
 }

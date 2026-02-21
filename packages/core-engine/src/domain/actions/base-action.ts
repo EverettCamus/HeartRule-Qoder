@@ -110,7 +110,7 @@ export type ExitReason =
  * - metadata: 额外元数据（如轮次、退出决策、exit_reason等）
  */
 export interface ActionResult {
-  success: boolean;
+  success: boolean; // 表示 action 是否成功执行（技术层面），false: 执行过程出错（如 LLM 调用失败、解析错误等），会有 error 字段
   completed: boolean; // Action是否完成（可能需要多轮）
   aiMessage?: string | null; // AI生成的消息
   extractedVariables?: Record<string, any> | null; // 提取的变量（用户变量）

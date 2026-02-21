@@ -67,12 +67,27 @@ export class ActionStateManager {
    * Restore action state from metadata if exists
    */
   restoreActionIfNeeded(executionState: ExecutionState): void {
+    console.log('[ActionStateManager] 🔍 Checking if action needs restore:', {
+      hasActionState: !!executionState.metadata.actionState,
+      hasCurrentAction: !!executionState.currentAction,
+      actionStateSnapshot: executionState.metadata.actionState,
+    });
+
     if (executionState.metadata.actionState && !executionState.currentAction) {
       console.log('[ActionStateManager] 🔄 Deserializing action state:', {
         actionId: executionState.metadata.actionState.actionId,
         currentRound: executionState.metadata.actionState.currentRound,
       });
       executionState.currentAction = this.deserialize(executionState.metadata.actionState);
+      console.log('[ActionStateManager] ✅ Action restored:', {
+        actionId: executionState.currentAction.actionId,
+        currentRound: executionState.currentAction.currentRound,
+        maxRounds: executionState.currentAction.maxRounds,
+      });
+    } else if (!executionState.metadata.actionState) {
+      console.log('[ActionStateManager] ⚠️ No actionState in metadata');
+    } else if (executionState.currentAction) {
+      console.log('[ActionStateManager] ℹ️ currentAction already exists, no restore needed');
     }
   }
 

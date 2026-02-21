@@ -296,7 +296,9 @@ describe('Story 2.1集成：Topic Planning Integration', () => {
         'phase_1'
       );
 
-      expect(executionState.currentActionIdx).toBe(0);
+      // planCurrentTopic 不再自动重置 currentActionIdx
+      // 索引的重置由 executeTopic 中的逻辑处理（只在首次规划时重置）
+      expect(executionState.currentActionIdx).toBe(5); // 保持原值
     });
   });
 

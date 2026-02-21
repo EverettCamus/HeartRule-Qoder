@@ -235,6 +235,11 @@ export class SessionManager {
       orderBy: (fields, { asc }) => [asc(fields.timestamp)],
     });
 
+    console.log(`[SessionManager] 📋 Loaded ${history.length} messages from database:`, {
+      aiMessages: history.filter(m => m.role === 'assistant').length,
+      userMessages: history.filter(m => m.role === 'user').length,
+    });
+
     return history.map((m) => ({
       role: m.role,
       content: m.content,
@@ -500,6 +505,7 @@ export class SessionManager {
   private buildSessionResponse(
     executionState: ExecutionState,
     session: SessionData,
+    script: ScriptData,
     globalVariables: Record<string, any>,
     includeVariableStore: boolean = false
   ): SessionResponse {
@@ -518,13 +524,45 @@ export class SessionManager {
         actionIndex: executionState.currentActionIdx,
         actionId: executionState.currentActionId || `action_${executionState.currentActionIdx}`,
         actionType: executionState.currentActionType || 'unknown',
+        sourceActionId: executionState.lastAiMessage
+          ? executionState.conversationHistory
+              .slice()
+              .reverse()
+              .find((m: any) => m.role === 'assistant')?.actionId
+          : undefined,
+        sourceActionType: (() => {
+          if (!executionState.lastAiMessage) return undefined;
+          const sourceActionId = executionState.conversationHistory
+            .slice()
+            .reverse()
+            .find((m: any) => m.role === 'assistant')?.actionId;
+          if (!sourceActionId) return undefined;
+          // 从脚本中查找 sourceActionId 对应的 actionType
+          try {
+            const scriptObj = typeof script.scriptContent === 'string' 
+              ? yaml.parse(script.scriptContent) 
+              : script.scriptContent;
+            const sessionData = scriptObj.session || scriptObj;
+            for (const phase of sessionData.phases) {
+              for (const topic of phase.topics) {
+                const action = topic.actions.find((a: any) => 
+                  (a.action_id === sourceActionId || a.id === sourceActionId)
+                );
+                if (action) return action.action_type || action.type;
+              }
+            }
+          } catch (e) {
+            console.error('[SessionManager] ❌ Error parsing script:', e);
+          }
+          return undefined;
+        })(),
         currentRound:
           executionState.metadata?.lastActionRoundInfo?.currentRound ??
           executionState.metadata?.actionState?.currentRound,
         maxRounds:
           executionState.metadata?.lastActionRoundInfo?.maxRounds ??
           executionState.metadata?.actionState?.maxRounds,
-      },
+      } as any,
     };
 
     // 仅在 processUserInput 中包含扁平化的 variableStore
@@ -701,7 +739,7 @@ export class SessionManager {
       await this.updateSessionState(sessionId, executionState, globalVariables);
 
       // 7. 构建并返回响应
-      const result = this.buildSessionResponse(executionState, session, globalVariables, false);
+      const result = this.buildSessionResponse(executionState, session, script, globalVariables, false);
       console.log('[SessionManager] 🏁 initializeSession completed:', result);
       return result;
     } catch (error) {
@@ -721,31 +759,33 @@ export class SessionManager {
     const script = await this.loadScriptById(session.scriptId);
 
     try {
-      // 2. 加载全局变量和对话历史
+      // 2. 加载全局变量
       const globalVariables = await this.loadGlobalVariables(script.scriptName);
+
+      // 3. 保存用户消息（先保存，再加载，确保 conversationHistory 完整）
+      await this.saveUserMessage(sessionId, userInput);
+      
+      // 4. 加载对话历史（包含刚保存的用户消息）
       const conversationHistory = await this.loadConversationHistory(sessionId);
 
-      // 3. 保存用户消息
-      await this.saveUserMessage(sessionId, userInput);
-
-      // 4. 恢复执行状态
+      // 5. 恢复执行状态
       let executionState = this.restoreExecutionState(
         session,
         globalVariables,
         conversationHistory
       );
 
-      // 5. 执行脚本
+      // 6. 执行脚本（注意：userInput 已经保存到 conversationHistory，不再重复传递）
       const prevHistoryLength = executionState.conversationHistory.length;
-      executionState = await this.executeScript(script, sessionId, executionState, userInput);
+      executionState = await this.executeScript(script, sessionId, executionState, null);
 
-      // 6. 保存执行结果
+      // 7. 保存执行结果
       await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
       await this.saveVariableSnapshots(sessionId, session.variables, executionState.variables);
       await this.updateSessionState(sessionId, executionState, globalVariables);
 
-      // 7. 构建并返回响应
-      const result = this.buildSessionResponse(executionState, session, globalVariables, true);
+      // 8. 构建并返回响应
+      const result = this.buildSessionResponse(executionState, session, script, globalVariables, true);
       console.log('[SessionManager] 🏁 processUserInput completed:', {
         aiMessage: result.aiMessage,
         aiMessageLength: result.aiMessage?.length || 0,
