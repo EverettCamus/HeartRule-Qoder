@@ -378,15 +378,28 @@
 
 **验收标准**:
 
-- [ ] Topic可仅通过`actions`列表定义默认执行序列,系统不强制要求`default_action_template`等额外字段
-- [ ] `actions`中的Action类型、必填字段、占位符格式均通过Schema验证,与现有YAML验证体系(Story 7.5)一致
-- [ ] Topic.strategy字段可描述策略要点,并在执行时可被Topic层规划逻辑读取
-- [ ] 解析器正确加载`topic.actions`与`topic.strategy`到内存,并以结构化形式提供给TopicPlanner/Orchestrator使用
-- [ ] 现有会谈脚本中已存在的`topic`+`actions`结构在本Story完成后无需改写即可作为默认Action模板被使用
+- [x] Topic可仅通过`actions`列表定义默认执行序列,系统不强制要求`default_action_template`等额外字段
+- [x] `actions`中的Action类型、必填字段、占位符格式均通过Schema验证,与现有YAML验证体系(Story 7.5)一致
+- [x] Topic.strategy字段可描述策略要点,并在执行时可被Topic层规划逻辑读取
+- [x] 解析器正确加载`topic.actions`与`topic.strategy`到内存,并以结构化形式提供给TopicPlanner/Orchestrator使用
+- [x] 现有会谈脚本中已存在的`topic`+`actions`结构在本Story完成后无需改写即可作为默认Action模板被使用
+
+**实现状态**: ✅ 已完成 (2026-02-21)
+
+- TopicPlanner接口和BasicTopicPlanner实现完整 (topic-planner.ts, 120行)
+- ScriptExecutor正确集成TopicPlanner,支持依赖注入
+- ExecutionState.currentTopicPlan存储规划结果
+- Topic.strategy字段Schema验证支持 (topic.schema.json)
+- 规划触发逻辑: 首次进入Topic/切换Topic时自动规划
+- 20个集成测试全部通过,性能<10ms
+- 验证脚本: scripts/sessions/story-2.1-verification-test.yaml
+- 完成日期: 2026-02-21
 
 **优先级**: P0 - 高  
 **预估工作量**: 5 Story Points  
 **依赖关系**: 依赖现有YAML解析器和YAML Schema验证体系
+
+**📍 当前推荐 (2026-02-21)**: Story 2.1 已完成，**建议继续 Story 2.2** - Topic动态展开Action队列，这是Epic 2的核心功能，将Topic层的智能规划能力从"零智能"基础版升级为真正的动态编排。
 
 ---
 
