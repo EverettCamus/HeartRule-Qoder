@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react';
 import { message } from 'antd';
+import { useCallback, useEffect, useRef } from 'react';
 
 import type { PhaseWithTopics } from '../services/YamlService';
 import type { FocusPath } from '../utils/history-manager';
@@ -11,7 +11,9 @@ import { globalHistoryManager } from '../utils/history-manager';
 export interface HistoryOperationsConfig {
   // 状态
   currentPhases: PhaseWithTopics[];
-  setCurrentPhases: (phases: PhaseWithTopics[] | ((prev: PhaseWithTopics[]) => PhaseWithTopics[])) => void;
+  setCurrentPhases: (
+    phases: PhaseWithTopics[] | ((prev: PhaseWithTopics[]) => PhaseWithTopics[])
+  ) => void;
   setHasUnsavedChanges: (changed: boolean) => void;
 
   // 文件相关
@@ -56,14 +58,14 @@ export interface HistoryOperations {
 
 /**
  * 历史操作 Hook
- * 
+ *
  * 功能：
  * 1. 管理 Undo/Redo 历史栈
  * 2. 处理跨文件 Undo/Redo
  * 3. 焦点导航自动恢复
  * 4. 初始状态自动推送
  * 5. 快捷键监听 (Ctrl+Z / Ctrl+Y)
- * 
+ *
  * 重构说明：
  * - 从 ProjectEditor/index.tsx 提取约 400 行代码到独立 Hook
  * - 包含历史管理、Undo/Redo、焦点导航等逻辑
@@ -129,7 +131,7 @@ export function useHistoryOperations(config: HistoryOperationsConfig): HistoryOp
    * 注意：不再负责切换文件，只负责设置焦点和展开节点
    */
   const applyFocusNavigation = useCallback(
-    (focusPath: FocusPath | null, targetFileId: string) => {
+    (focusPath: FocusPath | null, _targetFileId: string) => {
       if (!focusPath) {
         console.log('[FocusNavigation] ⚠️ 无焦点信息，跳过');
         return;
@@ -504,7 +506,9 @@ export function useHistoryOperations(config: HistoryOperationsConfig): HistoryOp
       };
     }
 
-    console.log(`[InitialState] 推入初始状态 (文件: ${selectedFile.fileName}, phases: ${currentPhases.length})`);
+    console.log(
+      `[InitialState] 推入初始状态 (文件: ${selectedFile.fileName}, phases: ${currentPhases.length})`
+    );
     globalHistoryManager.push({
       fileId: selectedFile.id,
       fileName: selectedFile.fileName,
