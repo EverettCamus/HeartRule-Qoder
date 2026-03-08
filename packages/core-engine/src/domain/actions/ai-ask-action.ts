@@ -467,8 +467,13 @@ export class AiAskAction extends BaseAction {
     const variables = this.extractCommonProfileVariables(context);
 
     // 提问任务
+    // 提问任务 - 支持 content、question_template、prompt_template 字段，优先级依次降低
+    // 提问任务 - 支持 content、question_template、prompt_template 字段，优先级依次降低
     const taskTemplate =
-      this.getConfig('question_template') || this.getConfig('prompt_template') || '';
+      this.getConfig('content') ||
+      this.getConfig('question_template') ||
+      this.getConfig('prompt_template') ||
+      '';
     const task = this.substituteVariables(taskTemplate, context);
     variables.set('task', task);
 
@@ -889,13 +894,17 @@ ${historyText}
    */
   private buildPrompt(
     templateContent: string,
-    scriptVariables: Record<string, any>,
+    scriptVariables: Map<string, any> | Record<string, any>,
     systemVariables: Record<string, any>,
     monitorFeedback: string
   ): string {
+    // 将 scriptVariables 转换为 Map（如果它是普通对象）
+    const scriptVarsMap =
+      scriptVariables instanceof Map ? scriptVariables : new Map(Object.entries(scriptVariables));
+
     let prompt = this.templateManager.substituteVariables(
       templateContent,
-      new Map(Object.entries(scriptVariables)),
+      scriptVarsMap,
       systemVariables
     );
     if (monitorFeedback) {
@@ -904,7 +913,6 @@ ${historyText}
     console.log(`[AiAskAction] 📝 Prompt prepared (${prompt.length} chars)`);
     return prompt;
   }
-
   /**
    * 调用 LLM
    */

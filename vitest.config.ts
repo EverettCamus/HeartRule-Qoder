@@ -12,6 +12,7 @@ export default defineConfig({
       '**/*.spec.ts',
       '**/*.config.*',
       'packages/script-editor/**',
+      '.worktrees/**',
     ],
     coverage: {
       provider: 'v8',

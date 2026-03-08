@@ -17,7 +17,7 @@ import { TemplateResolver } from '../../../src/engines/prompt-template/template-
 describe('TemplateResolver - 两层模板路径解析', () => {
   let resolver: TemplateResolver;
   // 使用项目根目录的config/prompts
-  const templateBasePath = path.join(process.cwd(), 'config', 'prompts');
+  const templateBasePath = path.resolve(process.cwd(), 'config/prompts');
 
   beforeAll(() => {
     resolver = new TemplateResolver(templateBasePath);
@@ -55,7 +55,7 @@ describe('TemplateResolver - 两层模板路径解析', () => {
 describe('PromptTemplateManager - 模板验证', () => {
   let manager: PromptTemplateManager;
   // 使用项目根目录的config/prompts
-  const templateBasePath = path.join(process.cwd(), 'config', 'prompts');
+  const templateBasePath = path.resolve(process.cwd(), 'config/prompts');
 
   beforeAll(() => {
     manager = new PromptTemplateManager(templateBasePath);
@@ -119,7 +119,7 @@ describe('PromptTemplateManager - 模板验证', () => {
 describe('安全边界检测集成测试', () => {
   it('应该能加载包含安全边界的模板', async () => {
     // 使用项目根目录的config/prompts/_system/config/default
-    const templateBasePath = path.join(process.cwd(), 'config', 'prompts');
+    const templateBasePath = path.resolve(process.cwd(), 'config/prompts');
     const manager = new PromptTemplateManager(templateBasePath);
 
     // 加载我们更新过的模板（新的两层机制使用 _system/config/default/ai_ask_v1.md）
