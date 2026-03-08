@@ -79,3 +79,6 @@ legacy-python/data/*.sqlite
 # Git Worktrees
 .worktrees/
 worktrees/
+
+# Sisyphus agent working files
+.sisyphus/
