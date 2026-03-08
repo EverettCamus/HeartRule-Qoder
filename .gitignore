@@ -75,3 +75,7 @@ legacy-python/*.swo
 # Python数据
 legacy-python/data/*.db
 legacy-python/data/*.sqlite
+
+# Git Worktrees
+.worktrees/
+worktrees/
