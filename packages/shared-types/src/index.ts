@@ -1,6 +1,6 @@
 /**
  * Shared Types Package
- * 
+ *
  * 导出所有共享的TypeScript类型定义和Zod Schema
  */
 
@@ -10,6 +10,7 @@ export * from './domain/message.js';
 export * from './domain/script.js';
 export * from './domain/variable.js';
 export * from './domain/exit-decision.js';
+export * from './domain/topic-decision-v2.js';
 
 // API接口类型
 export * from './api/requests.js';
