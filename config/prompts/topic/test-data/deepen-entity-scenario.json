@@ -1,0 +1,176 @@
+{
+  "scenario_name": "deepen_entity_scenario",
+  "description": "测试深化实体场景：已有实体信息不完整，需要追问情感和关系细节",
+  "topic_config": {
+    "topic_id": "collect_caregiver_info",
+    "topic_goal": "收集来访者童年主要抚养者信息",
+    "topic_strategy": "渐进深入：先基本信息，再关系史，最后深层记忆",
+    "topic_progress": 60
+  },
+  "conversation_history": [
+    {
+      "role": "user",
+      "content": "爸爸叫李明，他是工程师。我们关系还不错，但他工作很忙。"
+    },
+    {
+      "role": "assistant",
+      "content": "谢谢您分享这些信息。您提到爸爸是工程师，工作很忙。"
+    },
+    {
+      "role": "user",
+      "content": "是的，他经常加班，有时候我晚上都见不到他。"
+    }
+  ],
+  "existing_entities": [
+    {
+      "entity_name": "爸爸",
+      "entity_type": "caregiver",
+      "index": 0,
+      "processed_info": {
+        "name": "李明",
+        "relationship": "父子",
+        "role": "工程师",
+        "basic_info_completed": true,
+        "relationship_history_completed": false,
+        "emotional_connection_assessed": false
+      }
+    }
+  ],
+  "expected_decision_output": {
+    "needsAdjustment": true,
+    "strategy": "DEEPEN_ENTITY",
+    "reasoning": "爸爸的基本信息已收集，但情感连接和关系质量需要深化探索，用户提到'有时候我晚上都见不到他'暗示可能存在情感距离",
+    "adjustmentPlan": {
+      "entities": [
+        {
+          "entityName": "爸爸",
+          "intent": "DEEPEN",
+          "actionsNeeded": [
+            {
+              "type": "ai_say",
+              "purpose": "表达共情，建立安全空间讨论情感话题",
+              "priority": "high"
+            },
+            {
+              "type": "ai_ask",
+              "purpose": "探索爸爸工作忙对亲子关系的影响",
+              "priority": "high",
+              "variableTargets": ["caregiver_0_work_impact"]
+            },
+            {
+              "type": "ai_ask",
+              "purpose": "询问童年时期对爸爸的情感体验",
+              "priority": "medium",
+              "variableTargets": ["caregiver_0_childhood_emotion"]
+            },
+            {
+              "type": "ai_think",
+              "purpose": "评估父子情感连接质量",
+              "priority": "medium"
+            }
+          ],
+          "context": {
+            "conversationSnippet": "他经常加班，有时候我晚上都见不到他",
+            "existingKnowledge": "爸爸叫李明，工程师，工作很忙，关系还不错",
+            "emotionalTone": "略带遗憾"
+          }
+        }
+      ],
+      "insertionStrategy": "INSERT_AFTER_CURRENT",
+      "targetPosition": {
+        "afterActionId": "current_topic_action"
+      }
+    },
+    "constraints": {
+      "maxTotalActions": 6,
+      "maxActionsPerEntity": 4,
+      "timeBudgetMinutes": 3,
+      "forbiddenActionTypes": ["use_skill"]
+    }
+  },
+  "expected_planner_output": {
+    "actions": [
+      {
+        "action_type": "ai_say",
+        "action_id": "caregiver_0_say_empathy",
+        "config": {
+          "content": "我听到您说爸爸工作很忙，有时候晚上都见不到他。这听起来可能让您感到有些距离感。我想了解一下这对你们的关系有什么影响。",
+          "max_rounds": 1
+        }
+      },
+      {
+        "action_type": "ai_ask",
+        "action_id": "caregiver_0_ask_work_impact",
+        "config": {
+          "content": "爸爸工作忙对你们的亲子关系有什么具体的影响吗？比如在情感连接上，或者日常互动上？",
+          "output": [
+            {
+              "get": "caregiver_0_work_impact",
+              "define": "爸爸工作忙对亲子关系的影响",
+              "extraction_method": "llm"
+            }
+          ],
+          "max_rounds": 2
+        }
+      },
+      {
+        "action_type": "ai_ask",
+        "action_id": "caregiver_0_ask_childhood_emotion",
+        "config": {
+          "content": "回想童年时期，当爸爸加班晚归时，您通常有什么感受？",
+          "output": [
+            {
+              "get": "caregiver_0_childhood_emotion",
+              "define": "童年时期对爸爸加班的情感体验",
+              "extraction_method": "llm"
+            }
+          ],
+          "max_rounds": 2
+        }
+      },
+      {
+        "action_type": "ai_think",
+        "action_id": "caregiver_0_think_emotional_connection",
+        "config": {
+          "think_goal": "基于已有信息评估父子情感连接质量，识别可能的模式",
+          "input_variables": [
+            "caregiver_0_name",
+            "caregiver_0_relationship",
+            "caregiver_0_role",
+            "caregiver_0_work_impact",
+            "caregiver_0_childhood_emotion"
+          ],
+          "output_variables": [
+            "caregiver_0_emotional_connection_quality",
+            "caregiver_0_relationship_pattern"
+          ]
+        }
+      }
+    ]
+  },
+  "evaluation_criteria": {
+    "decision_quality": {
+      "needs_adjustment_correct": true,
+      "strategy_appropriate": true,
+      "reasoning_comprehensive": true,
+      "entity_intents_appropriate": true,
+      "actions_needed_reasonable": true,
+      "emotional_tone_detected": true
+    },
+    "planner_quality": {
+      "yaml_format_correct": true,
+      "action_ids_follow_naming_convention": true,
+      "variable_names_follow_convention": true,
+      "content_natural_and_engaging": true,
+      "output_schema_complete": true,
+      "empathy_expressed": true
+    },
+    "integration_quality": {
+      "planner_follows_decision_intent": true,
+      "entity_indices_consistent": true,
+      "variable_targets_implemented": true,
+      "insertion_strategy_respected": true,
+      "emotional_context_addressed": true
+    }
+  }
+}

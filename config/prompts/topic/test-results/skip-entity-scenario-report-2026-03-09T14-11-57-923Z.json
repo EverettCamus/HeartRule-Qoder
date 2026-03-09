@@ -1,0 +1,139 @@
+{
+  "test_run": {
+    "scenario": "skip-entity-scenario",
+    "timestamp": "2026-03-09T14:11:57.923Z",
+    "description": "测试跳过实体场景：用户明确表示不愿讨论某个实体"
+  },
+  "scores": {
+    "decision": 100,
+    "planner": 75,
+    "overall": 88
+  },
+  "validation": {
+    "decision": {
+      "is_valid_json": true,
+      "has_required_fields": true,
+      "strategy_valid": true,
+      "needs_adjustment_correct": true,
+      "matches_expected": true,
+      "issues": []
+    },
+    "planner": {
+      "is_valid_yaml": true,
+      "has_actions_array": true,
+      "action_ids_valid": false,
+      "variable_names_valid": true,
+      "matches_expected": true,
+      "issues": ["无效的Action ID格式: general_say_respect_decision"]
+    }
+  },
+  "outputs": {
+    "decision": {
+      "needsAdjustment": true,
+      "strategy": "SKIP_ENTITY",
+      "reasoning": "用户明确表示'我不想谈爷爷'，应尊重用户意愿跳过该实体。爸爸和妈妈需要深化关系史探索。",
+      "adjustmentPlan": {
+        "entities": [
+          {
+            "entityName": "爷爷",
+            "intent": "SKIP",
+            "actionsNeeded": [],
+            "context": {
+              "conversationSnippet": "爷爷...我不想谈爷爷",
+              "existingKnowledge": "用户提到爷爷但不愿讨论",
+              "emotionalTone": "抗拒"
+            }
+          },
+          {
+            "entityName": "爸爸",
+            "intent": "DEEPEN",
+            "actionsNeeded": [
+              {
+                "type": "ai_ask",
+                "purpose": "询问童年时期与爸爸的关系细节",
+                "priority": "high",
+                "variableTargets": ["caregiver_0_relationship_detail"]
+              }
+            ],
+            "context": {
+              "conversationSnippet": "爸爸是工程师，他们对我都挺好的",
+              "existingKnowledge": "爸爸是工程师，关系良好",
+              "emotionalTone": "积极"
+            }
+          },
+          {
+            "entityName": "妈妈",
+            "intent": "DEEPEN",
+            "actionsNeeded": [
+              {
+                "type": "ai_ask",
+                "purpose": "询问童年时期与妈妈的关系细节",
+                "priority": "high",
+                "variableTargets": ["caregiver_1_relationship_detail"]
+              }
+            ],
+            "context": {
+              "conversationSnippet": "妈妈是老师，他们对我都挺好的",
+              "existingKnowledge": "妈妈是老师，关系良好",
+              "emotionalTone": "积极"
+            }
+          }
+        ],
+        "insertionStrategy": "APPEND_TO_END"
+      },
+      "constraints": {
+        "maxTotalActions": 4,
+        "maxActionsPerEntity": 2,
+        "timeBudgetMinutes": 3,
+        "forbiddenActionTypes": []
+      }
+    },
+    "planner": {
+      "actions": [
+        {
+          "action_type": "ai_say",
+          "action_id": "general_say_respect_decision",
+          "config": {
+            "content": "我理解并尊重您不想谈论爷爷的决定。我们继续聊聊您和爸爸妈妈的关系。",
+            "max_rounds": 1
+          }
+        },
+        {
+          "action_type": "ai_ask",
+          "action_id": "caregiver_0_ask_relationship_detail",
+          "config": {
+            "content": "您提到爸爸是工程师，对您挺好的。能具体说说在您成长过程中，你们是如何相处的吗？比如一起做过什么特别的事情？",
+            "output": [
+              {
+                "get": "caregiver_0_relationship_detail",
+                "define": "童年时期与爸爸相处的具体细节",
+                "extraction_method": "llm"
+              }
+            ],
+            "max_rounds": 2
+          }
+        },
+        {
+          "action_type": "ai_ask",
+          "action_id": "caregiver_1_ask_relationship_detail",
+          "config": {
+            "content": "妈妈是老师，您说她对您也挺好的。您能分享一下和妈妈在一起的一些特别回忆吗？",
+            "output": [
+              {
+                "get": "caregiver_1_relationship_detail",
+                "define": "童年时期与妈妈相处的具体细节",
+                "extraction_method": "llm"
+              }
+            ],
+            "max_rounds": 2
+          }
+        }
+      ]
+    }
+  },
+  "recommendations": [
+    "检查决策输出是否符合JSON Schema",
+    "验证规划输出的YAML格式",
+    "确保Action ID遵循命名规范"
+  ]
+}

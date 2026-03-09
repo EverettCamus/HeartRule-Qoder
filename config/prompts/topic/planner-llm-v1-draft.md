@@ -120,6 +120,8 @@ config.output格式：
 
 ### 命名格式
 
+#### 实体相关Action
+
 ```
 {entity_type}_{index}_{purpose_slug}
 ```
@@ -130,11 +132,31 @@ config.output格式：
 - `index`：实体索引（从0开始）
 - `purpose_slug`：用途简写（小写字母+下划线）
 
+#### 通用Action（非实体相关）
+
+```
+general_{purpose_slug}
+```
+
+**适用场景**：
+
+- 过渡性说明（如话题转换、尊重用户决定）
+- 全局性操作（如会话总结、进度说明）
+- 非特定实体的共情表达
+
 ### 示例
+
+**实体相关Action**：
 
 - `caregiver_0_say_welcome`：欢迎爸爸的ai_say
 - `caregiver_1_ask_basic_info`：询问妈妈基本信息的ai_ask
 - `caregiver_2_think_emotional_connection`：评估与外公情感连接的ai_think
+
+**通用Action**：
+
+- `general_say_respect_decision`：表达对用户决定的尊重
+- `general_say_transition`：话题转换说明
+- `general_say_session_summary`：会话总结
 
 ## 变量命名规范
 

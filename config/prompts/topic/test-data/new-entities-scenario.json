@@ -1,0 +1,224 @@
+{
+  "scenario_name": "new_entities_scenario",
+  "description": "测试发现新实体场景：对话中提及未处理过的抚养者",
+  "topic_config": {
+    "topic_id": "collect_caregiver_info",
+    "topic_goal": "收集来访者童年主要抚养者信息",
+    "topic_strategy": "渐进深入：先基本信息，再关系史，最后深层记忆",
+    "topic_progress": 30
+  },
+  "conversation_history": [
+    {
+      "role": "user",
+      "content": "主要是爸爸，后来妈妈也回来了。对了，外公也经常来帮忙。"
+    },
+    {
+      "role": "assistant",
+      "content": "我了解了。您提到爸爸是主要的抚养者。"
+    }
+  ],
+  "existing_entities": [
+    {
+      "entity_name": "爸爸",
+      "entity_type": "caregiver",
+      "index": 0,
+      "processed_info": {
+        "name": "爸爸",
+        "relationship": "主要抚养者",
+        "basic_info_completed": true,
+        "relationship_history_completed": false
+      }
+    }
+  ],
+  "expected_decision_output": {
+    "needsAdjustment": true,
+    "strategy": "NEW_ENTITIES",
+    "reasoning": "发现'妈妈'和'外公'两个新实体，爸爸需要补充关系史",
+    "adjustmentPlan": {
+      "entities": [
+        {
+          "entityName": "妈妈",
+          "intent": "NEW",
+          "actionsNeeded": [
+            {
+              "type": "ai_say",
+              "purpose": "引出妈妈的话题，建立情感连接",
+              "priority": "high"
+            },
+            {
+              "type": "ai_ask",
+              "purpose": "询问妈妈的基本信息（姓名、关系、角色）",
+              "priority": "high",
+              "variableTargets": [
+                "caregiver_1_name",
+                "caregiver_1_relationship",
+                "caregiver_1_role"
+              ]
+            },
+            {
+              "type": "ai_ask",
+              "purpose": "询问与妈妈的早期记忆",
+              "priority": "medium",
+              "variableTargets": ["caregiver_1_childhood_memory"]
+            }
+          ],
+          "context": {
+            "conversationSnippet": "后来妈妈也回来了",
+            "existingKnowledge": "妈妈是后来回来的抚养者",
+            "emotionalTone": "中性"
+          }
+        },
+        {
+          "entityName": "外公",
+          "intent": "NEW",
+          "actionsNeeded": [
+            {
+              "type": "ai_ask",
+              "purpose": "询问外公的基本信息",
+              "priority": "medium",
+              "variableTargets": ["caregiver_2_name", "caregiver_2_relationship"]
+            }
+          ],
+          "context": {
+            "conversationSnippet": "外公也经常来帮忙",
+            "existingKnowledge": "外公经常来帮忙",
+            "emotionalTone": "积极"
+          }
+        },
+        {
+          "entityName": "爸爸",
+          "intent": "EXTEND",
+          "actionsNeeded": [
+            {
+              "type": "ai_ask",
+              "purpose": "询问童年时期与爸爸的关系史",
+              "priority": "high",
+              "variableTargets": ["caregiver_0_relationship_history"]
+            }
+          ],
+          "context": {
+            "conversationSnippet": "主要是爸爸",
+            "existingKnowledge": "爸爸是主要抚养者，基本信息已收集",
+            "emotionalTone": "中性"
+          }
+        }
+      ],
+      "insertionStrategy": "APPEND_TO_END"
+    },
+    "constraints": {
+      "maxTotalActions": 10,
+      "maxActionsPerEntity": 4,
+      "timeBudgetMinutes": 5,
+      "forbiddenActionTypes": []
+    }
+  },
+  "expected_planner_output": {
+    "actions": [
+      {
+        "action_type": "ai_say",
+        "action_id": "caregiver_1_say_welcome",
+        "config": {
+          "content": "接下来，我想了解一下您妈妈的情况。了解童年抚养者情况有助于理解您的成长经历。",
+          "max_rounds": 1
+        }
+      },
+      {
+        "action_type": "ai_ask",
+        "action_id": "caregiver_1_ask_basic_info",
+        "config": {
+          "content": "请问您妈妈的姓名是什么？您和她的关系如何（亲近/疏远/较为复杂）？在您的成长过程中，她扮演了怎样的角色？",
+          "output": [
+            {
+              "get": "caregiver_1_name",
+              "define": "妈妈的姓名",
+              "extraction_method": "direct"
+            },
+            {
+              "get": "caregiver_1_relationship",
+              "define": "与妈妈的关系类型",
+              "extraction_method": "llm"
+            },
+            {
+              "get": "caregiver_1_role",
+              "define": "妈妈在成长过程中扮演的角色",
+              "extraction_method": "llm"
+            }
+          ],
+          "max_rounds": 2
+        }
+      },
+      {
+        "action_type": "ai_ask",
+        "action_id": "caregiver_1_ask_early_memory",
+        "config": {
+          "content": "您还记得小时候和妈妈的一些特别记忆吗？比如一起做过的事情，或者她说过让您印象深刻的话？",
+          "output": [
+            {
+              "get": "caregiver_1_childhood_memory",
+              "define": "与妈妈的童年记忆",
+              "extraction_method": "llm"
+            }
+          ],
+          "max_rounds": 2
+        }
+      },
+      {
+        "action_type": "ai_ask",
+        "action_id": "caregiver_2_ask_basic_info",
+        "config": {
+          "content": "您提到外公也经常来帮忙。请问外公的姓名是什么？您和他是什么关系？",
+          "output": [
+            {
+              "get": "caregiver_2_name",
+              "define": "外公的姓名",
+              "extraction_method": "direct"
+            },
+            {
+              "get": "caregiver_2_relationship",
+              "define": "与外公的关系类型",
+              "extraction_method": "llm"
+            }
+          ],
+          "max_rounds": 2
+        }
+      },
+      {
+        "action_type": "ai_ask",
+        "action_id": "caregiver_0_ask_relationship_history",
+        "config": {
+          "content": "关于爸爸，我想了解更多你们在您童年时期的关系。您能描述一下那时候你们是如何相处的吗？",
+          "output": [
+            {
+              "get": "caregiver_0_relationship_history",
+              "define": "童年时期与爸爸的关系史",
+              "extraction_method": "llm"
+            }
+          ],
+          "max_rounds": 2
+        }
+      }
+    ]
+  },
+  "evaluation_criteria": {
+    "decision_quality": {
+      "needs_adjustment_correct": true,
+      "strategy_appropriate": true,
+      "reasoning_comprehensive": true,
+      "entity_intents_appropriate": true,
+      "actions_needed_reasonable": true
+    },
+    "planner_quality": {
+      "yaml_format_correct": true,
+      "action_ids_follow_naming_convention": true,
+      "variable_names_follow_convention": true,
+      "content_natural_and_engaging": true,
+      "output_schema_complete": true
+    },
+    "integration_quality": {
+      "planner_follows_decision_intent": true,
+      "entity_indices_consistent": true,
+      "variable_targets_implemented": true,
+      "insertion_strategy_respected": true
+    }
+  }
+}

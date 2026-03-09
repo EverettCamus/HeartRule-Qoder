@@ -1,0 +1,46 @@
+{
+  "test_run": {
+    "scenario": "deepen-entity-scenario",
+    "timestamp": "2026-03-09T14:09:21.985Z",
+    "description": "测试深化实体场景：已有实体信息不完整，需要追问情感和关系细节"
+  },
+  "scores": {
+    "decision": 25,
+    "planner": 100,
+    "overall": 63
+  },
+  "validation": {
+    "decision": {
+      "is_valid_json": true,
+      "has_required_fields": false,
+      "strategy_valid": false,
+      "needs_adjustment_correct": false,
+      "matches_expected": false,
+      "issues": [
+        "缺少必需字段: strategy",
+        "缺少必需字段: adjustmentPlan",
+        "无效的策略: undefined",
+        "needsAdjustment不正确"
+      ]
+    },
+    "planner": {
+      "is_valid_yaml": true,
+      "has_actions_array": true,
+      "action_ids_valid": true,
+      "variable_names_valid": true,
+      "issues": []
+    }
+  },
+  "outputs": {
+    "decision": {
+      "needsAdjustment": false,
+      "reasoning": "测试默认响应"
+    },
+    "planner": {}
+  },
+  "recommendations": [
+    "检查决策输出是否符合JSON Schema",
+    "验证规划输出的YAML格式",
+    "确保Action ID遵循命名规范"
+  ]
+}
