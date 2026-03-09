@@ -429,13 +429,221 @@ config.output格式：
 - 约束条件
 - 输出格式
 - 示例
-
-**关键指导原则**：
+  **关键指导原则**：
 
 - 渐进深入：先基本信息→关系史→深层记忆
 - 语句自然：避免列表式问题
 - 灵活适配：NEW/EXTEND/DEEPEN不同意图对应不同数量actions
 - 情绪敏感：根据emotionalTone调整问题语气
+
+### 5.1.1 Decision Prompt Template 详细结构
+
+````markdown
+# Topic决策引擎 - Decision Prompt Template
+
+## 系统角色与上下文
+
+你是HeartRule AI咨询引擎的Topic决策专家。你的任务是分析当前对话上下文，判断是否需要调整Action队列，并生成结构化的调整计划。
+
+## 当前Topic信息
+
+- **Topic ID**: {{topic_id}}
+- **Topic目标**: {{topic_goal}}
+- **Topic策略**: {{topic_strategy}}
+- **当前进度**: {{topic_progress}}%
+
+## 对话上下文
+
+{{conversation_history}}
+
+## 已识别实体状态
+
+{{existing_entities}}
+
+## 决策指南
+
+### 何时需要调整（needsAdjustment = true）
+
+1. **发现新实体**：对话中提及未处理过的实体（如新出现的抚养者）
+2. **实体需要深化**：已处理实体但信息不完整，需要追问细节
+3. **对话转向**：用户主动提及相关但未计划的话题
+4. **情绪信号**：用户表达强烈情绪，需要针对性响应
+
+### 何时不需要调整（needsAdjustment = false）
+
+1. **信息已充分**：当前实体信息收集已达到目标
+2. **用户抗拒**：用户明确表示不愿继续当前话题
+3. **时间/资源限制**：已达到会话时间或资源上限
+4. **Topic已完成**：Topic目标已达成，无需进一步行动
+
+## 策略类型选择指南
+
+根据调整需求选择合适的strategy：
+
+- **NEW_ENTITIES**：发现新实体需要处理
+- **DEEPEN_ENTITY**：深化已有实体的信息收集
+- **SKIP_ENTITY**：跳过某些实体（用户抗拒或无关）
+- **REORDER_ACTIONS**：重新排序现有Actions
+- **CUSTOM**：自定义调整策略
+
+## 实体处理意图选择
+
+为每个实体选择合适的intent：
+
+- **NEW**：全新实体，需要完整信息收集流程
+- **EXTEND**：已有实体，补充额外信息
+- **DEEPEN**：深化已有实体的情感/关系维度
+- **SKIP**：跳过该实体处理
+
+## Action描述指导
+
+为每个实体描述需要的Actions：
+
+### ai_say类型
+
+- 用途：引导话题、提供解释、建立信任
+- 示例："引出妈妈的话题，建立情感连接"
+
+### ai_ask类型
+
+- 用途：收集信息、追问细节、探索感受
+- 示例："询问妈妈的基本信息（姓名、关系、角色）"
+- 变量提取：明确需要提取的变量名和定义
+
+### ai_think类型
+
+- 用途：内部认知加工、情感分析、模式识别
+- 示例："评估与妈妈的情感连接质量"
+
+### use_skill类型
+
+- 用途：调用特定咨询技术
+- 示例："使用苏格拉底式提问探索亲子关系"
+
+## 约束条件
+
+{{constraints}}
+
+## 输出格式
+
+你必须输出严格的JSON格式，符合以下Schema：
+
+```json
+{
+  "needsAdjustment": boolean,
+  "strategy": "NEW_ENTITIES" | "DEEPEN_ENTITY" | "SKIP_ENTITY" | "REORDER_ACTIONS" | "CUSTOM",
+  "reasoning": "string（决策推理过程）",
+  "adjustmentPlan": {
+    "entities": [
+      {
+        "entityName": "string",
+        "intent": "NEW" | "EXTEND" | "DEEPEN" | "SKIP",
+        "actionsNeeded": [
+          {
+            "type": "ai_say" | "ai_ask" | "ai_think" | "use_skill",
+            "purpose": "string",
+            "priority": "high" | "medium" | "low",
+            "variableTargets": ["string"]  // 仅ai_ask需要
+          }
+        ],
+        "context": {
+          "conversationSnippet": "string",
+          "existingKnowledge": "string",
+          "emotionalTone": "string"
+        }
+      }
+    ],
+    "insertionStrategy": "APPEND_TO_END" | "INSERT_AFTER_CURRENT" | "INSERT_BEFORE_TOPIC_END",
+    "targetPosition": {
+      "afterActionId": "string",
+      "positionIndex": number
+    }
+  },
+  "constraints": {
+    "maxTotalActions": number,
+    "maxActionsPerEntity": number,
+    "timeBudgetMinutes": number,
+    "forbiddenActionTypes": ["string"]
+  }
+}
+```
+````
+
+## 示例
+
+{{decision_example}}
+
+---
+
+````
+
+### 5.1.2 变量替换机制
+
+Decision Prompt使用两层变量替换系统：
+
+#### 系统层变量（{%变量名%}）
+- 来源：系统运行时注入
+- 示例：{%time%}, {%session_id%}, {%user_id%}
+- 替换时机：Prompt构建时
+
+#### 模板层变量（{{变量名}}）
+- 来源：Topic配置或运行时计算
+- 示例：{{topic_goal}}, {{conversation_history}}, {{existing_entities}}
+- 替换时机：Prompt构建时
+
+#### 动态内容块（{{#if 条件}}内容{{/if}}）
+- 用途：条件性包含内容块
+- 示例：{{#if has_emotional_tone}}情绪分析指导...{{/if}}
+- 实现：使用ConditionalTemplate类处理
+
+### 5.1.3 Topic节点配置示例
+
+```yaml
+topic:
+  id: "collect_caregiver_info"
+  goal: "收集来访者童年主要抚养者信息"
+  strategy: "progressive_deepening"
+  decision_prompt_config:
+    # 系统层变量注入
+    system_variables:
+      time: "{%time%}"
+      who: "{%who%}"
+      user: "{%user%}"
+
+    # 模板层变量定义
+    template_variables:
+      topic_goal: "收集来访者童年主要抚养者信息"
+      topic_strategy: "渐进深入：先基本信息，再关系史，最后深层记忆"
+      constraints: |
+        最大总Actions数：10
+        每个实体最大Actions数：4
+        时间预算：5分钟
+        禁止的Action类型：[]
+
+    # 条件内容块配置
+    conditional_blocks:
+      - condition: "has_emotional_context"
+        content: |
+          情绪敏感指导：
+          根据用户情绪调整问题语气，避免触发防御反应
+      - condition: "has_time_pressure"
+        content: |
+          时间约束：优先收集关键信息，跳过非必要追问
+
+    # 示例配置
+    examples:
+      - scenario: "发现新实体"
+        input: "对话：'主要是爸爸，后来妈妈也回来了。对了，外公也经常来帮忙。'"
+        output: |
+          {
+            "needsAdjustment": true,
+            "strategy": "NEW_ENTITIES",
+            "reasoning": "发现'妈妈'和'外公'两个新实体，爸爸需要补充关系史",
+            "adjustmentPlan": { ... }
+          }
+````
+
+---
 
 ### 5.2 Planner Prompt Template
 
@@ -445,22 +653,490 @@ config.output格式：
 2. 结合Topic的goal和strategy，生成Action YAML
 3. 严格按照ActionConfig Schema输出
 
-**主要章节**：
+### 5.2.1 Planner Prompt Template 详细结构
 
-- Topic信息
-- 调整计划（输入JSON）
-- Action配置规范（四种类型）
-- Action ID命名规范
-- 问题设计原则
-- 输出格式
-- 示例
-- 实体索引分配表
+````markdown
+# Topic规划引擎 - Planner Prompt Template
 
-**关键指导原则**：
+## 系统角色与上下文
 
-- 严格变量命名规则
-- 渐进式问题设计
-- 优先级排序
+你是HeartRule AI咨询引擎的Topic规划专家。你的任务是根据决策引擎的输出，生成具体的Action YAML配置。
+
+## Topic信息
+
+- **Topic ID**: {{topic_id}}
+- **Topic目标**: {{topic_goal}}
+- **Topic策略**: {{topic_strategy}}
+
+## 调整计划输入
+
+以下是决策引擎生成的调整计划：
+
+```json
+{{adjustment_plan_json}}
+```
+````
+
+## 实体索引分配表
+
+基于adjustmentPlan.entities，分配实体索引：
+
+| 实体名称 | 实体类型 | 分配索引 | 处理意图 |
+| -------- | -------- | -------- | -------- |
+
+{{#each entities}}
+| {{entityName}} | caregiver | {{@index}} | {{intent}} |
+{{/each}}
+
+**索引分配规则**：
+
+1. 按entities数组顺序分配索引0, 1, 2...
+2. 已存在的实体保留原索引
+3. 新实体按顺序分配新索引
+
+## Action配置规范
+
+### ai_say Action规范
+
+```yaml
+必需字段：
+- action_type: "ai_say"
+- action_id: "{entity_type}_{index}_{purpose_slug}"
+- config.content: "string（要说的话）"
+
+可选字段：
+- config.max_rounds: number（默认1）
+- config.say_goal: "string（说话目的）"
+```
+
+**内容设计原则**：
+
+- 自然过渡：从当前对话自然引出新话题
+- 建立信任：表达共情和理解
+- 明确目的：简要说明为什么要问这些问题
+
+### ai_ask Action规范
+
+```yaml
+必需字段：
+- action_type: "ai_ask"
+- action_id: "{entity_type}_{index}_{variable_suffix}"
+- config.content: "string（问题文本）"
+- config.output: array 或 config.target_variable: string
+
+config.output格式：
+  - get: "string（变量名）"
+    define: "string（变量定义）"
+    extraction_method?: "direct" | "pattern" | "llm"
+
+可选字段：
+- config.max_rounds: number（默认3）
+- config.required: boolean
+- config.extraction_prompt: string
+```
+
+**问题设计原则**：
+
+1. **渐进深入**：从简单事实→关系描述→情感体验
+2. **开放引导**：使用开放式问题，避免是/否回答
+3. **单一焦点**：每个问题聚焦一个主题
+4. **变量明确**：明确要提取的变量名和定义
+
+### ai_think Action规范
+
+```yaml
+必需字段：
+- action_type: "ai_think"
+- action_id: "{entity_type}_{index}_think_{purpose_slug}"
+- config.think_goal: "string（思考目标）"
+- config.input_variables: ["string"]
+- config.output_variables: ["string"]
+
+可选字段：
+- config.prompt_template: string
+```
+
+**思考目标设计**：
+
+- 分析模式：识别关系模式、情感模式
+- 评估质量：评估关系质量、情感连接
+- 生成洞察：基于已有信息生成专业洞察
+
+### use_skill Action规范
+
+```yaml
+必需字段：
+- action_type: "use_skill"
+- action_id: "{entity_type}_{index}_skill_{skill_name}"
+- config.skill_id: "string"
+
+可选字段：
+- config.skill_parameters: object
+- config.output_variables: ["string"]
+```
+
+## Action ID命名规范
+
+### 命名格式
+
+```
+{entity_type}_{index}_{purpose_slug}
+```
+
+**字段说明**：
+
+- `entity_type`：实体类型（如caregiver、department、role）
+- `index`：实体索引（从0开始）
+- `purpose_slug`：用途简写（小写字母+下划线）
+
+### 示例
+
+- `caregiver_0_say_welcome`：欢迎爸爸的ai_say
+- `caregiver_1_ask_basic_info`：询问妈妈基本信息的ai_ask
+- `caregiver_2_think_emotional_connection`：评估与外公情感连接的ai_think
+
+## 变量命名规范
+
+### 嵌套实体变量格式
+
+```
+{entity_type}_{index}_{variable_suffix}
+```
+
+**示例**：
+
+- `caregiver_0_name`：爸爸的姓名
+- `caregiver_1_relationship`：与妈妈的关系类型
+- `caregiver_2_childhood_memory`：与外公的童年记忆
+
+### 变量后缀规范
+
+| 后缀         | 含义     | 示例                             |
+| ------------ | -------- | -------------------------------- |
+| name         | 姓名     | caregiver_0_name                 |
+| relationship | 关系类型 | caregiver_1_relationship         |
+| role         | 角色描述 | caregiver_2_role                 |
+| memory       | 记忆描述 | caregiver_0_childhood_memory     |
+| emotion      | 情感体验 | caregiver_1_emotional_tone       |
+| quality      | 关系质量 | caregiver_2_relationship_quality |
+
+## 输出格式
+
+你必须输出严格的YAML格式，符合ActionConfig[] Schema：
+
+```yaml
+actions:
+  - action_type: 'ai_say'
+    action_id: 'caregiver_1_say_welcome'
+    config:
+      content: |
+        接下来，我想了解一下您妈妈的情况。
+        了解童年抚养者情况有助于理解您的成长经历。
+      max_rounds: 1
+
+  - action_type: 'ai_ask'
+    action_id: 'caregiver_1_ask_basic_info'
+    config:
+      content: |
+        请问您妈妈的姓名是什么？
+        您和她的关系如何（亲近/疏远/较为复杂）？
+        在您的成长过程中，她扮演了怎样的角色？
+      output:
+        - get: 'caregiver_1_name'
+          define: '妈妈的姓名'
+          extraction_method: 'direct'
+        - get: 'caregiver_1_relationship'
+          define: '与妈妈的关系类型'
+          extraction_method: 'llm'
+      max_rounds: 2
+
+  # ... 更多actions
+```
+
+## 示例
+
+{{planner_example}}
+
+---
+
+````
+
+### 5.2.2 变量替换与模板继承
+
+Planner Prompt继承Decision Prompt的变量替换系统，并增加规划层特定变量：
+
+#### 输入变量（{{变量名}}）
+- `{{adjustment_plan_json}}`：Stage 1输出的完整JSON
+- `{{entities}}`：实体列表，用于生成索引分配表
+- `{{topic_goal}}`, `{{topic_strategy}}`：从Topic配置继承
+
+#### 模板片段（{{>片段名}}）
+- 用途：复用常见的Action配置模板
+- 示例：{{>ai_ask_basic_info_template}}
+- 实现：使用ModularTemplate类组合
+
+#### 循环结构（{{#each items}}内容{{/each}}）
+- 用途：遍历实体列表生成配置
+- 示例：{{#each entities}}生成{{entityName}}的Actions...{{/each}}
+- 实现：使用ConditionalTemplate类处理
+
+### 5.2.3 Topic节点配置示例（续）
+
+```yaml
+topic:
+  id: "collect_caregiver_info"
+  goal: "收集来访者童年主要抚养者信息"
+  strategy: "progressive_deepening"
+
+  planner_prompt_config:
+    # 输入变量绑定
+    input_variables:
+      adjustment_plan_json: "{{adjustment_plan_json}}"
+      entities: "{{adjustment_plan.entities}}"
+
+    # 模板片段注册
+    template_fragments:
+      ai_ask_basic_info_template: |
+        - action_type: "ai_ask"
+          action_id: "{entity_type}_{index}_ask_basic_info"
+          config:
+            content: |
+              请问{entity_name}的姓名是什么？
+              您和{entity_name}的关系如何（亲近/疏远/较为复杂）？
+              在您的成长过程中，{entity_name}扮演了怎样的角色？
+            output:
+              - get: "{entity_type}_{index}_name"
+                define: "{entity_name}的姓名"
+                extraction_method: "direct"
+              - get: "{entity_type}_{index}_relationship"
+                define: "与{entity_name}的关系类型"
+                extraction_method: "llm"
+            max_rounds: 2
+
+      ai_say_transition_template: |
+        - action_type: "ai_say"
+          action_id: "{entity_type}_{index}_say_transition"
+          config:
+            content: |
+              接下来，我想了解一下您{entity_name}的情况。
+              了解童年抚养者情况有助于理解您的成长经历。
+            max_rounds: 1
+
+    # 循环模板配置
+    loop_templates:
+      - for: "entities"
+        template: |
+          # 处理实体：{{entityName}}
+          {{>ai_say_transition_template}}
+          {{>ai_ask_basic_info_template}}
+          {{#if needs_deepening}}
+          {{>ai_ask_deepening_template}}
+          {{/if}}
+
+    # 示例配置
+    examples:
+      - scenario: "新实体处理"
+        input: |
+          {
+            "needsAdjustment": true,
+            "strategy": "NEW_ENTITIES",
+            "adjustmentPlan": {
+              "entities": [
+                {
+                  "entityName": "妈妈",
+                  "intent": "NEW",
+                  "actionsNeeded": [ ... ]
+                }
+              ]
+            }
+          }
+        output: |
+          actions:
+            - action_type: "ai_say"
+              action_id: "caregiver_1_say_welcome"
+              config:
+                content: |
+                  接下来，我想了解一下您妈妈的情况。
+                  了解童年抚养者情况有助于理解您的成长经历。
+                max_rounds: 1
+            # ... 更多actions
+````
+
+---
+
+## 5.3 脚本配置与模板逻辑的边界
+
+### 5.3.1 职责分离原则
+
+两阶段LLM Pipeline遵循明确的职责分离：
+
+| 层面       | 配置位置         | 职责                          | 修改频率               |
+| ---------- | ---------------- | ----------------------------- | ---------------------- |
+| **脚本层** | YAML脚本文件     | 定义Topic目标、策略、约束     | 低（领域知识变化时）   |
+| **模板层** | Prompt模板文件   | 定义决策/规划逻辑、指导原则   | 中（Prompt优化迭代时） |
+| **代码层** | TypeScript源代码 | 实现LLM调用、解析、验证、执行 | 极低（架构变更时）     |
+
+### 5.3.2 脚本层配置（YAML）
+
+脚本层负责领域知识的具体化，配置在Topic YAML文件中：
+
+```yaml
+topic:
+  id: 'collect_caregiver_info'
+  goal: '收集来访者童年主要抚养者信息'
+  strategy: 'progressive_deepening'
+
+  # 决策提示词配置
+  decision_prompt_config:
+    system_variables:
+      time: '{%time%}'
+      who: '{%who%}'
+    template_variables:
+      topic_goal: '收集来访者童年主要抚养者信息'
+      topic_strategy: '渐进深入：先基本信息，再关系史，最后深层记忆'
+    constraints: |
+      最大总Actions数：10
+      每个实体最大Actions数：4
+    examples:
+      - scenario: '发现新实体'
+        input: "对话：'主要是爸爸，后来妈妈也回来了。'"
+        output: '{...}'
+
+  # 规划提示词配置
+  planner_prompt_config:
+    input_variables:
+      adjustment_plan_json: '{{adjustment_plan_json}}'
+    template_fragments:
+      ai_ask_basic_info_template: '...'
+    examples:
+      - scenario: '新实体处理'
+        input: '{...}'
+        output: 'actions: [...]'
+```
+
+**脚本层关注点**：
+
+- 具体的领域目标（收集什么信息）
+- 具体的策略（如何收集）
+- 具体的约束（资源限制）
+- 具体的示例（典型场景）
+
+### 5.3.3 模板层逻辑（Prompt Templates）
+
+模板层负责决策/规划的通用逻辑，存储在独立的Prompt模板文件中：
+
+```markdown
+# Topic决策引擎 - Decision Prompt Template
+
+## 系统角色与上下文
+
+你是HeartRule AI咨询引擎的Topic决策专家...
+
+## 决策指南
+
+### 何时需要调整（needsAdjustment = true）
+
+1. **发现新实体**：对话中提及未处理过的实体...
+2. **实体需要深化**：已处理实体但信息不完整...
+
+### 何时不需要调整（needsAdjustment = false）
+
+1. **信息已充分**：当前实体信息收集已达到目标...
+2. **用户抗拒**：用户明确表示不愿继续当前话题...
+
+## 策略类型选择指南
+
+根据调整需求选择合适的strategy：
+
+- **NEW_ENTITIES**：发现新实体需要处理
+- **DEEPEN_ENTITY**：深化已有实体的信息收集
+- **SKIP_ENTITY**：跳过某些实体...
+
+...
+```
+
+**模板层关注点**：
+
+- 通用的决策逻辑（何时调整、如何选择策略）
+- 通用的规划逻辑（如何生成Actions、命名规范）
+- 通用的指导原则（问题设计、变量命名）
+- 通用的输出格式（JSON/YAML Schema）
+
+### 5.3.4 代码层实现（TypeScript）
+
+代码层负责技术实现，不包含业务逻辑：
+
+```typescript
+// TopicDecisionService - 只负责编排，不包含决策逻辑
+class TopicDecisionService {
+  async makeDecision(context: DecisionContext): Promise<DecisionOutput> {
+    // 1. 构建Prompt（组合脚本配置 + 模板）
+    const prompt = this.buildDecisionPrompt(context);
+
+    // 2. 调用LLM
+    const llmResponse = await this.callLLM(prompt);
+
+    // 3. 解析和验证
+    const decision = this.parseDecisionOutput(llmResponse);
+    this.validateDecisionSchema(decision);
+
+    // 4. 返回结果
+    return decision;
+  }
+
+  // 构建Prompt：组合模板 + 脚本配置 + 运行时变量
+  private buildDecisionPrompt(context: DecisionContext): string {
+    const template = this.loadTemplate('decision-prompt.md');
+    const config = context.topic.decisionPromptConfig;
+    const runtimeVars = this.extractRuntimeVariables(context);
+
+    return this.templateEngine.render(template, {
+      ...config.system_variables,
+      ...config.template_variables,
+      ...runtimeVars,
+    });
+  }
+}
+```
+
+**代码层关注点**：
+
+- LLM调用编排（顺序、错误处理）
+- 模板渲染（变量替换、条件逻辑）
+- 结果解析（JSON/YAML解析）
+- Schema验证（Zod验证）
+- 队列操作执行（插入、追加）
+
+### 5.3.5 边界清晰的好处
+
+1. **零编码扩展**：新场景只需更新YAML配置，无需改代码
+2. **领域专家可迭代**：Prompt模板即策略文档，直接可读可改
+3. **技术债务隔离**：业务逻辑在Prompt层，技术实现在代码层
+4. **测试友好**：可单独测试Prompt效果、代码正确性
+5. **版本控制**：Prompt模板和脚本配置可单独版本管理
+
+### 5.3.6 修改指南
+
+**何时修改脚本层（YAML）**：
+
+- 添加新的Topic类型
+- 调整领域特定的约束条件
+- 增加新的示例场景
+- 修改领域目标或策略
+
+**何时修改模板层（Prompt）**：
+
+- 优化决策逻辑（更准确的needsAdjustment判断）
+- 改进规划质量（更自然的Action生成）
+- 增加新的策略类型
+- 改进变量命名规范
+
+**何时修改代码层（TypeScript）**：
+
+- 修复技术Bug（解析错误、内存泄漏）
+- 性能优化（缓存、并行化）
+- 架构变更（新的LLM Provider、存储后端）
+- 增加可观测性（日志、监控）
 
 ---
 
@@ -643,8 +1319,8 @@ actions:
 
 两个Prompt Template应存储为：
 
-- `/packages/core-engine/config/prompts/topic/decision-lmm-prompt.md`
-- `/packages/core-engine/config/prompts/topic/planner-llm-prompt.md`
+- `/config/prompts/topic/decision-llm-v1-draft.md`
+- `/config/prompts/topic/planner-llm-v1-draft.md`
 
 ### 附录C：相关设计文档
 
