@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消消乐小游戏 - Match3 Game</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="game-container">
+        <header class="game-header">
+            <h1><i class="fas fa-gamepad"></i> 消消乐小游戏</h1>
+            <p class="subtitle">Match3 Puzzle Game</p>
+        </header>
+        
+        <div class="game-info">
+            <div class="info-item">
+                <i class="fas fa-star"></i>
+                <span>分数: </span>
+                <span id="score" class="value">0</span>
+            </div>
+            <div class="info-item">
+                <i class="fas fa-clock"></i>
+                <span>时间: </span>
+                <span id="timer" class="value">03:00</span>
+            </div>
+            <div class="info-item">
+                <i class="fas fa-running"></i>
+                <span>移动: </span>
+                <span id="moves" class="value">30/30</span>
+            </div>
+        </div>
+        
+        <div class="game-board-container">
+            <canvas id="game-board" width="400" height="400"></canvas>
+            <div class="game-overlay" id="game-overlay">
+                <div class="overlay-content">
+                    <h2 id="game-overlay-title">游戏结束</h2>
+                    <p id="game-overlay-message">时间到！</p>
+                    <button id="play-again-btn">再玩一次</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="game-controls">
+            <button id="restart-btn" class="btn">
+                <i class="fas fa-redo"></i> 重新开始
+            </button>
+            <button id="pause-btn" class="btn">
+                <i class="fas fa-pause"></i> 暂停
+            </button>
+            <button id="sound-btn" class="btn">
+                <i class="fas fa-volume-up"></i> 音效
+            </button>
+            <button id="help-btn" class="btn">
+                <i class="fas fa-question-circle"></i> 帮助
+            </button>
+        </div>
+        
+        <div class="game-instructions">
+            <h3><i class="fas fa-info-circle"></i> 游戏说明</h3>
+            <p>点击相邻的两个色块交换位置，形成3个或以上相同颜色的连线即可消除得分。</p>
+            <ul>
+                <li>3连消: <span class="score-example">10分</span></li>
+                <li>4连消: <span class="score-example">20分</span></li>
+                <li>5连消: <span class="score-example">30分</span></li>
+                <li>连锁消除: <span class="score-example">额外加分</span></li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="audio.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
