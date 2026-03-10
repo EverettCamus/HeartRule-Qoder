@@ -664,5 +664,173 @@ function findMatches() {
     return matches;
 }
 
+/**
+ * 处理匹配并计分
+ */
+function processMatches() {
+    let totalMatches = 0;
+    
+    while (true) {
+        const matches = findMatches();
+        
+        if (matches.length === 0) {
+            break;
+        }
+        
+        // 增加连锁计数
+        gameState.chainCount++;
+        
+        // 处理每个匹配
+        for (const match of matches) {
+            // 计算分数
+            let matchScore = 0;
+            
+            if (match.length === 3) {
+                matchScore = CONFIG.SCORE_3_MATCH;
+            } else if (match.length === 4) {
+                matchScore = CONFIG.SCORE_4_MATCH;
+            } else {
+                matchScore = CONFIG.SCORE_5_MATCH;
+            }
+            
+            // 添加连锁奖励
+            if (gameState.chainCount > 1) {
+                matchScore += CONFIG.CHAIN_BONUS * (gameState.chainCount - 1);
+            }
+            
+            // 更新分数
+            gameState.score += matchScore;
+            
+            // 播放消除音效
+            if (typeof audioManager !== 'undefined') {
+                if (gameState.chainCount > 1) {
+                    audioManager.playSound('chain');
+                } else {
+                    audioManager.playSound('match');
+                }
+            }
+            
+            // 标记消除的色块
+            if (match.direction === 'horizontal') {
+                for (let i = 0; i < match.length; i++) {
+                    gameState.board[match.row][match.col + i] = null;
+                }
+            } else {
+                for (let i = 0; i < match.length; i++) {
+                    gameState.board[match.row + i][match.col] = null;
+                }
+            }
+            
+            totalMatches++;
+        }
+        
+        // 应用重力，让色块下落
+        applyGravity();
+        
+        // 填充空位
+        fillEmptySpaces();
+    }
+    
+    // 重置连锁计数
+    if (totalMatches > 0) {
+        gameState.chainCount = 0;
+    }
+    
+    // 更新UI
+    updateUI();
+}
+
+/**
+ * 应用重力，让色块下落
+ */
+function applyGravity() {
+    for (let col = 0; col < CONFIG.BOARD_SIZE; col++) {
+        let emptyRow = CONFIG.BOARD_SIZE - 1;
+        
+        // 从底部向上扫描
+        for (let row = CONFIG.BOARD_SIZE - 1; row >= 0; row--) {
+            if (gameState.board[row][col] !== null) {
+                // 如果当前行有色块，且下面有空位，则下落
+                if (row < emptyRow) {
+                    gameState.board[emptyRow][col] = gameState.board[row][col];
+                    gameState.board[row][col] = null;
+                }
+                emptyRow--;
+            }
+        }
+    }
+}
+
+/**
+ * 填充空位
+ */
+function fillEmptySpaces() {
+    for (let col = 0; col < CONFIG.BOARD_SIZE; col++) {
+        for (let row = 0; row < CONFIG.BOARD_SIZE; row++) {
+            if (gameState.board[row][col] === null) {
+                // 生成随机色块，确保不会创建初始消除
+                let tileType;
+                let attempts = 0;
+                const maxAttempts = 10;
+                
+                do {
+                    tileType = Math.floor(Math.random() * CONFIG.COLORS.length);
+                    attempts++;
+                    
+                    if (attempts >= maxAttempts) {
+                        console.warn(`达到最大尝试次数，使用随机值: row=${row}, col=${col}`);
+                        break;
+                    }
+                } while (createsInitialMatch(row, col, tileType));
+                
+                gameState.board[row][col] = tileType;
+            }
+        }
+    }
+}
+
+/**
+ * 检查游戏结束条件
+ */
+function checkGameEnd() {
+    // 检查移动次数是否用完
+    if (gameState.movesLeft <= 0) {
+        endGame('移动次数用完！');
+        return;
+    }
+    
+    // 检查是否还有有效移动
+    if (!hasValidMoves()) {
+        endGame('没有有效移动了！');
+        return;
+    }
+}
+
+/**
+ * 检查是否还有有效移动
+ */
+function hasValidMoves() {
+    // 检查所有相邻的交换是否能形成消除
+    for (let row = 0; row < CONFIG.BOARD_SIZE; row++) {
+        for (let col = 0; col < CONFIG.BOARD_SIZE; col++) {
+            // 检查右侧相邻
+            if (col < CONFIG.BOARD_SIZE - 1) {
+                if (isValidSwap(row, col, row, col + 1)) {
+                    return true;
+                }
+            }
+            
+            // 检查下方相邻
+            if (row < CONFIG.BOARD_SIZE - 1) {
+                if (isValidSwap(row, col, row + 1, col)) {
+                    return true;
+                }
+            }
+        }
+    }
+    
+    return false;
+}
+
 // 页面加载完成后初始化游戏
 document.addEventListener('DOMContentLoaded', initGame);
