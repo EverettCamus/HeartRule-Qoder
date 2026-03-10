@@ -240,8 +240,55 @@ function startGame() {
 }
 
 // 占位函数，将在后续任务中实现
+/**
+ * 处理Canvas点击事件
+ */
 function handleCanvasClick(event) {
-    console.log('Canvas点击事件:', event);
+    if (!gameState.isPlaying || gameState.isPaused || gameState.gameOver) {
+        return;
+    }
+    
+    const rect = gameState.canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    // 计算点击的网格位置
+    const col = Math.floor(x / (CONFIG.TILE_SIZE + CONFIG.TILE_PADDING));
+    const row = Math.floor(y / (CONFIG.TILE_SIZE + CONFIG.TILE_PADDING));
+    
+    // 检查是否在有效范围内
+    if (row < 0 || row >= CONFIG.BOARD_SIZE || col < 0 || col >= CONFIG.BOARD_SIZE) {
+        return;
+    }
+    
+    // 播放点击音效
+    if (typeof audioManager !== 'undefined') {
+        audioManager.playSound('click');
+    }
+    
+    // 如果没有选中的色块，选中当前色块
+    if (!gameState.selectedTile) {
+        gameState.selectedTile = { row, col };
+        return;
+    }
+    
+    // 如果点击的是已选中的色块，取消选择
+    if (gameState.selectedTile.row === row && gameState.selectedTile.col === col) {
+        gameState.selectedTile = null;
+        return;
+    }
+    
+    // 检查是否相邻
+    const rowDiff = Math.abs(gameState.selectedTile.row - row);
+    const colDiff = Math.abs(gameState.selectedTile.col - col);
+    
+    if ((rowDiff === 1 && colDiff === 0) || (rowDiff === 0 && colDiff === 1)) {
+        // 尝试交换
+        attemptSwap(gameState.selectedTile.row, gameState.selectedTile.col, row, col);
+    }
+    
+    // 无论交换是否成功，都取消选择
+    gameState.selectedTile = null;
 }
 
 function restartGame() {
@@ -435,6 +482,186 @@ function endGame(message) {
     domElements.gameOverlay.style.display = 'flex';
     
     console.log(`游戏结束: ${message}`);
+}
+
+/**
+ * 处理Canvas点击事件
+ */
+function handleCanvasClick(event) {
+    if (!gameState.isPlaying || gameState.isPaused || gameState.gameOver) {
+        return;
+    }
+    
+    const rect = gameState.canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    // 计算点击的网格位置
+    const col = Math.floor(x / (CONFIG.TILE_SIZE + CONFIG.TILE_PADDING));
+    const row = Math.floor(y / (CONFIG.TILE_SIZE + CONFIG.TILE_PADDING));
+    
+    // 检查是否在有效范围内
+    if (row < 0 || row >= CONFIG.BOARD_SIZE || col < 0 || col >= CONFIG.BOARD_SIZE) {
+        return;
+    }
+    
+    // 播放点击音效
+    if (typeof audioManager !== 'undefined') {
+        audioManager.playSound('click');
+    }
+    
+    // 如果没有选中的色块，选中当前色块
+    if (!gameState.selectedTile) {
+        gameState.selectedTile = { row, col };
+        return;
+    }
+    
+    // 如果点击的是已选中的色块，取消选择
+    if (gameState.selectedTile.row === row && gameState.selectedTile.col === col) {
+        gameState.selectedTile = null;
+        return;
+    }
+    
+    // 检查是否相邻
+    const rowDiff = Math.abs(gameState.selectedTile.row - row);
+    const colDiff = Math.abs(gameState.selectedTile.col - col);
+    
+    if ((rowDiff === 1 && colDiff === 0) || (rowDiff === 0 && colDiff === 1)) {
+        // 尝试交换
+        attemptSwap(gameState.selectedTile.row, gameState.selectedTile.col, row, col);
+    }
+    
+    // 无论交换是否成功，都取消选择
+    gameState.selectedTile = null;
+}
+
+/**
+ * 尝试交换两个色块
+ */
+function attemptSwap(row1, col1, row2, col2) {
+    // 检查交换是否有效（是否能形成消除）
+    if (isValidSwap(row1, col1, row2, col2)) {
+        // 执行交换
+        swapTiles(row1, col1, row2, col2);
+        
+        // 播放交换音效
+        if (typeof audioManager !== 'undefined') {
+            audioManager.playSound('swap');
+        }
+        
+        // 减少移动次数
+        gameState.movesLeft--;
+        
+        // 检查消除
+        processMatches();
+        
+        // 检查游戏结束条件
+        checkGameEnd();
+    } else {
+        console.log('无效的交换');
+    }
+}
+
+/**
+ * 检查交换是否有效
+ */
+function isValidSwap(row1, col1, row2, col2) {
+    // 临时交换
+    const temp = gameState.board[row1][col1];
+    gameState.board[row1][col1] = gameState.board[row2][col2];
+    gameState.board[row2][col2] = temp;
+    
+    // 检查是否能形成消除
+    const matches = findMatches();
+    const hasMatch = matches.length > 0;
+    
+    // 恢复交换
+    gameState.board[row2][col2] = gameState.board[row1][col1];
+    gameState.board[row1][col1] = temp;
+    
+    return hasMatch;
+}
+
+/**
+ * 交换两个色块
+ */
+function swapTiles(row1, col1, row2, col2) {
+    const temp = gameState.board[row1][col1];
+    gameState.board[row1][col1] = gameState.board[row2][col2];
+    gameState.board[row2][col2] = temp;
+}
+
+/**
+ * 查找所有匹配（三连消及以上）
+ */
+function findMatches() {
+    const matches = [];
+    
+    // 水平检测
+    for (let row = 0; row < CONFIG.BOARD_SIZE; row++) {
+        for (let col = 0; col < CONFIG.BOARD_SIZE - 2; col++) {
+            const tileType = gameState.board[row][col];
+            
+            if (tileType !== null && 
+                tileType === gameState.board[row][col + 1] && 
+                tileType === gameState.board[row][col + 2]) {
+                
+                // 找到匹配的起点
+                let matchLength = 3;
+                
+                // 检查是否有更长的匹配
+                while (col + matchLength < CONFIG.BOARD_SIZE && 
+                       gameState.board[row][col + matchLength] === tileType) {
+                    matchLength++;
+                }
+                
+                matches.push({
+                    row,
+                    col,
+                    direction: 'horizontal',
+                    length: matchLength,
+                    tileType
+                });
+                
+                // 跳过已匹配的色块
+                col += matchLength - 1;
+            }
+        }
+    }
+    
+    // 垂直检测
+    for (let col = 0; col < CONFIG.BOARD_SIZE; col++) {
+        for (let row = 0; row < CONFIG.BOARD_SIZE - 2; row++) {
+            const tileType = gameState.board[row][col];
+            
+            if (tileType !== null && 
+                tileType === gameState.board[row + 1][col] && 
+                tileType === gameState.board[row + 2][col]) {
+                
+                // 找到匹配的起点
+                let matchLength = 3;
+                
+                // 检查是否有更长的匹配
+                while (row + matchLength < CONFIG.BOARD_SIZE && 
+                       gameState.board[row + matchLength][col] === tileType) {
+                    matchLength++;
+                }
+                
+                matches.push({
+                    row,
+                    col,
+                    direction: 'vertical',
+                    length: matchLength,
+                    tileType
+                });
+                
+                // 跳过已匹配的色块
+                row += matchLength - 1;
+            }
+        }
+    }
+    
+    return matches;
 }
 
 // 页面加载完成后初始化游戏
