@@ -1,0 +1,59 @@
+=== Task 2: 更新layer-implementation-guide.md第1.2节 ===
+执行时间: Tue Mar 10 20:36:05 CST 2026
+
+1. 备份文件: docs/architecture/layer-implementation-guide.md.backup
+2. 更新范围: 第55-94行
+3. 新标题: '### 1.2 动作类型定义与Scene Solution方案'
+
+=== 验证结果 ===
+
+--- docs/architecture/layer-implementation-guide.md.backup	2026-03-10 20:33:48.936465014 +0800
++++ docs/architecture/layer-implementation-guide.md	2026-03-10 20:34:58.984283680 +0800
+@@ -52,25 +52,80 @@
+ 用户输出  策略优化
+ ```
+ 
+-### 1.2 动作类型定义
++### 1.2 动作类型定义与Scene Solution方案
++
++**设计演进**：从单一动作类型配置演进为场景化解决方案框架，支持每个action_type有多个场景化模板方案，通过智能预处理接口实现精准匹配。
++
++**scene_solution架构**：每个action_type可以定义多个scene_solution，每个scene_solution针对特定对话场景进行优化。LLM根据action的目标提示词智能分类，选择最合适的scene_solution。
+ 
+ ```yaml
+-# Action类型配置示例
++# Action类型配置示例（支持scene_solution）
+ action_types:
+   ai_say:
+     description: '向用户传达信息（方案说服、知识介绍等）'
++    # 向后兼容：原有配置作为默认scene_solution
+     main_prompt_template: 'templates/actions/ai_say/main.md'
+     monitor_prompt_template: 'templates/actions/ai_say/monitor.md'
+     monitor_frequency: 'low' # 低频监控
++    
++    # 场景化解决方案（scene_solutions）
++    scene_solutions:
++      - id: 'advice'
++        name: '建议方案'
++        description: '提供具体建议或解决方案'
++        category: 'advice'
++        main_prompt_template: 'templates/actions/ai_say/scenes/advice/main.md'
++        monitor_prompt_template: 'templates/actions/ai_say/scenes/advice/monitor.md'
++        monitor_frequency: 'medium'
++        classification_prompt: '这是一个提供建议或解决方案的场景'
++        
++      - id: 'knowledge'
++        name: '介绍知识'
++        description: '介绍专业知识或概念'
++        category: 'knowledge'
++        main_prompt_template: 'templates/actions/ai_say/scenes/knowledge/main.md'
++        monitor_prompt_template: 'templates/actions/ai_say/scenes/knowledge/monitor.md'
++        monitor_frequency: 'low'
++        classification_prompt: '这是一个介绍专业知识或概念的场景'
++        
++      - id: 'persuasion'
++        name: '说服引导'
++        description: '说服用户接受观点或采取行动'
++        category: 'persuasion'
++        main_prompt_template: 'templates/actions/ai_say/scenes/persuasion/main.md'
++        monitor_prompt_template: 'templates/actions/ai_say/scenes/persuasion/monitor.md'

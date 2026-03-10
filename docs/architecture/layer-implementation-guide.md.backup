@@ -1,0 +1,707 @@
+# 五层架构实现指南
+
+**版本**: 1.0  
+**最后更新**: 2026年3月9日  
+**基于决策**: [2026-03-09-five-layer-implementation-decisions.md](../decisions/2026-03-09-five-layer-implementation-decisions.md)
+
+---
+
+## 概述
+
+本指南详细描述了HeartRule咨询智能系统五层架构的具体实现机制，聚焦于各层"计划-灵活"平衡的实现方案。本指南面向开发团队和技术架构师，提供具体的技术实现指导。
+
+## 架构总览
+
+```
+┌─────────────────────────────────────────────────────┐
+│                Consultation层                        │
+│  跨会谈战略调整 · 治疗计划演进 · 长期模式识别        │
+├─────────────────────────────────────────────────────┤
+│                 Session层                            │
+│  会谈结构守护 · 时间策略执行 · 进展监控              │
+├─────────────────────────────────────────────────────┤
+│                 Phase层                              │
+│  意识侦察系统 · 咨询技能调用 · 话题队列调度          │
+├─────────────────────────────────────────────────────┤
+│                 Topic层                              │
+│  目标进展监控 · 动态队列调整 · 行动方案优化          │
+├─────────────────────────────────────────────────────┤
+│                 Action层                             │
+│  主线程+监控线程 · 原子执行单元 · 质量门禁           │
+└─────────────────────────────────────────────────────┘
+```
+
+## 1. Action层实现机制
+
+### 1.1 核心设计：双线程模型
+
+**架构图**:
+
+```
+用户输入
+    ↓
+[监控线程] ← 异步启动
+    │       检查：安全性、相关性、专业性
+    ↓       评分阈值 > 0.8
+[主线程] ────┐
+    │       │
+    ↓       ↓
+生成响应  调整建议
+    │       │
+    ↓       ↓
+用户输出  策略优化
+```
+
+### 1.2 动作类型定义
+
+```yaml
+# Action类型配置示例
+action_types:
+  ai_say:
+    description: '向用户传达信息（方案说服、知识介绍等）'
+    main_prompt_template: 'templates/actions/ai_say/main.md'
+    monitor_prompt_template: 'templates/actions/ai_say/monitor.md'
+    monitor_frequency: 'low' # 低频监控
+
+  ai_ask:
+    description: '收集用户信息，存入变量供后续引用'
+    main_prompt_template: 'templates/actions/ai_ask/main.md'
+    monitor_prompt_template: 'templates/actions/ai_ask/monitor.md'
+    monitor_frequency: 'high' # 高频监控
+    variable_extraction:
+      method: 'llm_extraction'
+      schema: 'schemas/user_info.json'
+
+  ai_think:
+    description: '对信息进行加工分析，结果存入变量'
+    main_prompt_template: 'templates/actions/ai_think/main.md'
+    monitor_prompt_template: 'templates/actions/ai_think/monitor.md'
+    monitor_frequency: 'medium'
+    output_variables: ['analysis_result', 'insights']
+
+  ai_draw:
+    description: '根据用户描述进行绘画输出'
+    main_prompt_template: 'templates/actions/ai_draw/main.md'
+    monitor_prompt_template: 'templates/actions/ai_draw/monitor.md'
+    monitor_frequency: 'medium'
+
+  ai_form:
+    description: '智能引导用户填表，提供提示帮助'
+    main_prompt_template: 'templates/actions/ai_form/main.md'
+    monitor_prompt_template: 'templates/actions/ai_form/monitor.md'
+    monitor_frequency: 'high'
+    guidance_steps: 3 # 最多3步引导
+```
+
+### 1.3 每类Action对应的监控层
+
+**架构设计原则**：
+- 每个Action类型（ai_say, ai_ask, ai_think等）都有对应的监控处理器
+- 每个Action类型有独立的监控提示词模板
+- 监控处理器继承通用基类，共享JSON解析、重试等基础设施
+- 监控模板支持两层方案（default/custom）和变量替换
+
+**监控处理器注册表示例**：
+```yaml
+action_monitor_mapping:
+  ai_say:
+    monitor_handler: 'AiSayMonitorHandler'
+    template_path: 'default/ai_say_monitor_v1.md'
+    focus_areas:
+      - '用户理解困难检测'
+      - '表达优化建议生成'
+      - '安全风险评估'
+  
+  ai_ask:
+    monitor_handler: 'AiAskMonitorHandler'
+    template_path: 'default/ai_ask_monitor_v1.md'
+    focus_areas:
+      - '信息收集障碍识别'
+      - '提问策略调整'
+      - '用户阻抗处理'
+  
+  ai_think:
+    monitor_handler: 'AiThinkMonitorHandler' # 待实现
+    template_path: 'default/ai_think_monitor_v1.md' # 待创建
+    focus_areas:
+      - '分析质量评估'
+      - '逻辑一致性检查'
+      - '洞察深度评估'
+```
+
+**监控模板两层方案**：
+```
+监控模板路径解析优先级：
+1. custom/{scheme_name}/{action_type}_monitor_v1.md (自定义方案)
+2. default/{action_type}_monitor_v1.md (系统默认)
+
+变量替换支持：
+- {{current_round}} - 当前轮次
+- {{max_rounds}} - 最大轮次
+- {{user_engagement}} - 用户参与度
+- {{topic_content}} - 话题内容
+- {{action_result}} - Action执行结果
+- 以及其他context/metrics中的变量
+```
+
+**监控分析流程**：
+```
+1. Action执行完成后，收集执行metrics和context
+2. MonitorOrchestrator根据actionType选择对应的监控处理器
+3. 监控处理器调用MonitorTemplateService加载并渲染监控模板
+4. 调用监控LLM进行分析，解析JSON结果
+5. 根据分析结果生成反馈建议或触发Topic编排
+```
+
+**通用监控检查项**（适用于所有Action类型）：
+```yaml
+monitor_checks:
+  safety_check:
+    description: '安全检查'
+    prompt: |
+      检查以下内容是否包含：
+      1. 自伤或伤害他人的表述
+      2. 非法或危险行为建议
+      3. 极端情绪煽动
+      得分规则：发现任何一项得0分，否则得1分
+
+  relevance_check:
+    description: '相关性检查'
+    prompt: |
+      检查回应是否：
+      1. 与当前咨询目标相关
+      2. 与用户前文内容连贯
+      3. 有助于推进对话
+      得分：0-1分，基于相关程度
+
+  professionalism_check:
+    description: '专业性检查'
+    prompt: |
+      检查是否符合心理咨询专业标准：
+      1. 是否保持中立非评判态度
+      2. 是否避免给出直接建议
+      3. 是否使用专业但易懂的语言
+      得分：0-1分，基于专业符合度
+
+  quality_check:
+    description: '质量检查'
+    prompt: |
+      检查回应质量：
+      1. 逻辑是否清晰连贯
+      2. 表达是否准确易懂
+      3. 是否有助于用户理解
+      得分：0-1分，基于综合质量
+```
+### 1.4 执行流程
+
+```typescript
+// 伪代码示例
+class ActionExecutor {
+  async execute(actionConfig: ActionConfig, context: ActionContext): Promise<ActionResult> {
+    // 1. 启动监控线程（异步）
+    const monitorPromise = this.startMonitorThread(actionConfig, context);
+
+    // 2. 执行主线程
+    const mainResult = await this.executeMainThread(actionConfig, context);
+
+    // 3. 获取监控结果
+    const monitorResult = await monitorPromise;
+
+    // 4. 根据监控结果调整
+    if (monitorResult.score < 0.8) {
+      return this.handleLowQualityResult(mainResult, monitorResult);
+    }
+
+    // 5. 记录执行数据
+    this.recordExecutionData(actionConfig, mainResult, monitorResult);
+
+    return {
+      success: true,
+      completed: true,
+      aiMessage: mainResult.content,
+      variables: mainResult.extractedVariables,
+      monitorScore: monitorResult.score,
+    };
+  }
+}
+```
+
+## 2. Topic层实现机制
+
+### 2.1 核心职责：动态队列调整
+
+**调整触发条件**:
+
+1. Action执行超时或质量不足
+2. 收集信息不完整或质量差
+3. 用户出现明显阻抗
+4. 时间预算严重偏差
+
+### 2.2 调整工作流
+
+```
+检测调整需求
+    ↓
+生成文字调整计划（LLM）
+    ↓
+转换为具体actions（LLM）
+    ↓
+Schema验证
+    ├─ 通过 → 应用新actions队列
+    └─ 失败 → 回退机制
+```
+
+### 2.3 调整器配置
+
+```yaml
+topic_adjuster:
+  # 监控配置
+  monitoring:
+    check_interval: '每完成一个action'
+    metrics:
+      - name: 'information_quality'
+        threshold: 0.7
+      - name: 'user_engagement'
+        threshold: 0.5
+      - name: 'time_progress'
+        threshold: 0.8 # 时间使用超过80%时警告
+
+  # 调整计划生成
+  planning:
+    llm_prompt_template: 'templates/topic/adjustment_plan.md'
+    constraints:
+      - '保持topic核心目标不变'
+      - '总时间预算不变'
+      - '必须通过schema验证'
+
+  # 验证配置
+  validation:
+    schema_path: 'schemas/action_config.json'
+    strict_mode: true
+    fallback_strategies:
+      - '使用原始actions'
+      - '简化版本（只保留核心actions）'
+      - '请求人工干预'
+
+  # 调整类型
+  adjustment_types:
+    resequence:
+      description: '重新排序actions'
+      applicable_when: '某些actions依赖前面收集的信息'
+
+    augment:
+      description: '增加辅助actions'
+      applicable_when: '信息收集不充分'
+      max_additional: 2
+
+    prune:
+      description: '删除次要actions'
+      applicable_when: '时间不足或用户疲劳'
+      priority_field: 'action.priority'
+
+    modify:
+      description: '修改action参数'
+      applicable_when: '需要调整提问方式或深度'
+```
+
+### 2.4 状态上报协议
+
+Topic层需要向Phase层上报：
+
+- `topic_progress`: 目标达成度（0-1）
+- `adjustment_decisions`: 调整决策记录
+- `key_issues`: 遇到的关键问题
+- `time_usage`: 时间使用情况
+
+## 3. Phase层实现机制
+
+### 3.1 意识侦察系统
+
+**意识类型矩阵**:
+
+| 意识类型   | 监控目标       | 触发条件       | 调用技能     |
+| ---------- | -------------- | -------------- | ------------ |
+| 矛盾识别   | 前后表述一致性 | 逻辑矛盾检测   | 澄清提问技能 |
+| 情绪识别   | 情绪状态变化   | 情绪强度>阈值  | 情绪安抚技能 |
+| 自杀风险   | 安全风险信号   | 危险关键词检测 | 危机干预技能 |
+| 阻抗识别   | 用户参与度     | 回避/简短回答  | 阻抗处理技能 |
+| 自动化思维 | 认知模式识别   | CBT模式匹配    | 认知重构技能 |
+
+### 3.2 侦察器配置
+
+```yaml
+consciousness_scouts:
+  contradiction_scout:
+    description: '识别用户前后矛盾表述'
+    monitoring_method: 'semantic_analysis'
+    check_frequency: '每3条用户消息'
+    threshold: 0.7 # 矛盾置信度阈值
+
+  emotion_scout:
+    description: '监控用户情绪变化'
+    monitoring_method: 'sentiment_analysis'
+    check_frequency: '每1条用户消息'
+    emotion_dimensions:
+      - valence: '积极/消极'
+      - arousal: '激活程度'
+      - dominance: '控制感'
+    threshold: 0.8 # 情绪强度阈值
+
+  suicide_risk_scout:
+    description: '检测自杀风险信号'
+    monitoring_method: 'keyword_pattern'
+    check_frequency: '实时'
+    risk_keywords:
+      - '不想活了'
+      - '结束一切'
+      - '没有意义'
+    emergency_threshold: 1 # 发现即触发
+
+  resistance_scout:
+    description: '识别用户阻抗'
+    monitoring_method: 'engagement_metrics'
+    check_frequency: '每2条用户消息'
+    metrics:
+      - response_length: '<10字为低参与'
+      - response_time: '>30秒为延迟'
+      - avoidance_patterns: ['不知道', '没什么', '还行']
+    threshold: 0.6
+
+  automatic_thought_scout:
+    description: '识别自动化思维'
+    monitoring_method: 'cbt_pattern'
+    check_frequency: '每5条用户消息'
+    thought_patterns:
+      - '全或无思维'
+      - '灾难化'
+      - '过度概括'
+      - '情绪推理'
+    threshold: 0.7
+```
+
+### 3.3 咨询技能库
+
+```yaml
+consultation_skills:
+  empathy_expression:
+    skill_id: 'skill_empathy'
+    description: '表达共情和理解'
+    trigger_conditions:
+      - 'emotion_intensity > 0.7'
+      - 'user_engagement < 0.4'
+    implementation: 'topic_scripts/empathy_expression.yaml'
+    expected_outcome: '用户感到被理解，情绪缓解'
+
+  resistance_handling:
+    skill_id: 'skill_resistance'
+    description: '处理用户阻抗'
+    trigger_conditions:
+      - 'resistance_level > 0.6'
+      - 'topic_relevance < 0.5'
+    implementation: 'topic_scripts/resistance_handling.yaml'
+    expected_outcome: '阻抗降低，参与度提升'
+
+  crisis_intervention:
+    skill_id: 'skill_crisis'
+    description: '危机干预'
+    trigger_conditions:
+      - 'suicide_risk_detected == true'
+    implementation: 'topic_scripts/crisis_intervention.yaml'
+    priority: '最高'
+    expected_outcome: '安全风险降低，用户稳定'
+
+  focus_redirect:
+    skill_id: 'skill_focus'
+    description: '焦点重定向'
+    trigger_conditions:
+      - 'topic_relevance < 0.4'
+      - 'time_remaining < 0.3 * total_time'
+    implementation: 'topic_scripts/focus_redirect.yaml'
+    expected_outcome: '对话回归核心话题'
+
+  cognitive_reframe:
+    skill_id: 'skill_reframe'
+    description: '认知重构'
+    trigger_conditions:
+      - 'automatic_thought_detected == true'
+      - 'emotion_intensity > 0.5'
+    implementation: 'topic_scripts/cognitive_reframe.yaml'
+    expected_outcome: '用户认知调整，情绪改善'
+```
+
+### 3.4 技能调用工作流
+
+```
+意识侦察触发
+    ↓
+匹配技能条件
+    ↓
+按优先级排序
+    ↓
+调用最高优先级技能
+    ↓
+调整topic队列
+    ├─ 插入技能topic
+    ├─ 调整后续topic时间
+    └─ 记录调用决策
+```
+
+## 4. Session层实现机制
+
+### 4.1 会谈守护职责
+
+**三大守护维度**:
+
+1. **结构完整性守护**
+   - 开始阶段：建立关系，设定议程
+   - 过程阶段：按Phase推进，监控进展
+   - 结束阶段：总结收获，布置作业
+
+2. **时间策略执行**
+   - Phase时间分配监控
+   - 进度提醒与调整
+   - 超时处理机制
+
+3. **主目标进展监控**
+   - 目标达成度评估
+   - 关键里程碑检查
+   - 风险识别与处理
+
+### 4.2 决策边界规则
+
+**Session层处理**（影响本次会谈剩余部分）：
+
+- 延长或缩短某个Phase的时间
+- 调整Phase内的topic顺序
+- 因用户状态变化调整会谈节奏
+- 处理会谈内的突发危机
+
+**Consultation层处理**（影响治疗整体方向）：
+
+- 改变本次会谈的终极治疗目标
+- 调整后续会谈的安排
+- 基于重大发现重新制定治疗计划
+- 增加或减少整个疗程的会谈次数
+
+### 4.3 状态评估框架
+
+```yaml
+session_assessment:
+  # 评估时间点
+  assessment_points:
+    - '会谈开始后10分钟'
+    - '每个Phase结束时'
+    - '会谈结束前15分钟'
+
+  # 评估维度
+  dimensions:
+    goal_achievement:
+      weight: 0.4
+      indicators:
+        - '核心议题覆盖度'
+        - '关键信息收集完整性'
+        - '用户认知/情绪变化'
+
+    process_quality:
+      weight: 0.3
+      indicators:
+        - '咨询关系建立质量'
+        - '对话流畅度'
+        - '专业遵循度'
+
+    risk_management:
+      weight: 0.3
+      indicators:
+        - '安全风险水平'
+        - '伦理风险'
+        - '用户满意度风险'
+
+  # 决策阈值
+  decision_thresholds:
+    replan_session: 0.3 # 目标达成度<30%时考虑重规划
+    extend_time: 0.7 # 进展良好但时间不足时延长时间
+    early_end: 0.9 # 目标达成度>90%时可提前结束
+```
+
+### 4.4 重规划触发条件
+
+```yaml
+replanning_triggers:
+  crisis_situation:
+    condition: '检测到自伤、伤害他人等紧急风险'
+    action: '立即转向危机干预协议'
+    priority: '最高'
+
+  major_discovery:
+    condition: '发现比原计划更核心的问题'
+    action: '重新评估Session目标'
+    priority: '高'
+    escalation: 'Consultation层' # 需要跨层决策
+
+  strong_resistance:
+    condition: '用户阻抗持续高水平且影响进展'
+    action: '调整咨询方法或节奏'
+    priority: '中'
+
+  poor_progress:
+    condition: '目标达成度 < 0.3 且时间已过一半'
+    action: '重新规划剩余时间使用'
+    priority: '中'
+```
+
+## 5. 层间协调协议
+
+### 5.1 状态上报规范
+
+**数据格式**:
+
+```typescript
+interface LayerReport {
+  layer: 'action' | 'topic' | 'phase' | 'session';
+  timestamp: string;
+  metrics: Record<string, number>;
+  decisions: Array<{
+    type: string;
+    reason: string;
+    outcome: string;
+  }>;
+  issues: Array<{
+    severity: 'low' | 'medium' | 'high';
+    description: string;
+    impact: string;
+  }>;
+}
+```
+
+**上报频率**:
+
+- Action层：每个action执行完成后
+- Topic层：每个topic完成或调整后
+- Phase层：每个Phase结束时
+- Session层：关键评估时间点
+
+### 5.2 决策影响传播
+
+```
+Action调整 → 影响Topic进展评估
+Topic调整 → 影响Phase进度监控
+Phase调整 → 影响Session时间分配
+Session调整 → 影响Consultation治疗计划
+```
+
+### 5.3 冲突解决机制
+
+1. **同级冲突**：在同一层内发生的决策冲突
+   - 解决方案：按优先级排序，高优先级覆盖低优先级
+   - 示例：Phase层多个意识同时触发，按紧急程度排序
+
+2. **跨层冲突**：不同层的决策相互矛盾
+   - 解决方案：向上层汇报，由上层协调
+   - 示例：Topic层想增加actions，但Phase层因时间不足想减少
+
+3. **资源冲突**：多个调整竞争同一资源（如时间）
+   - 解决方案：按战略重要性分配
+   - 示例：危机干预 vs 常规话题推进
+
+## 6. 实施检查清单
+
+### Phase 1: Action层（MVP核心）
+
+- [ ] 实现ai_say, ai_ask基础动作类型
+- [ ] 开发主线程+监控线程框架
+- [ ] 建立动作执行状态跟踪
+- [ ] 实现基础监控检查项（安全、相关性）
+
+### Phase 2: Topic层
+
+- [ ] 实现Topic规划器基础版本
+- [ ] 开发LLM生成actions + schema验证流程
+- [ ] 建立调整决策记录机制
+- [ ] 实现状态上报协议
+
+### Phase 3: Phase层
+
+- [ ] 实现情绪识别和阻抗识别意识
+- [ ] 开发基础咨询技能库（共情表达、阻抗处理）
+- [ ] 建立意识触发到技能调用流程
+- [ ] 实现topic队列调整机制
+
+### Phase 4: Session层
+
+- [ ] 实现会谈结构完整性检查
+- [ ] 开发时间策略执行监控
+- [ ] 建立Session层决策边界规则
+- [ ] 实现状态评估框架
+
+### Phase 5: Consultation层
+
+- [ ] 实现跨会谈进展评估
+- [ ] 开发治疗计划调整机制
+- [ ] 建立长期模式识别能力
+- [ ] 实现完整的层间协调
+
+## 7. 性能与监控指标
+
+### 关键性能指标
+
+1. **响应时间**：各层决策延迟 < 2秒
+2. **资源使用**：监控线程CPU使用率 < 20%
+3. **决策质量**：调整后目标达成度提升 > 20%
+4. **识别准确率**：意识识别准确率 > 85%
+
+### 监控仪表板
+
+建议实现的监控维度：
+
+- 各层决策频率分布
+- 调整成功率统计
+- 意识触发与技能调用关联分析
+- 层间通信延迟热图
+- 用户满意度与系统调整相关性
+
+## 8. 扩展与演进
+
+### 短期扩展（3-6个月）
+
+1. 增加更多Action类型（ai_draw, ai_form等）
+2. 丰富意识侦察类型（更多心理咨询维度）
+3. 扩展咨询技能库（更多治疗技术）
+4. 优化LLM提示词工程
+
+### 中期演进（6-12个月）
+
+1. 机器学习优化：基于历史数据优化决策阈值
+2. 个性化适应：根据用户特征调整监控策略
+3. 多模态扩展：支持语音、图像等输入输出
+4. 协作模式：AI与人类咨询师协作机制
+
+### 长期愿景（1-2年）
+
+1. 自主学习：从咨询案例中自动提炼模式和技能
+2. 领域扩展：扩展到其他专业对话领域（医疗、教育等）
+3. 生态构建：咨询技能市场，第三方技能开发
+4. 研究平台：心理咨询研究数据收集与分析
+
+---
+
+## 附录
+
+### A. 相关文档
+
+1. [决策文档](../decisions/2026-03-09-five-layer-implementation-decisions.md)
+2. [哲学思考](../design/thinking/HeartRule咨询智能实现机制.md)
+3. [MVP路线图](../implementation/mvp-roadmap.md)
+
+### B. 技术参考
+
+1. Worker Threads实现示例
+2. LLM提示词模板库
+3. Schema验证工具配置
+4. 监控指标收集框架
+
+### C. 专业参考
+
+1. 心理咨询伦理规范
+2. 认知行为疗法技术手册
+3. 危机干预协议标准
+4. 咨询效果评估工具
