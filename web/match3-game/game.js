@@ -278,5 +278,164 @@ function updateUI() {
     domElements.moves.textContent = `${gameState.movesLeft}/${CONFIG.INITIAL_MOVES}`;
 }
 
+/**
+ * 游戏主循环
+ */
+function gameLoop(currentTime) {
+    if (!gameState.isPlaying || gameState.gameOver) {
+        return;
+    }
+    
+    // 计算时间差
+    const deltaTime = currentTime - gameState.lastTime;
+    gameState.lastTime = currentTime;
+    
+    // 更新游戏状态（如果不是暂停状态）
+    if (!gameState.isPaused) {
+        updateGame(deltaTime);
+    }
+    
+    // 渲染游戏
+    renderGame();
+    
+    // 继续循环
+    gameState.animationId = requestAnimationFrame(gameLoop);
+}
+
+/**
+ * 更新游戏状态
+ */
+function updateGame(deltaTime) {
+    // 更新计时器
+    if (gameState.timeLeft > 0) {
+        gameState.timeLeft -= deltaTime / 1000; // 转换为秒
+        
+        if (gameState.timeLeft <= 0) {
+            gameState.timeLeft = 0;
+            endGame('时间到！');
+        }
+    }
+    
+    // 更新UI
+    updateUI();
+}
+
+/**
+ * 渲染游戏
+ */
+function renderGame() {
+    // 清空Canvas
+    gameState.ctx.clearRect(0, 0, gameState.canvas.width, gameState.canvas.height);
+    
+    // 绘制游戏板背景
+    gameState.ctx.fillStyle = '#ffffff';
+    gameState.ctx.fillRect(0, 0, gameState.canvas.width, gameState.canvas.height);
+    
+    // 绘制网格线
+    gameState.ctx.strokeStyle = '#e2e8f0';
+    gameState.ctx.lineWidth = 1;
+    
+    for (let i = 0; i <= CONFIG.BOARD_SIZE; i++) {
+        const pos = i * (CONFIG.TILE_SIZE + CONFIG.TILE_PADDING) + CONFIG.TILE_PADDING / 2;
+        
+        // 垂直线
+        gameState.ctx.beginPath();
+        gameState.ctx.moveTo(pos, 0);
+        gameState.ctx.lineTo(pos, gameState.canvas.height);
+        gameState.ctx.stroke();
+        
+        // 水平线
+        gameState.ctx.beginPath();
+        gameState.ctx.moveTo(0, pos);
+        gameState.ctx.lineTo(gameState.canvas.width, pos);
+        gameState.ctx.stroke();
+    }
+    
+    // 绘制色块
+    for (let row = 0; row < CONFIG.BOARD_SIZE; row++) {
+        for (let col = 0; col < CONFIG.BOARD_SIZE; col++) {
+            const tileType = gameState.board[row][col];
+            
+            if (tileType !== null) {
+                drawTile(row, col, tileType);
+            }
+        }
+    }
+    
+    // 绘制选中效果
+    if (gameState.selectedTile) {
+        drawSelection(gameState.selectedTile.row, gameState.selectedTile.col);
+    }
+}
+
+/**
+ * 绘制单个色块
+ */
+function drawTile(row, col, tileType) {
+    const x = col * (CONFIG.TILE_SIZE + CONFIG.TILE_PADDING) + CONFIG.TILE_PADDING;
+    const y = row * (CONFIG.TILE_SIZE + CONFIG.TILE_PADDING) + CONFIG.TILE_PADDING;
+    
+    // 绘制圆角矩形
+    const radius = 8;
+    
+    gameState.ctx.save();
+    gameState.ctx.beginPath();
+    gameState.ctx.moveTo(x + radius, y);
+    gameState.ctx.lineTo(x + CONFIG.TILE_SIZE - radius, y);
+    gameState.ctx.quadraticCurveTo(x + CONFIG.TILE_SIZE, y, x + CONFIG.TILE_SIZE, y + radius);
+    gameState.ctx.lineTo(x + CONFIG.TILE_SIZE, y + CONFIG.TILE_SIZE - radius);
+    gameState.ctx.quadraticCurveTo(x + CONFIG.TILE_SIZE, y + CONFIG.TILE_SIZE, x + CONFIG.TILE_SIZE - radius, y + CONFIG.TILE_SIZE);
+    gameState.ctx.lineTo(x + radius, y + CONFIG.TILE_SIZE);
+    gameState.ctx.quadraticCurveTo(x, y + CONFIG.TILE_SIZE, x, y + CONFIG.TILE_SIZE - radius);
+    gameState.ctx.lineTo(x, y + radius);
+    gameState.ctx.quadraticCurveTo(x, y, x + radius, y);
+    gameState.ctx.closePath();
+    
+    // 填充颜色
+    gameState.ctx.fillStyle = CONFIG.COLORS[tileType];
+    gameState.ctx.fill();
+    
+    // 添加内阴影效果
+    gameState.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    gameState.ctx.lineWidth = 2;
+    gameState.ctx.stroke();
+    
+    gameState.ctx.restore();
+}
+
+/**
+ * 绘制选中效果
+ */
+function drawSelection(row, col) {
+    const x = col * (CONFIG.TILE_SIZE + CONFIG.TILE_PADDING) + CONFIG.TILE_PADDING;
+    const y = row * (CONFIG.TILE_SIZE + CONFIG.TILE_PADDING) + CONFIG.TILE_PADDING;
+    
+    gameState.ctx.save();
+    gameState.ctx.strokeStyle = '#667eea';
+    gameState.ctx.lineWidth = 3;
+    gameState.ctx.setLineDash([5, 3]);
+    
+    gameState.ctx.beginPath();
+    gameState.ctx.rect(x - 2, y - 2, CONFIG.TILE_SIZE + 4, CONFIG.TILE_SIZE + 4);
+    gameState.ctx.stroke();
+    
+    gameState.ctx.restore();
+}
+
+/**
+ * 游戏结束
+ */
+function endGame(message) {
+    gameState.isPlaying = false;
+    gameState.gameOver = true;
+    
+    // 显示游戏结束遮罩
+    domElements.overlayTitle.textContent = '游戏结束';
+    domElements.overlayMessage.textContent = message;
+    domElements.gameOverlay.style.display = 'flex';
+    
+    console.log(`游戏结束: ${message}`);
+}
+
 // 页面加载完成后初始化游戏
 document.addEventListener('DOMContentLoaded', initGame);
