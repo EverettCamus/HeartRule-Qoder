@@ -1,0 +1,14 @@
+设计草案文件不存在检查结果：
+文件: .sisyphus/drafts/scene-solution-design.md 不存在
+
+drafts目录内容：
+total 16
+drwxr-xr-x 2 leo leo 4096 Mar 10 19:48 .
+drwxr-xr-x 6 leo leo 4096 Mar 10 20:00 ..
+-rw-r--r-- 1 leo leo 5741 Mar 10 15:31 action-monitor-layer-analysis.md
+
+基于notepad中的设计决策准备更新内容：
+1. scene_solution与action_type一对一映射
+2. 智能分类：LLM根据action目标提示词进行分类
+3. 分阶段实施：本期定义框架，下期实现智能选择
+4. 向后兼容：原有action_type配置作为默认scene_solution

@@ -1,0 +1,40 @@
+### 1.2 动作类型定义
+
+```yaml
+# Action类型配置示例
+action_types:
+  ai_say:
+    description: '向用户传达信息（方案说服、知识介绍等）'
+    main_prompt_template: 'templates/actions/ai_say/main.md'
+    monitor_prompt_template: 'templates/actions/ai_say/monitor.md'
+    monitor_frequency: 'low' # 低频监控
+
+  ai_ask:
+    description: '收集用户信息，存入变量供后续引用'
+    main_prompt_template: 'templates/actions/ai_ask/main.md'
+    monitor_prompt_template: 'templates/actions/ai_ask/monitor.md'
+    monitor_frequency: 'high' # 高频监控
+    variable_extraction:
+      method: 'llm_extraction'
+      schema: 'schemas/user_info.json'
+
+  ai_think:
+    description: '对信息进行加工分析，结果存入变量'
+    main_prompt_template: 'templates/actions/ai_think/main.md'
+    monitor_prompt_template: 'templates/actions/ai_think/monitor.md'
+    monitor_frequency: 'medium'
+    output_variables: ['analysis_result', 'insights']
+
+  ai_draw:
+    description: '根据用户描述进行绘画输出'
+    main_prompt_template: 'templates/actions/ai_draw/main.md'
+    monitor_prompt_template: 'templates/actions/ai_draw/monitor.md'
+    monitor_frequency: 'medium'
+
+  ai_form:
+    description: '智能引导用户填表，提供提示帮助'
+    main_prompt_template: 'templates/actions/ai_form/main.md'
+    monitor_prompt_template: 'templates/actions/ai_form/monitor.md'
+    monitor_frequency: 'high'
+    guidance_steps: 3 # 最多3步引导
+```
