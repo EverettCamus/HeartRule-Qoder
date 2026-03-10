@@ -88,6 +88,15 @@ function initGame() {
     // 初始化游戏板
     initBoard();
     
+    // 预加载音效
+    if (typeof audioManager !== 'undefined') {
+        audioManager.loadAllSounds().then(() => {
+            console.log('音效预加载完成');
+        }).catch(error => {
+            console.warn('音效预加载失败:', error);
+        });
+    }
+    
     // 绑定事件监听器
     bindEvents();
     
@@ -301,7 +310,23 @@ function togglePause() {
 }
 
 function toggleSound() {
-    console.log('切换音效');
+    if (typeof audioManager !== 'undefined') {
+        const isEnabled = audioManager.toggleSound();
+        
+        // 更新按钮文本
+        const soundIcon = domElements.soundBtn.querySelector('i');
+        const soundText = domElements.soundBtn.querySelector('span');
+        
+        if (isEnabled) {
+            soundIcon.className = 'fas fa-volume-up';
+            soundText.textContent = '音效';
+        } else {
+            soundIcon.className = 'fas fa-volume-mute';
+            soundText.textContent = '静音';
+        }
+        
+        console.log(`音效 ${isEnabled ? '开启' : '关闭'}`);
+    }
 }
 
 function showHelp() {
@@ -475,6 +500,11 @@ function drawSelection(row, col) {
 function endGame(message) {
     gameState.isPlaying = false;
     gameState.gameOver = true;
+    
+    // 播放游戏结束音效
+    if (typeof audioManager !== 'undefined') {
+        audioManager.playSound('gameOver');
+    }
     
     // 显示游戏结束遮罩
     domElements.overlayTitle.textContent = '游戏结束';
