@@ -7,13 +7,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import type { ActionContext, ActionResult } from '../base-action.js';
-import type { VariableScopeResolver } from '../../../engines/variable-scope/variable-scope-resolver.js';
+
 import { DualThreadAction } from '../dual-thread-action.js';
 import { ThreadManager } from '../thread-manager.js';
 
-import type { ActionContext, ActionResult } from '../base-action.js';
-import { DualThreadAction } from '../dual-thread-action.js';
-import { ThreadManager } from '../thread-manager.js';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type MockScopeResolver = any;
 /**
  * 测试用的双线程Action实现
  */
@@ -25,7 +24,7 @@ class TestDualThreadAction extends DualThreadAction {
   }
   
   protected async executeMainThread(
-    _context: ActionContext,
+    context: ActionContext,
     _userInput?: string | null
   ): Promise<ActionResult> {
     // 模拟主线程执行
@@ -46,7 +45,7 @@ class TestDualThreadAction extends DualThreadAction {
   }
   
   protected async executeMonitorThread(
-    _context: ActionContext,
+    context: ActionContext,
     _userInput?: string | null
   ): Promise<ActionResult> {
     // 模拟监控线程执行
@@ -111,14 +110,14 @@ const createTestContext = (): ActionContext => ({
   scopeResolver: {
     resolve: vi.fn(),
     set: vi.fn(),
-  } as any,
+  } as MockScopeResolver,
   conversationHistory: [],
   metadata: {},
 });
 
 describe('DualThreadAction', () => {
   let action: TestDualThreadAction;
-  let _context: ActionContext;
+  let context: ActionContext;
   
   beforeEach(() => {
     context = createTestContext();
@@ -391,7 +390,7 @@ describe('ThreadManager', () => {
         await threadManager.executeInWorker('main', { test: 'data' });
         // 如果Worker能正常工作，这里会成功
         expect(true).toBe(true);
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Worker可能无法在测试环境中工作，这是预期的
         // 我们主要测试错误处理
         expect(error.message).toBeDefined();
@@ -413,7 +412,7 @@ describe('ThreadManager', () => {
           smallManager.executeInWorker('main', { data: 1 }),
           smallManager.executeInWorker('main', { data: 2 }),
         ]);
-      } catch (error: any) {
+      } catch (error: unknown) {
         // 应该收到最大数量限制的错误
         expect(error.message).toContain('Maximum worker limit');
       }
