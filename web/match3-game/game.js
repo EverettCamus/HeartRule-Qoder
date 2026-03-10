@@ -306,7 +306,29 @@ function restartGame() {
 }
 
 function togglePause() {
-    console.log('切换暂停状态');
+    if (!gameState.isPlaying || gameState.gameOver) {
+        return;
+    }
+    
+    gameState.isPaused = !gameState.isPaused;
+    
+    // 更新按钮文本
+    const pauseIcon = domElements.pauseBtn.querySelector('i');
+    const pauseText = domElements.pauseBtn.querySelector('span');
+    
+    if (gameState.isPaused) {
+        pauseIcon.className = 'fas fa-play';
+        pauseText.textContent = '继续';
+        console.log('游戏暂停');
+    } else {
+        pauseIcon.className = 'fas fa-pause';
+        pauseText.textContent = '暂停';
+        console.log('游戏继续');
+        
+        // 恢复游戏循环
+        gameState.lastTime = performance.now();
+        gameState.animationId = requestAnimationFrame(gameLoop);
+    }
 }
 
 function toggleSound() {
@@ -330,11 +352,42 @@ function toggleSound() {
 }
 
 function showHelp() {
-    console.log('显示帮助');
+    alert('游戏说明：\n\n' +
+          '1. 点击相邻的两个色块交换位置\n' +
+          '2. 形成3个或以上相同颜色的连线即可消除得分\n' +
+          '3. 3连消: 10分\n' +
+          '4. 4连消: 20分\n' +
+          '5. 5连消: 30分\n' +
+          '6. 连锁消除: 额外加分\n' +
+          '7. 游戏时间: 3分钟\n' +
+          '8. 移动次数: 30次');
 }
 
 function handleKeyDown(event) {
-    console.log('键盘事件:', event.key);
+    switch (event.key.toLowerCase()) {
+        case ' ':
+        case 'p':
+            // 空格或P键暂停/继续
+            togglePause();
+            break;
+        case 'r':
+            // R键重新开始
+            restartGame();
+            break;
+        case 'm':
+            // M键切换音效
+            toggleSound();
+            break;
+        case 'h':
+        case '?':
+            // H或?键显示帮助
+            showHelp();
+            break;
+        case 'escape':
+            // ESC键取消选择
+            gameState.selectedTile = null;
+            break;
+    }
 }
 
 function updateUI() {
