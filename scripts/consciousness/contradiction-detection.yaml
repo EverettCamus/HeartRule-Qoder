@@ -1,0 +1,178 @@
+# 矛盾表述检测意识脚本
+# 用于检测用户对话中的矛盾表述，触发咨询师关注
+
+metadata:
+  name: '矛盾表述检测'
+  version: '1.0'
+  author: 'HeartRule Team'
+  description: '检测用户在对话中出现的矛盾表述，帮助咨询师识别认知失调或情绪冲突'
+  consciousness_type: 'contradiction_detection'
+  trigger_priority: 'medium' # low/medium/high/urgent
+
+# 意识定义结构
+consciousness:
+  consciousness_id: 'contradiction_detection_v1'
+  consciousness_name: '矛盾表述检测'
+
+  # 触发条件配置
+  trigger_config:
+    # 检测时机
+    trigger_timing: 'after_user_message' # after_user_message / after_ai_response / periodic
+
+    # 触发频率限制（防止过度触发）
+    cooldown_rounds: 3 # 同一类型检测后冷却轮数
+
+    # 上下文窗口
+    context_window:
+      lookback_messages: 10 # 回溯消息数量
+      min_messages_required: 3 # 最少需要多少条消息才能检测
+
+  # 加载配置
+  loading_config:
+    # 模板路径（相对于templates目录）
+    template_path: 'consciousness/contradiction-detection.md'
+
+    # 模型选择（性能优化）
+    model_config:
+      # 使用轻量模型进行检测
+      model_preference: 'fast' # fast / balanced / quality
+      # 最大token数
+      max_tokens: 1024
+      # 温度参数（检测任务使用低温度）
+      temperature: 0.3
+
+    # 批量处理配置
+    batch_config:
+      enabled: true
+      batch_size: 5 # 批量检测的消息数
+
+    # 缓存配置
+    cache_config:
+      enabled: true
+      ttl_seconds: 300 # 缓存有效期
+
+  # 检测配置
+  detection_config:
+    # 检测类型
+    detection_types:
+      - type: 'logical_contradiction'
+        description: '逻辑矛盾：前后陈述在逻辑上不一致'
+        examples:
+          - '"我非常爱我的家人" 与 "我从不和家人联系"'
+          - '"我从不焦虑" 与 "我每天都担心各种事情"'
+        severity_weight: 0.8
+
+      - type: 'emotional_contradiction'
+        description: '情绪矛盾：言语内容与情绪表达不一致'
+        examples:
+          - '说"我很开心"但语气悲伤'
+          - '说"我不在乎"但表现出强烈情绪'
+        severity_weight: 0.7
+
+      - type: 'value_conflict'
+        description: '价值观冲突：不同陈述反映的价值观矛盾'
+        examples:
+          - '"家庭最重要" 与 "工作是我的全部"'
+          - '"我重视健康" 与 "我从不锻炼"'
+        severity_weight: 0.6
+
+      - type: 'behavioral_inconsistency'
+        description: '行为不一致：言语与描述的行为矛盾'
+        examples:
+          - '"我很外向" 与 "我总是独自一人"'
+          - '"我善于社交" 与 "我害怕见人"'
+        severity_weight: 0.5
+
+    # 检测阈值
+    thresholds:
+      confidence_threshold: 0.7 # 置信度阈值
+      severity_threshold: 0.5 # 严重程度阈值
+      min_contradiction_count: 1 # 最少矛盾数量
+
+    # 排除规则（避免误报）
+    exclusion_rules:
+      - '时间跨度超过30天的陈述不视为矛盾'
+      - '明显是比喻或修辞的表述不视为矛盾'
+      - '用户已自我意识到的矛盾不重复报告'
+
+  # 输出配置
+  output_config:
+    # 输出格式
+    output_format: 'structured' # structured / narrative
+
+    # 输出字段
+    output_fields:
+      - 'detected' # 是否检测到矛盾
+      - 'contradiction_type' # 矛盾类型
+      - 'statement_a' # 陈述A
+      - 'statement_b' # 陈述B
+      - 'confidence' # 置信度
+      - 'severity' # 严重程度
+      - 'clinical_significance' # 临床意义
+      - 'suggested_response' # 建议回应方向
+
+    # 触发动作（当检测到矛盾时）
+    trigger_actions:
+      - action_type: 'log_event'
+        config:
+          event_type: 'contradiction_detected'
+          log_level: 'info'
+
+      - action_type: 'notify_session'
+        config:
+          notification_type: 'consciousness_alert'
+          priority: 'medium'
+
+  # 安全底线配置
+  safety_baseline:
+    # 极简关键词检查（作为LLM检测的安全网）
+    keyword_check:
+      enabled: true
+      # 危机关键词（优先级最高）
+      crisis_keywords:
+        - '自杀'
+        - '自残'
+        - '不想活'
+        - '结束生命'
+      # 触发危机关键词时的行为
+      crisis_action: 'immediate_alert'
+
+    # 检测失败处理
+    failure_handling:
+      # LLM调用失败时的回退策略
+      fallback_strategy: 'skip' # skip / retry / use_cache
+      max_retries: 2
+      retry_delay_ms: 1000
+
+# 示例输入输出
+examples:
+  - description: '检测到逻辑矛盾'
+    input:
+      messages:
+        - role: 'user'
+          content: '我和父母关系很好，每周都会通话'
+        - role: 'assistant'
+          content: '听起来你和家人的关系很亲密'
+        - role: 'user'
+          content: '其实我已经三年没和父母说话了'
+    expected_output:
+      detected: true
+      contradiction_type: 'logical_contradiction'
+      statement_a: '我和父母关系很好，每周都会通话'
+      statement_b: '其实我已经三年没和父母说话了'
+      confidence: 0.95
+      severity: 0.8
+      clinical_significance: '可能反映家庭关系认知的复杂性，值得进一步探索'
+
+  - description: '未检测到矛盾'
+    input:
+      messages:
+        - role: 'user'
+          content: '我最近工作压力很大'
+        - role: 'assistant'
+          content: '能具体说说是什么让你感到压力吗？'
+        - role: 'user'
+          content: '项目deadline很紧，团队人手不够'
+    expected_output:
+      detected: false
+      confidence: 0.9

@@ -343,223 +343,404 @@ class ActionExecutor {
 
 ## 2. Topic层实现机制
 
-### 2.1 核心职责：动态队列调整
+### 2.1 核心设计：两阶段LLM Pipeline
 
-**调整触发条件**:
-
-1. Action执行超时或质量不足
-2. 收集信息不完整或质量差
-3. 用户出现明显阻抗
-4. 时间预算严重偏差
-
-### 2.2 调整工作流
+**架构图**:
 
 ```
-检测调整需求
+对话上下文
     ↓
-生成文字调整计划（LLM）
+[Stage 1: Decision LLM] ← 分析对话，判断是否需要调整队列
+    │       输出：结构化调整计划（JSON）
     ↓
-转换为具体actions（LLM）
+[Stage 2: Planner LLM] ← 将调整计划转换为Action配置
+    │       输出：Action YAML脚本
     ↓
 Schema验证
     ├─ 通过 → 应用新actions队列
     └─ 失败 → 回退机制
 ```
 
-### 2.3 调整器配置
+### 2.2 两阶段Pipeline详解（设计思路演进）
+
+**当前设计思路演进**:
+
+原始设计文档中的"代码层维护实体处理进度"方式存在以下问题：
+
+1. 代码层需要维护复杂的状态管理
+2. 需要将状态传递给LLM进行重复判断
+3. 增加了系统复杂性和维护负担
+
+**改进的设计思路**:
+
+**Stage 1: Decision LLM（决策层）**
+
+- **输入**: Topic目标、策略、对话摘要、剩余时间等
+- **输出**: 调整要求的自然语言描述，而非过度结构化的JSON
+- **核心能力**:
+  - 理解对话上下文，识别需要处理的新实体
+  - 判断是否需要调整Action队列
+  - 提供调整方向和理由的文字描述
+
+**Stage 2: Planner LLM（规划层）**
+
+- **输入**: Stage 1的文字描述 + Topic目标/策略
+- **输出**: 具体的Action YAML脚本
+- **核心能力**:
+  - 将文字调整要求转换为可执行的Action配置
+  - 遵循命名规范和脚本语法
+  - 考虑执行连续性和用户体验
+
+**可能的Stage 3: 执行/验证层**
+
+- **可选引入**: 第三个LLM负责执行修改计划或进行质量检查
+- **Schema验证**: 确保生成的Action脚本符合技术规范
+- **回退机制**: 验证失败时的处理策略
+
+**设计哲学**:
+
+- 像"写代码"一样的过程：需求描述 → 代码生成 → 执行 → 验证
+- 优先解决智能水平问题，效率优化作为后续考虑
+- 减少代码层状态管理，让LLM承担更多智能判断
+
+### 2.3 动态调整情景示例
+
+Topic层的动态调整能力支持多种情景，这些情景主要影响Decision LLM、Planner LLM和可能的Executor LLM的提示词设计：
+
+**情景A：一对多实体展开（核心示例）**
+
+- **触发条件**: 用户提到多个需要逐一处理的对象（如多个抚养者）
+- **调整动作**: 为每个实体生成对应的Action子队列
+- **示例**:
+  - 用户提到"爸爸、妈妈、外公"
+  - 系统自动为每个抚养者生成基本信息收集Actions
+  - 不同实体可分配不同数量的Actions（如爸爸3个、妈妈2个、外公1个）
+
+**情景B：话题延伸处理**
+
+- **触发条件**: 用户主动跑题，但内容与当前Topic相关
+- **调整动作**: 插入1-2个简要认可的Actions后回归主线
+- **示例**:
+  - 用户突然提到小学班主任的回忆
+  - 系统插入："嗯，您提到的小学班主任经历确实很有意思..."
+  - 然后引导回原话题："让我们回到刚才关于抚养者的话题..."
+
+**情景C：条件跳过**
+
+- **触发条件**: 前置条件不满足（如用户抗拒、时间不足）
+- **调整动作**: 跳过部分次要Actions
+- **示例**:
+  - 用户明确表示不想深入讨论某个话题
+  - 系统跳过相关的深入追问Actions
+  - 直接进入下一个话题或总结
+
+**情景D：情绪响应**
+
+- **触发条件**: 检测到用户情绪明显波动
+- **调整动作**: 插入安抚类Action或暂停当前Topic
+- **示例**:
+  - 用户表现出强烈焦虑情绪
+  - 系统插入共情表达："我能感受到您此刻的焦虑..."
+  - 询问是否需要调整节奏或话题
+
+**情景E：信息深化**
+
+- **触发条件**: 收集到高质量信息，值得深入探索
+- **调整动作**: 增加追问或分析类Actions
+- **示例**:
+  - 用户提供了特别有洞察的自我观察
+  - 系统追加："您刚才提到的这个观察非常深刻，我们可以进一步探讨..."
+  - 增加认知模式分析Action
+
+**设计要点**:
+
+- 所有情景都通过Prompt模板配置，无需代码修改
+- 调整逻辑由LLM判断，代码层只负责执行
+- 不同情景可组合出现（如同时处理新实体和情绪响应）
+- 优先级处理：安全相关 > 情绪响应 > 信息深化 > 常规调整
+
+**配置驱动**: 所有业务逻辑通过YAML配置和Prompt模板定义，实现零编码扩展。
+
+**Topic节点YAML配置结构**:
 
 ```yaml
-topic_adjuster:
-  # 监控配置
-  monitoring:
-    check_interval: '每完成一个action'
-    metrics:
-      - name: 'information_quality'
-        threshold: 0.7
-      - name: 'user_engagement'
-        threshold: 0.5
-      - name: 'time_progress'
-        threshold: 0.8 # 时间使用超过80%时警告
+topic:
+  id: 'collect_caregiver_info'
+  goal: '收集来访者童年主要抚养者信息'
+  strategy: 'progressive_deepening'
 
-  # 调整计划生成
-  planning:
-    llm_prompt_template: 'templates/topic/adjustment_plan.md'
-    constraints:
-      - '保持topic核心目标不变'
-      - '总时间预算不变'
-      - '必须通过schema验证'
+  # 决策提示词配置
+  decision_prompt_config:
+    system_variables: { ... }
+    template_variables: { ... }
+    conditional_blocks: [...]
+    examples: [...]
 
-  # 验证配置
-  validation:
-    schema_path: 'schemas/action_config.json'
-    strict_mode: true
-    fallback_strategies:
-      - '使用原始actions'
-      - '简化版本（只保留核心actions）'
-      - '请求人工干预'
-
-  # 调整类型
-  adjustment_types:
-    resequence:
-      description: '重新排序actions'
-      applicable_when: '某些actions依赖前面收集的信息'
-
-    augment:
-      description: '增加辅助actions'
-      applicable_when: '信息收集不充分'
-      max_additional: 2
-
-    prune:
-      description: '删除次要actions'
-      applicable_when: '时间不足或用户疲劳'
-      priority_field: 'action.priority'
-
-    modify:
-      description: '修改action参数'
-      applicable_when: '需要调整提问方式或深度'
+  # 规划提示词配置
+  planner_prompt_config:
+    input_variables: { ... }
+    template_fragments: { ... }
+    loop_templates: [...]
+    examples: [...]
 ```
 
-### 2.4 状态上报协议
+### 2.5 典型使用场景
+
+**场景A：一对多实体展开（核心实现）**
+
+- **Topic目标**: 收集来访者童年主要抚养者情况
+- **动态展开**:
+  1. Action1收集到"爸爸"，自动展开Action2(爸爸)、Action3(爸爸)
+  2. Action3(爸爸)执行中，用户提到"妈妈、外公"，自动追加对应Actions
+- **关键点**: 脚本作者只需要写一次模板，引擎通过两阶段LLM自动生成和扩展Actions
+
+**其他扩展场景**:
+
+- **场景B：话题延伸处理** - 用户主动跑题但内容相关
+- **场景C：条件跳过** - 根据条件跳过部分Actions
+- **场景D：情绪响应** - 检测到用户情绪明显波动
+
+### 2.6 状态上报协议
 
 Topic层需要向Phase层上报：
 
 - `topic_progress`: 目标达成度（0-1）
-- `adjustment_decisions`: 调整决策记录
-- `key_issues`: 遇到的关键问题
+- `adjustment_decisions`: 调整决策记录（包含两阶段LLM输出）
+- `entity_status`: 实体识别与处理状态
 - `time_usage`: 时间使用情况
+- `key_issues`: 遇到的关键问题
 
-## 3. Phase层实现机制
+## 3 意识侦察系统（LLM+脚本哲学）
 
-### 3.1 意识侦察系统
+### 3.1 设计哲学：纯LLM驱动检测
 
-**意识类型矩阵**:
+**核心原则**：遵循"LLM+脚本（组装提示词）"哲学，所有检测逻辑封装在提示词模板中，通过LLM端到端理解，避免传统AI的语义拆解流水线。
 
-| 意识类型   | 监控目标       | 触发条件       | 调用技能     |
-| ---------- | -------------- | -------------- | ------------ |
-| 矛盾识别   | 前后表述一致性 | 逻辑矛盾检测   | 澄清提问技能 |
-| 情绪识别   | 情绪状态变化   | 情绪强度>阈值  | 情绪安抚技能 |
-| 自杀风险   | 安全风险信号   | 危险关键词检测 | 危机干预技能 |
-| 阻抗识别   | 用户参与度     | 回避/简短回答  | 阻抗处理技能 |
-| 自动化思维 | 认知模式识别   | CBT模式匹配    | 认知重构技能 |
+**与传统AI检测的区别**：
+| 传统AI检测 | LLM+脚本检测 |
+|------------|--------------|
+| 原始文本 → 分词 → 句法分析 → 语义理解 → 规则匹配 | 原始文本 → 提示词模板（组装上下文） → LLM（端到端理解） → 结构化输出 |
+| 依赖规则引擎、模式匹配库 | 依赖提示词工程和LLM理解能力 |
+| 检测逻辑硬编码在代码中 | 检测逻辑定义在脚本模板中 |
+| 性能优化通过算法优化 | 性能优化通过模型选择、批量处理、缓存 |
 
-### 3.2 侦察器配置
-
-```yaml
-consciousness_scouts:
-  contradiction_scout:
-    description: '识别用户前后矛盾表述'
-    monitoring_method: 'semantic_analysis'
-    check_frequency: '每3条用户消息'
-    threshold: 0.7 # 矛盾置信度阈值
-
-  emotion_scout:
-    description: '监控用户情绪变化'
-    monitoring_method: 'sentiment_analysis'
-    check_frequency: '每1条用户消息'
-    emotion_dimensions:
-      - valence: '积极/消极'
-      - arousal: '激活程度'
-      - dominance: '控制感'
-    threshold: 0.8 # 情绪强度阈值
-
-  suicide_risk_scout:
-    description: '检测自杀风险信号'
-    monitoring_method: 'keyword_pattern'
-    check_frequency: '实时'
-    risk_keywords:
-      - '不想活了'
-      - '结束一切'
-      - '没有意义'
-    emergency_threshold: 1 # 发现即触发
-
-  resistance_scout:
-    description: '识别用户阻抗'
-    monitoring_method: 'engagement_metrics'
-    check_frequency: '每2条用户消息'
-    metrics:
-      - response_length: '<10字为低参与'
-      - response_time: '>30秒为延迟'
-      - avoidance_patterns: ['不知道', '没什么', '还行']
-    threshold: 0.6
-
-  automatic_thought_scout:
-    description: '识别自动化思维'
-    monitoring_method: 'cbt_pattern'
-    check_frequency: '每5条用户消息'
-    thought_patterns:
-      - '全或无思维'
-      - '灾难化'
-      - '过度概括'
-      - '情绪推理'
-    threshold: 0.7
-```
-
-### 3.3 咨询技能库
+### 3.2 意识定义脚本化架构
 
 ```yaml
-consultation_skills:
-  empathy_expression:
-    skill_id: 'skill_empathy'
-    description: '表达共情和理解'
-    trigger_conditions:
-      - 'emotion_intensity > 0.7'
-      - 'user_engagement < 0.4'
-    implementation: 'topic_scripts/empathy_expression.yaml'
-    expected_outcome: '用户感到被理解，情绪缓解'
+# 意识定义脚本示例：scripts/consciousness/contradiction-detection.yaml
+consciousness:
+  id: 'contradiction_detection'
+  name: '矛盾识别意识'
+  description: '识别用户前后矛盾表述'
 
-  resistance_handling:
-    skill_id: 'skill_resistance'
-    description: '处理用户阻抗'
-    trigger_conditions:
-      - 'resistance_level > 0.6'
-      - 'topic_relevance < 0.5'
-    implementation: 'topic_scripts/resistance_handling.yaml'
-    expected_outcome: '阻抗降低，参与度提升'
+  # 加载配置
+  loading:
+    scope: ['phase:assessment', 'phase:exploration'] # 在哪些阶段加载
+    activation: 'conditional' # conditional | always | on_demand
+    priority: 0.7 # 加载优先级（0-1）
 
-  crisis_intervention:
-    skill_id: 'skill_crisis'
-    description: '危机干预'
-    trigger_conditions:
-      - 'suicide_risk_detected == true'
-    implementation: 'topic_scripts/crisis_intervention.yaml'
-    priority: '最高'
-    expected_outcome: '安全风险降低，用户稳定'
+  # 核心：LLM检测配置
+  detection:
+    method: 'llm_pattern_recognition'
+    frequency: 'adaptive' # 自适应频率，非固定间隔
+    context_window: 10 # 分析最近10条消息
 
-  focus_redirect:
-    skill_id: 'skill_focus'
-    description: '焦点重定向'
-    trigger_conditions:
-      - 'topic_relevance < 0.4'
-      - 'time_remaining < 0.3 * total_time'
-    implementation: 'topic_scripts/focus_redirect.yaml'
-    expected_outcome: '对话回归核心话题'
+    # 提示词模板配置
+    prompt_template:
+      path: 'templates/consciousness/contradiction-detection.md'
+      input_variables:
+        - 'recent_messages:最近10条对话'
+        - 'session_variables:会话变量'
+        - 'emotional_state:情绪状态'
 
-  cognitive_reframe:
-    skill_id: 'skill_reframe'
-    description: '认知重构'
-    trigger_conditions:
-      - 'automatic_thought_detected == true'
-      - 'emotion_intensity > 0.5'
-    implementation: 'topic_scripts/cognitive_reframe.yaml'
-    expected_outcome: '用户认知调整，情绪改善'
+    # LLM配置
+    llm_config:
+      model: 'claude-3-haiku' # 轻量级模型用于检测
+      temperature: 0.1
+      max_tokens: 500
+
+    # 输出格式
+    output_schema:
+      type: 'object'
+      properties:
+        detected: { type: 'boolean' }
+        confidence: { type: 'number', minimum: 0, maximum: 1 }
+        contradiction_type: { type: 'string' }
+        evidence: { type: 'array', items: { type: 'string' } }
+        recommended_skill: { type: 'string' }
+      required: ['detected', 'confidence']
+
+  # 性能优化（LLM-native）
+  performance:
+    caching:
+      enabled: true
+      ttl: '30_seconds' # 检测结果缓存30秒
+      key_based_on: ['message_hash', 'session_context']
+
+    batching:
+      enabled: true
+      batch_size: 3 # 每3条消息批量检测一次
+      batch_timeout: '100ms'
+
+    sampling:
+      enabled: true
+      sample_rate: 0.3 # 30%的消息进行详细检测
+      always_check: ['safety_keywords'] # 安全关键词始终检查
+
+  # 触发后动作
+  actions:
+    - type: 'call_skill'
+      skill_id: 'clarification_questioning'
+      condition: 'detected == true && confidence > 0.7'
+
+    - type: 'log_insight'
+      condition: 'detected == true'
+      insight_type: 'contradiction_pattern'
 ```
 
-### 3.4 技能调用工作流
+### 3.3 意识加载与激活机制
+
+**三层加载策略**：
+
+1. **全局意识**：始终加载（如安全风险检测）
+
+   ```yaml
+   loading:
+     scope: 'global'
+     activation: 'always'
+   ```
+
+2. **阶段意识**：在特定Phase加载
+
+   ```yaml
+   loading:
+     scope: ['phase:assessment', 'phase:intervention']
+     activation: 'conditional' # 按需激活
+   ```
+
+3. **动态意识**：运行时根据上下文动态加载
+   ```yaml
+   loading:
+     scope: 'dynamic'
+     activation: 'on_demand'
+     loading_conditions:
+       - 'user_mentions_trauma == true'
+       - 'session_duration > 15_minutes'
+   ```
+
+**性能优化**：
+
+- **懒加载**：意识只在需要时实例化
+- **引用计数**：多场景共享同一意识，避免重复加载
+- **语义缓存**：基于语义相似度的缓存，而非精确匹配
+- **自适应采样**：根据对话强度动态调整检测频率
+
+### 3.4 安全底线保障
+
+**即使坚持"纯LLM"，安全底线仍需保障**：
+
+```yaml
+safety_backstop:
+  # 极简关键词匹配（不是完整规则引擎）
+  emergency_keywords:
+    - '自杀'
+    - '自残'
+    - '想死'
+    - 'kill myself'
+
+  # 实现方式：字符串包含检查，<1ms延迟
+  implementation: 'string.includes() check'
+
+  # 触发动作：立即暂停对话，调用危机干预
+  action: 'immediate_crisis_intervention'
+
+  # 优先级：最高，覆盖所有其他逻辑
+  priority: 'highest'
+```
+
+### 3.5 意识触发引擎工作流
 
 ```
-意识侦察触发
+对话进行中
     ↓
-匹配技能条件
+[意识加载器] ← 根据当前Phase/上下文加载相关意识脚本
+    │       只加载提示词模板，不实例化复杂逻辑
     ↓
-按优先级排序
+[检测调度器] ← 智能调度（非固定阶段）
+    │       考虑因素：
+    │       - 消息重要性（情感强度、长度）
+    │       - 上次检测时间
+    │       - 缓存命中率
     ↓
-调用最高优先级技能
+[批量检测器] ← 批量组装提示词，单次LLM调用
+    │       输入：多条消息 + 多个意识模板
+    │       输出：批量检测结果（结构化JSON）
     ↓
-调整topic队列
-    ├─ 插入技能topic
-    ├─ 调整后续topic时间
-    └─ 记录调用决策
+[结果解析器] ← 解析LLM的结构化响应
+    ├─ 触发技能调用 → 插入技能Topic
+    ├─ 更新语义缓存 → 提高后续检测效率
+    └─ 调整检测频率 → 自适应优化
 ```
+
+### 3.6 性能优化策略（LLM-native）
+
+**不依赖规则引擎，而是通过LLM-native方式优化**：
+
+1. **模型分层**：
+
+   ```yaml
+   detection_tiers:
+     tier1: # 高频检测
+       model: 'claude-3-haiku' # 快速、便宜
+       prompt: '简版检测模板'
+       max_tokens: 200
+
+     tier2: # 深度检测
+       model: 'claude-3-sonnet' # 更准确
+       trigger: 'tier1.confidence < 0.7'
+   ```
+
+2. **智能采样**：
+
+   ```yaml
+   adaptive_sampling:
+     base_rate: 0.2 # 20%消息检测
+
+     increase_when:
+       - 'emotional_intensity > 0.7'
+       - 'message_length > 100_chars'
+       - 'contains_question == true'
+
+     decrease_when:
+       - 'consecutive_similar_messages > 3'
+       - 'session_phase == "closing"'
+   ```
+
+3. **语义缓存**：
+   ```typescript
+   class ConsciousnessCache {
+     // 基于语义的缓存，而非精确匹配
+     async getCachedDetection(message: string, context: Context): Promise<DetectionResult | null> {
+       // 计算语义相似度
+       const similarity = await this.calculateSemanticSimilarity(message, cachedMessages);
+       if (similarity > 0.9) {
+         return cachedResult;
+       }
+       return null;
+     }
+   }
+   ```
+
+### 3.7 与现有架构的集成
+
+**完全复用现有基础设施**：
+
+1. **模板系统**：复用`PromptTemplateManager`加载和渲染提示词模板
+2. **LLM编排**：复用`LLMOrchestrator`统一LLM调用接口
+3. **监控模式**：与`MonitorOrchestrator`类似架构模式
+4. **脚本配置**：意识定义在YAML脚本中，与现有Action配置一致
+
+**向后兼容**：现有监控系统可以逐步迁移到意识检测架构，两者可以共存。
 
 ## 4. Session层实现机制
 
@@ -568,6 +749,7 @@ consultation_skills:
 **三大守护维度**:
 
 1. **结构完整性守护**
+   - 以CBT心理咨询为例
    - 开始阶段：建立关系，设定议程
    - 过程阶段：按Phase推进，监控进展
    - 结束阶段：总结收获，布置作业

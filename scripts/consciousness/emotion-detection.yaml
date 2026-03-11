@@ -1,0 +1,281 @@
+# 情绪变化检测意识脚本
+# 用于检测用户对话中的情绪变化，帮助咨询师把握会谈节奏
+
+metadata:
+  name: '情绪变化检测'
+  version: '1.0'
+  author: 'HeartRule Team'
+  description: '检测用户在对话中的情绪变化，识别情绪波动、情绪转换和情绪异常'
+  consciousness_type: 'emotion_detection'
+  trigger_priority: 'medium'
+
+# 意识定义结构
+consciousness:
+  consciousness_id: 'emotion_detection_v1'
+  consciousness_name: '情绪变化检测'
+
+  # 触发条件配置
+  trigger_config:
+    trigger_timing: 'after_user_message'
+    cooldown_rounds: 2
+    context_window:
+      lookback_messages: 8
+      min_messages_required: 2
+
+  # 加载配置
+  loading_config:
+    template_path: 'consciousness/emotion-detection.md'
+    model_config:
+      model_preference: 'fast'
+      max_tokens: 1024
+      temperature: 0.3
+    batch_config:
+      enabled: true
+      batch_size: 5
+    cache_config:
+      enabled: true
+      ttl_seconds: 180
+
+  # 检测配置
+  detection_config:
+    # 情绪维度
+    emotion_dimensions:
+      - dimension: 'valence'
+        description: '情绪效价：积极-消极维度'
+        range: [-1, 1] # -1(极度消极) 到 1(极度积极)
+        threshold: 0.3 # 变化超过此值视为显著变化
+
+      - dimension: 'arousal'
+        description: '情绪唤醒度：平静-激动维度'
+        range: [0, 1] # 0(平静) 到 1(极度激动)
+        threshold: 0.3
+
+      - dimension: 'dominance'
+        description: '情绪支配度：被动-主动维度'
+        range: [0, 1] # 0(被动/无助) 到 1(主动/掌控)
+        threshold: 0.3
+
+    # 基础情绪类型
+    primary_emotions:
+      - emotion: 'joy'
+        chinese: '喜悦'
+        valence: 0.8
+        arousal: 0.5
+
+      - emotion: 'sadness'
+        chinese: '悲伤'
+        valence: -0.7
+        arousal: 0.2
+
+      - emotion: 'anger'
+        chinese: '愤怒'
+        valence: -0.6
+        arousal: 0.8
+
+      - emotion: 'fear'
+        chinese: '恐惧'
+        valence: -0.8
+        arousal: 0.7
+
+      - emotion: 'surprise'
+        chinese: '惊讶'
+        valence: 0.0
+        arousal: 0.7
+
+      - emotion: 'disgust'
+        chinese: '厌恶'
+        valence: -0.5
+        arousal: 0.4
+
+      - emotion: 'trust'
+        chinese: '信任'
+        valence: 0.6
+        arousal: 0.2
+
+      - emotion: 'anticipation'
+        chinese: '期待'
+        valence: 0.4
+        arousal: 0.5
+
+      - emotion: 'anxiety'
+        chinese: '焦虑'
+        valence: -0.5
+        arousal: 0.6
+
+      - emotion: 'shame'
+        chinese: '羞耻'
+        valence: -0.7
+        arousal: 0.4
+
+      - emotion: 'guilt'
+        chinese: '内疚'
+        valence: -0.6
+        arousal: 0.3
+
+      - emotion: 'hope'
+        chinese: '希望'
+        valence: 0.7
+        arousal: 0.4
+
+    # 情绪变化模式
+    change_patterns:
+      - pattern: 'sudden_shift'
+        description: '突然转变：情绪在短时间内剧烈变化'
+        detection_criteria:
+          message_span: 2 # 在2条消息内
+          valence_change: 0.5 # 效价变化超过0.5
+        clinical_significance: '可能反映情绪不稳定或触及敏感话题'
+
+      - pattern: 'gradual_decline'
+        description: '逐渐下降：情绪持续走低'
+        detection_criteria:
+          message_span: 5
+          valence_trend: 'decreasing'
+          total_change: 0.4
+        clinical_significance: '可能反映抑郁倾向或会谈触及痛点'
+
+      - pattern: 'emotional_fluctuation'
+        description: '情绪波动：频繁的情绪起伏'
+        detection_criteria:
+          fluctuation_count: 3 # 在窗口内波动次数
+          min_amplitude: 0.3
+        clinical_significance: '可能反映情绪调节困难或内心冲突'
+
+      - pattern: 'emotional_blunting'
+        description: '情感平淡：情绪反应减弱'
+        detection_criteria:
+          arousal_average: 0.2 # 平均唤醒度低
+          valence_range: 0.2 # 效价范围窄
+        clinical_significance: '可能反映抑郁症状或情感隔离'
+
+      - pattern: 'suppressed_emotion'
+        description: '情绪压抑：内容与情绪表达不一致'
+        detection_criteria:
+          content_valence: 0.5 # 内容显示积极
+          expression_valence: -0.3 # 表达显示消极
+          discrepancy: 0.5
+        clinical_significance: '可能反映防御机制或情感压抑'
+
+    # 检测阈值
+    thresholds:
+      confidence_threshold: 0.7
+      change_significance_threshold: 0.3
+      crisis_emotion_threshold: 0.8 # 负面情绪强度超过此值触发关注
+
+    # 危机情绪标记
+    crisis_emotions:
+      - emotion: 'despair'
+        triggers: ['绝望', '无望', '没有意义', '活着没意思']
+        severity: 'high'
+
+      - emotion: 'rage'
+        triggers: ['想杀', '恨死', '要报复']
+        severity: 'high'
+
+      - emotion: 'panic'
+        triggers: ['无法呼吸', '要疯了', '控制不住']
+        severity: 'medium'
+
+  # 输出配置
+  output_config:
+    output_format: 'structured'
+    output_fields:
+      - 'current_emotion'
+      - 'emotion_trajectory'
+      - 'change_detected'
+      - 'change_pattern'
+      - 'clinical_notes'
+      - 'suggested_intervention'
+
+    trigger_actions:
+      - action_type: 'update_session_state'
+        config:
+          state_key: 'current_emotion'
+
+      - action_type: 'log_event'
+        config:
+          event_type: 'emotion_change'
+          log_level: 'info'
+
+      - action_type: 'conditional_notify'
+        config:
+          condition: 'severity >= 0.7'
+          notification_type: 'emotion_alert'
+
+  # 安全底线配置
+  safety_baseline:
+    keyword_check:
+      enabled: true
+      crisis_keywords:
+        - '自杀'
+        - '自残'
+        - '不想活'
+        - '结束生命'
+        - '活着没意思'
+        - '想死'
+      crisis_action: 'immediate_alert'
+
+    failure_handling:
+      fallback_strategy: 'use_previous'
+      max_retries: 2
+      retry_delay_ms: 1000
+
+# 示例输入输出
+examples:
+  - description: '检测到情绪突然转变'
+    input:
+      messages:
+        - role: 'user'
+          content: '今天天气真好，我心情也不错'
+        - role: 'assistant'
+          content: '很高兴听到你心情不错'
+        - role: 'user'
+          content: '但是一想到工作，我就觉得特别焦虑，甚至有点想哭'
+    expected_output:
+      change_detected: true
+      change_pattern: 'sudden_shift'
+      previous_emotion:
+        primary: 'joy'
+        valence: 0.6
+        arousal: 0.3
+      current_emotion:
+        primary: 'anxiety'
+        valence: -0.5
+        arousal: 0.7
+      valence_change: -1.1
+      clinical_notes: '用户从积极情绪突然转为焦虑，可能反映工作相关压力是敏感话题'
+
+  - description: '检测到情绪逐渐下降'
+    input:
+      messages:
+        - role: 'user'
+          content: '最近还好吧'
+        - role: 'assistant'
+          content: '能具体说说吗？'
+        - role: 'user'
+          content: '工作压力有点大'
+        - role: 'assistant'
+          content: '工作压力确实让人疲惫'
+        - role: 'user'
+          content: '是啊，感觉越来越累'
+        - role: 'assistant'
+          content: '这种疲惫感持续多久了？'
+        - role: 'user'
+          content: '很久了，感觉没什么希望'
+    expected_output:
+      change_detected: true
+      change_pattern: 'gradual_decline'
+      emotion_trajectory:
+        - message_index: 0
+          emotion: 'neutral'
+          valence: 0.0
+        - message_index: 2
+          emotion: 'mild_stress'
+          valence: -0.2
+        - message_index: 4
+          emotion: 'fatigue'
+          valence: -0.4
+        - message_index: 6
+          emotion: 'despair'
+          valence: -0.7
+      clinical_notes: '情绪逐渐走低，最后出现绝望感表达，需要关注'
