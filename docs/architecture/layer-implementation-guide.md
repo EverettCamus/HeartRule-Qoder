@@ -235,48 +235,77 @@ action_monitor_mapping:
 3. 监控处理器调用MonitorTemplateService加载并渲染监控模板
 4. 调用监控LLM进行分析，解析JSON结果
 5. 根据分析结果生成反馈建议或触发Topic编排
+6. 监控反馈注入：将分析结果中的`feedback_for_action`字段存储到`executionState.metadata.latestMonitorFeedback`，并自动注入到下一个Action的LLM提示词中
 ```
+
+监控反馈机制确保监控分析结果能够影响主流程的执行。当监控LLM识别出优化机会或问题时，会通过`feedback_for_action`字段提供具体的改进建议。这些建议被存储到执行上下文中，并在下一个Action执行时自动注入到LLM提示词中，从而实现监控结果对主流程的实时干预和优化。
 
 **通用监控检查项**（适用于所有Action类型）：
 
-```yaml
-monitor_checks:
-  safety_check:
-    description: '安全检查'
-    prompt: |
-      检查以下内容是否包含：
-      1. 自伤或伤害他人的表述
-      2. 非法或危险行为建议
-      3. 极端情绪煽动
-      得分规则：发现任何一项得0分，否则得1分
+监控检查通过模板文件实现，而非YAML配置。系统使用Markdown模板文件定义监控分析任务，这些模板遵循统一的结构设计。
 
-  relevance_check:
-    description: '相关性检查'
-    prompt: |
-      检查回应是否：
-      1. 与当前咨询目标相关
-      2. 与用户前文内容连贯
-      3. 有助于推进对话
-      得分：0-1分，基于相关程度
+**模板位置**：`_system/config/default/*_monitor_v1.md`
 
-  professionalism_check:
-    description: '专业性检查'
-    prompt: |
-      检查是否符合心理咨询专业标准：
-      1. 是否保持中立非评判态度
-      2. 是否避免给出直接建议
-      3. 是否使用专业但易懂的语言
-      得分：0-1分，基于专业符合度
+**当前支持的Action类型**：
 
-  quality_check:
-    description: '质量检查'
-    prompt: |
-      检查回应质量：
-      1. 逻辑是否清晰连贯
-      2. 表达是否准确易懂
-      3. 是否有助于用户理解
-      得分：0-1分，基于综合质量
+- `ai_ask_monitor_v1.md` - 用于ai_ask Action的监控分析
+- `ai_say_monitor_v1.md` - 用于ai_say Action的监控分析
+
+**模板设计原则**：
+
+1. **Role定位**：明确监控LLM的角色和职责
+2. **输入信息**：提供完整的执行上下文和metrics数据
+3. **分析任务**：定义具体的监控分析维度（安全性、相关性、专业性、质量等）
+4. **输出格式**：严格JSON格式，包含`score`、`reasoning`、`feedback_for_action`、`strategy_suggestion`等字段
+5. **分析示例**：提供示例输入输出，确保LLM理解分析标准
+6. **注意事项**：包含实现细节和边界条件说明
+
+**模板内容示例**（ai_ask_monitor_v1.md节选）：
+
+````markdown
+# Role定位
+
+你是一个AI咨询会话的监控分析专家，负责评估Action执行的质量和安全性...
+
+# 输入信息
+
+## 执行上下文
+
+- Action类型: ai_ask
+- 用户输入: {{user_input}}
+- AI回应: {{ai_response}}
+  ...
+
+# 分析任务
+
+请从以下维度分析本次Action执行：
+
+## 1. 安全性检查
+
+检查AI回应是否包含：
+
+1. 自伤或伤害他人的表述
+2. 非法或危险行为建议
+3. 极端情绪煽动
+   ...
+
+# 输出格式
+
+请严格按照以下JSON格式输出分析结果：
+
+```json
+{
+  "score": 0.85,
+  "reasoning": "安全性良好，但相关性有待提高...",
+  "feedback_for_action": "建议在提问时更明确地关联用户前文内容",
+  "strategy_suggestion": "继续当前话题，但增加连接性提问"
+}
 ```
+````
+
+````
+
+**实现状态**：当前仅`ai_ask`和`ai_say`两种Action类型实现了监控处理器，其他Action类型将在后续版本中逐步支持。
 
 ### 1.4 执行流程
 
@@ -310,7 +339,7 @@ class ActionExecutor {
     };
   }
 }
-```
+````
 
 ## 2. Topic层实现机制
 
