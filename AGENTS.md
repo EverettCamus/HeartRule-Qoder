@@ -244,5 +244,5 @@ export class Session {
 ## Additional Resources
 
 - [README.md](../README.md) - Project overview
-- [docs/DEVELOPMENT_GUIDE.md](../docs/DEVELOPMENT_GUIDE.md) - Development guide
+- [openspec/specs/\_global/process/development-guide.md](../openspec/specs/_global/process/development-guide.md) - Development guide
 - API docs: http://localhost:8000/docs (when running locally)

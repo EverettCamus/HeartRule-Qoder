@@ -1,0 +1,179 @@
+# Scrum + OpenSpec Integration Schema
+# Schema: scrum-spec-driven
+# Description: Scrum methodology integrated with OpenSpec for specification-driven development
+# Version: 1.0.0
+
+name: 'scrum-spec-driven'
+description: 'Scrum + OpenSpec integration for specification-driven development'
+version: '1.0.0'
+template: 'scrum-spec-change.md'
+
+# Scrum Integration
+scrum:
+  enabled: true
+  sprint_duration: '2 weeks'
+
+  # Roles mapping
+  roles:
+    product_owner: 'Defines product backlog and priorities'
+    scrum_master: 'Facilitates Scrum process and removes impediments'
+    development_team: 'Implements user stories and delivers increments'
+
+  # Artifacts
+  artifacts:
+    product_backlog: 'Prioritized list of user stories'
+    sprint_backlog: 'User stories selected for current sprint'
+    increment: 'Potentially shippable product increment'
+
+# OpenSpec Integration
+openspec:
+  # Change lifecycle mapped to Scrum events
+  lifecycle:
+    propose: 'Sprint Planning - Create change proposal'
+    design: 'Backlog Refinement - Design solution'
+    plan: 'Sprint Planning - Create implementation plan'
+    implement: 'Sprint Execution - Implement tasks'
+    review: 'Sprint Review - Review completed work'
+    verify: 'Definition of Done - Verify acceptance criteria'
+    archive: 'Sprint Retrospective - Archive and reflect'
+
+  # Required sections in change documents
+  required_sections:
+    - 'sprint_info'
+    - 'user_stories'
+    - 'acceptance_criteria'
+    - 'definition_of_done'
+    - 'sprint_goals'
+    - 'retrospective_notes'
+
+# Template Structure
+template_structure:
+  # Header section
+  header:
+    - 'title'
+    - 'sprint_number'
+    - 'sprint_dates'
+    - 'scrum_team'
+    - 'status'
+
+  # Sprint Information
+  sprint_info:
+    - 'sprint_goals'
+    - 'capacity'
+    - 'focus_areas'
+
+  # User Stories
+  user_stories:
+    structure:
+      - 'id'
+      - 'title'
+      - 'description'
+      - 'acceptance_criteria'
+      - 'story_points'
+      - 'priority'
+    validation:
+      min_stories: 1
+      max_stories: 10
+
+  # Implementation Plan
+  implementation:
+    - 'tasks'
+    - 'dependencies'
+    - 'risks'
+    - 'mitigation_strategies'
+
+  # Review & Verification
+  review:
+    - 'demo_notes'
+    - 'feedback'
+    - 'metrics'
+    - 'improvements'
+
+  # Retrospective
+  retrospective:
+    - 'what_went_well'
+    - 'what_could_improve'
+    - 'action_items'
+
+# Validation Rules
+validation:
+  # Sprint validation
+  sprint:
+    duration: '1-4 weeks'
+    team_size: '3-9 members'
+
+  # User story validation
+  user_stories:
+    format: 'As a [role], I want [feature], so that [benefit]'
+    acceptance_criteria:
+      min_items: 3
+      format: 'Given [context], When [action], Then [result]'
+
+  # Definition of Done
+  definition_of_done:
+    required:
+      - 'code_reviewed'
+      - 'tests_passing'
+      - 'documentation_updated'
+      - 'deployed_to_staging'
+      - 'accepted_by_product_owner'
+
+# Workflow Integration
+workflow:
+  # Pre-sprint activities
+  pre_sprint:
+    - 'backlog_grooming'
+    - 'story_refinement'
+    - 'capacity_planning'
+
+  # Sprint execution
+  sprint_execution:
+    - 'daily_standup'
+    - 'task_implementation'
+    - 'continuous_integration'
+
+  # Post-sprint activities
+  post_sprint:
+    - 'sprint_review'
+    - 'sprint_retrospective'
+    - 'increment_demo'
+
+# Metrics and Reporting
+metrics:
+  velocity: 'Average story points completed per sprint'
+  burn_down: 'Work remaining vs time'
+  quality:
+    - 'defect_rate'
+    - 'test_coverage'
+    - 'code_review_comments'
+  team_health:
+    - 'happiness_index'
+    - 'collaboration_score'
+    - 'process_adherence'
+
+# Integration Points
+integrations:
+  # Tool integration
+  tools:
+    - 'jira'
+    - 'github'
+    - 'slack'
+
+  # Automation
+  automation:
+    - 'ci_cd_pipeline'
+    - 'test_automation'
+    - 'documentation_generation'
+
+# Examples
+examples:
+  sprint_number: 'Sprint 5'
+  sprint_dates: '2026-03-11 to 2026-03-25'
+  sprint_goals: 'Implement user authentication and session management'
+  user_story_example: |
+    As a user, I want to log in with email and password, so that I can access my personalized dashboard.
+
+    Acceptance Criteria:
+    1. Given I am on the login page, When I enter valid credentials, Then I should be redirected to my dashboard
+    2. Given I enter invalid credentials, When I click login, Then I should see an error message
+    3. Given I am logged in, When I visit the login page, Then I should be redirected to my dashboard

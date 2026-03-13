@@ -1,0 +1,261 @@
+# Research-First Approach Schema
+# Schema: research-first
+# Description: Research-first approach for AI implementation exploration
+# Version: 1.0.0
+
+name: 'research-first'
+description: 'Research-first approach for AI implementation exploration'
+version: '1.0.0'
+template: 'research-first-change.md'
+
+# Research Methodology
+methodology:
+  name: 'Research-First Approach'
+  description: 'Systematic research before implementation for AI/ML projects'
+  phases:
+    - 'problem_definition'
+    - 'literature_review'
+    - 'hypothesis_formulation'
+    - 'experiment_design'
+    - 'implementation'
+    - 'evaluation'
+    - 'conclusion'
+
+# Research Components
+research:
+  # Problem Definition
+  problem_definition:
+    required:
+      - 'research_question'
+      - 'problem_statement'
+      - 'objectives'
+      - 'success_criteria'
+
+  # Literature Review
+  literature_review:
+    sources:
+      - 'academic_papers'
+      - 'technical_documentation'
+      - 'open_source_projects'
+      - 'industry_reports'
+    analysis_dimensions:
+      - 'technical_approach'
+      - 'performance_metrics'
+      - 'limitations'
+      - 'applicability'
+
+  # Hypothesis Formulation
+  hypothesis:
+    structure:
+      - 'null_hypothesis'
+      - 'alternative_hypothesis'
+      - 'assumptions'
+      - 'variables'
+    validation:
+      - 'testable'
+      - 'falsifiable'
+      - 'specific'
+
+  # Experiment Design
+  experiment:
+    design:
+      - 'controlled_variables'
+      - 'independent_variables'
+      - 'dependent_variables'
+      - 'control_group'
+      - 'experimental_group'
+    metrics:
+      - 'accuracy'
+      - 'precision'
+      - 'recall'
+      - 'f1_score'
+      - 'inference_time'
+      - 'resource_usage'
+
+# AI/ML Specific
+ai_ml:
+  # Model Selection
+  model_selection:
+    criteria:
+      - 'task_type'
+      - 'data_characteristics'
+      - 'performance_requirements'
+      - 'resource_constraints'
+    options:
+      - 'traditional_ml'
+      - 'deep_learning'
+      - 'transformer_models'
+      - 'ensemble_methods'
+
+  # Data Requirements
+  data:
+    collection:
+      - 'sources'
+      - 'volume'
+      - 'variety'
+      - 'velocity'
+    preprocessing:
+      - 'cleaning'
+      - 'normalization'
+      - 'augmentation'
+      - 'splitting'
+
+  # Training & Evaluation
+  training:
+    infrastructure:
+      - 'hardware_requirements'
+      - 'software_stack'
+      - 'cloud_services'
+    hyperparameters:
+      - 'learning_rate'
+      - 'batch_size'
+      - 'epochs'
+      - 'optimizer'
+
+# Implementation Strategy
+implementation:
+  # Proof of Concept
+  poc:
+    objectives:
+      - 'validate_feasibility'
+      - 'identify_risks'
+      - 'estimate_effort'
+    deliverables:
+      - 'working_prototype'
+      - 'performance_baseline'
+      - 'risk_assessment'
+
+  # Production Readiness
+  production:
+    requirements:
+      - 'scalability'
+      - 'reliability'
+      - 'maintainability'
+      - 'security'
+    considerations:
+      - 'model_serving'
+      - 'monitoring'
+      - 'retraining'
+      - 'versioning'
+
+# Template Structure
+template_structure:
+  # Research Overview
+  overview:
+    - 'research_title'
+    - 'research_question'
+    - 'hypothesis'
+    - 'expected_outcomes'
+
+  # Literature Review
+  literature:
+    - 'key_findings'
+    - 'gap_analysis'
+    - 'related_work'
+
+  # Methodology
+  methodology:
+    - 'research_design'
+    - 'data_collection'
+    - 'analysis_methods'
+
+  # Experiment Design
+  experiment:
+    - 'setup'
+    - 'procedures'
+    - 'metrics'
+
+  # Results & Analysis
+  results:
+    - 'findings'
+    - 'analysis'
+    - 'interpretation'
+
+  # Conclusion & Recommendations
+  conclusion:
+    - 'summary'
+    - 'limitations'
+    - 'future_work'
+    - 'recommendations'
+
+# Validation Rules
+validation:
+  # Research quality
+  research_quality:
+    - 'clear_research_question'
+    - 'comprehensive_literature_review'
+    - 'testable_hypothesis'
+    - 'appropriate_methodology'
+
+  # Experimental rigor
+  experimental_rigor:
+    - 'controlled_experiment'
+    - 'statistical_significance'
+    - 'reproducible_results'
+    - 'ethical_considerations'
+
+  # Implementation validity
+  implementation_validity:
+    - 'code_quality'
+    - 'documentation'
+    - 'testing'
+    - 'deployment'
+
+# Workflow
+workflow:
+  # Research phase
+  research_phase:
+    - 'problem_scoping'
+    - 'literature_survey'
+    - 'methodology_selection'
+    - 'experiment_planning'
+
+  # Implementation phase
+  implementation_phase:
+    - 'prototype_development'
+    - 'experiment_execution'
+    - 'data_analysis'
+    - 'result_interpretation'
+
+  # Documentation phase
+  documentation_phase:
+    - 'report_writing'
+    - 'presentation_preparation'
+    - 'knowledge_transfer'
+
+# Metrics & Evaluation
+evaluation:
+  # Research metrics
+  research_metrics:
+    - 'novelty'
+    - 'rigor'
+    - 'impact'
+    - 'practicality'
+
+  # Technical metrics
+  technical_metrics:
+    - 'performance'
+    - 'efficiency'
+    - 'scalability'
+    - 'maintainability'
+
+  # Business metrics
+  business_metrics:
+    - 'roi'
+    - 'time_to_value'
+    - 'risk_reduction'
+    - 'competitive_advantage'
+
+# Examples
+examples:
+  research_question: 'How can we improve the accuracy of sentiment analysis for Chinese social media text using transformer models?'
+  hypothesis: 'Fine-tuning BERT-based models with domain-specific Chinese social media data will improve sentiment analysis accuracy by at least 5% compared to baseline models.'
+  experiment_design: |
+    Control Group: Baseline BERT model without fine-tuning
+    Experimental Group: BERT model fine-tuned on Weibo sentiment dataset
+    Metrics: Accuracy, Precision, Recall, F1-Score
+    Dataset: 10,000 labeled Weibo posts (balanced sentiment distribution)
+  expected_outcomes: |
+    1. Performance improvement of 5-10% in sentiment classification
+    2. Identification of key features for Chinese social media sentiment
+    3. Recommendations for model deployment in production environment

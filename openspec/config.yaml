@@ -1,0 +1,191 @@
+# OpenSpec Configuration for HeartRule AI Consulting Engine
+# Version: 1.0.0
+# Created: 2026-03-11
+
+# Project Information
+project:
+  name: 'HeartRule AI Consulting Engine'
+  description: 'AI consulting engine using LLM + YAML scripts for intelligent consultation'
+  version: '2.0.0'
+  repository: 'https://github.com/your-org/heartrule'
+
+# Directory Configuration
+directories:
+  specs: 'openspec/specs'
+  changes: 'openspec/changes'
+  archive: 'openspec/changes/archive'
+  schemas: 'openspec/schemas'
+  templates: 'openspec/templates'
+
+# Schema Configuration
+schemas:
+  # Default schema for all changes
+  default: 'standard'
+
+  # Available schemas
+  available:
+    - name: 'standard'
+      description: 'Standard OpenSpec change schema'
+      template: 'standard-change.md'
+
+    - name: 'scrum-spec-driven'
+      description: 'Scrum + OpenSpec integration for specification-driven development'
+      template: 'scrum-spec-change.md'
+
+    - name: 'research-first'
+      description: 'Research-first approach for AI implementation exploration'
+      template: 'research-first-change.md'
+
+# Language Strategy Configuration
+language:
+  default: 'zh' # Chinese for specifications
+
+  # Directory-specific language rules
+  rules:
+    - pattern: 'specs/product/**'
+      language: 'zh'
+      description: 'Product specifications in Chinese for team communication'
+
+    - pattern: 'specs/domain/strategic/**'
+      language: 'zh'
+      description: 'DDD strategic design in Chinese for team alignment'
+
+    - pattern: 'specs/domain/tactical/**'
+      language: 'en'
+      description: 'DDD tactical design in English for technical implementation'
+
+    - pattern: 'specs/architecture/**'
+      language: 'en'
+      description: 'Architecture design in English for technical consistency'
+
+    - pattern: 'specs/research/ai-implementation/**'
+      language: 'zh'
+      description: 'AI implementation research in Chinese for team understanding'
+
+    - pattern: 'specs/research/technical/**'
+      language: 'en'
+      description: 'Technical research in English for reference to international docs'
+
+    - pattern: 'specs/_global/process/**'
+      language: 'zh'
+      description: 'Process documentation in Chinese for team clarity'
+
+    - pattern: 'changes/*/design.md'
+      language: 'en'
+      description: 'Change design documents in English for technical review'
+
+    - pattern: 'changes/*/tasks.md'
+      language: 'en'
+      description: 'Change tasks in English for implementation clarity'
+
+# Validation Rules
+validation:
+  # File naming conventions
+  naming:
+    specs:
+      pattern: "^[a-z0-9-]+(\\.md)?$"
+      message: 'Spec files must use kebab-case with .md extension'
+
+    changes:
+      pattern: '^[a-z0-9-]+$'
+      message: 'Change directories must use kebab-case'
+
+  # Required files in changes
+  required_files:
+    - 'design.md'
+    - 'tasks.md'
+    - 'evidence/'
+
+  # Language validation
+  language_check: true
+
+  # Schema validation
+  schema_validation: true
+
+# Workflow Configuration
+workflow:
+  # Scrum integration
+  scrum:
+    enabled: true
+    sprint_duration: '2 weeks'
+
+    # Sprint phases mapping to OpenSpec
+    phases:
+      planning:
+        - 'propose'
+        - 'refine'
+
+      execution:
+        - 'apply'
+        - 'implement'
+
+      review:
+        - 'review'
+        - 'verify'
+
+      retrospective:
+        - 'archive'
+        - 'reflect'
+
+  # Default workflow steps
+  default_steps:
+    - 'propose'
+    - 'design'
+    - 'plan'
+    - 'implement'
+    - 'review'
+    - 'verify'
+    - 'archive'
+
+# Template Configuration
+templates:
+  # Default templates directory
+  directory: 'openspec/templates'
+
+  # Available templates
+  available:
+    - name: 'standard-change.md'
+      description: 'Standard change template'
+      path: 'templates/standard-change.md'
+
+    - name: 'scrum-spec-change.md'
+      description: 'Scrum + OpenSpec change template'
+      path: 'templates/scrum-spec-change.md'
+
+    - name: 'research-first-change.md'
+      description: 'Research-first change template'
+      path: 'templates/research-first-change.md'
+
+    - name: 'product-story.md'
+      description: 'Product user story template'
+      path: 'templates/product-story.md'
+
+    - name: 'architecture-decision.md'
+      description: 'Architecture decision record template'
+      path: 'templates/architecture-decision.md'
+
+# Integration Configuration
+integrations:
+  # Git integration
+  git:
+    enabled: true
+    auto_commit: false
+    branch_prefix: 'openspec/'
+
+  # Documentation integration
+  docs:
+    source: 'docs/'
+    target: 'openspec/specs/'
+    migration_enabled: true
+
+  # CI/CD integration
+  ci:
+    enabled: false
+    # CI configuration to be added later
+
+# Metadata
+metadata:
+  created: '2026-03-11T14:21:43Z'
+  updated: '2026-03-11T14:21:43Z'
+  version: '1.0.0'
+  maintainer: 'HeartRule Development Team'

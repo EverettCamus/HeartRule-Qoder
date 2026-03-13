@@ -329,8 +329,7 @@ export class MyAction extends BaseAction {
 
 ## 📖 文档资源
 
-- [开发指南](docs/DEVELOPMENT_GUIDE.md)
-- [MVP实现状态](docs/MVP_IMPLEMENTATION_STATUS.md)
+- [开发指南](openspec/specs/_global/process/development-guide.md)
 - [架构设计](.qoder/quests/ai-consulting-engine-architecture.md)
 - [构建修复报告](BUILD_FIX_REPORT.md)
 - [目录重组计划](DIRECTORY_RESTRUCTURE_PLAN.md)
@@ -407,7 +406,7 @@ git push origin feature/my-feature
 
 ### 获取帮助
 
-1. 查看[开发指南](docs/DEVELOPMENT_GUIDE.md)
+1. 查看[开发指南](openspec/specs/_global/process/development-guide.md)
 2. 查看[API文档](http://localhost:8000/docs)
 3. 提交[GitHub Issue](https://github.com/your-org/heartrule/issues)
 
