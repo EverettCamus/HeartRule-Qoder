@@ -325,8 +325,8 @@ HeartRule-Qcoder/
 
 ## 🔗 相关文档
 
-- [开发指南](docs/DEVELOPMENT_GUIDE.md)
-- [技术架构设计](docs/design/SEQUENCE_DIAGRAMS.md)
+- [开发指南](openspec/specs/_global/process/development-guide.md)
+- [技术架构设计](docs/design/SEQUENCE_DIAGRAMS.md) _(待迁移)_
 - [脚本编辑器使用指南](packages/script-editor/USAGE_GUIDE.md)
 - [可视化编辑功能](packages/script-editor/README_VISUAL_EDITING.md)
 

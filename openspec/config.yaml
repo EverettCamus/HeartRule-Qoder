@@ -174,9 +174,9 @@ integrations:
 
   # Documentation integration
   docs:
-    source: 'docs/'
+    source: 'docs-archive/'  # Updated: docs/ → docs-archive/
     target: 'openspec/specs/'
-    migration_enabled: true
+    migration_enabled: false  # Migration completed
 
   # CI/CD integration
   ci:

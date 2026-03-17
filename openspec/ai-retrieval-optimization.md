@@ -48,29 +48,34 @@ document_roles:
 
 ```
 IF document.path CONTAINS "openspec/"
-THEN boost_score = 1.5
+THEN boost_score = 2.0
+ELSE IF document.path CONTAINS "docs-archive/"
+THEN boost_score = 0.5
 ELSE IF document.path CONTAINS "docs/"
-THEN boost_score = 0.7
-```
+THEN boost_score = 0.3
 
 #### Rule 2: Recency Priority
 
 ```
+
 IF document.modified_date > (today - 30 days)
-THEN boost_score = boost_score * 1.2
+THEN boost_score = boost_score _ 1.2
 ELSE IF document.modified_date < (today - 180 days)
-THEN boost_score = boost_score * 0.8
+THEN boost_score = boost_score _ 0.8
+
 ```
 
 #### Rule 3: Document Type Priority
 
 ```
+
 CASE document.type:
-  "specification": boost_score = boost_score * 1.3
-  "design": boost_score = boost_score * 1.2
-  "research": boost_score = boost_score * 1.1
-  "bugfix": boost_score = boost_score * 0.9
-```
+"specification": boost_score = boost_score _ 1.3
+"design": boost_score = boost_score _ 1.2
+"research": boost_score = boost_score _ 1.1
+"bugfix": boost_score = boost_score _ 0.9
+
+````
 
 ### 3. Metadata Implementation
 
@@ -87,7 +92,7 @@ migrated_from: docs/product/productbacklog.md
 tags: [product, specification, authoritative]
 search_priority: high
 ---
-```
+````
 
 #### docs/ Document Headers
 
@@ -134,9 +139,9 @@ document_search:
 // .opencode/search-config.js
 module.exports = {
   documentWeights: {
-    'openspec/': 1.5,
-    'docs/': 0.7,
+    'openspec/': 2.0,
     'docs-archive/': 0.5,
+    'docs/': 0.3,
   },
 
   metadataBoost: {

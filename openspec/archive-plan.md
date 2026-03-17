@@ -18,6 +18,10 @@ Phase 5: Validation and Cleanup
 
 ### 2. Archive Location
 
+**Unified Archive Location**: `docs-archive/`
+
+All archived documents are consolidated in a single location for consistency and ease of management.
+
 ```
 docs-archive/
 ├── README.md                    # Archive overview and usage guidelines
@@ -26,8 +30,14 @@ docs-archive/
 ├── architecture/                # Archived architecture documents
 ├── research/                    # Archived research papers
 ├── process/                     # Archived process documentation
-└── misc/                        # Miscellaneous archived documents
+├── misc/                        # Miscellaneous archived documents
+│   └── legacy-script-definition-requirements.md
+├── bugfix/                      # Bug fix records
+├── test/                        # Test reports
+└── temp/                        # Temporary documents
 ```
+
+**Note**: The `openspec/` directory contains only active documents. No archive directories exist within OpenSpec structure.
 
 ## Document Classification
 

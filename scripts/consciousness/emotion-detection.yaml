@@ -24,21 +24,16 @@ consciousness:
 
   # 加载配置
   loading_config:
-    template_path: 'consciousness/emotion-detection.md'
-    model_config:
-      model_preference: 'fast'
-      max_tokens: 1024
-      temperature: 0.3
-    batch_config:
-      enabled: true
-      batch_size: 5
-    cache_config:
-      enabled: true
-      ttl_seconds: 180
+    scope: ['phase:assessment', 'phase:intervention']
+    activation: 'conditional'
+    priority: 0.6
 
-  # 检测配置
-  detection_config:
-    # 情绪维度
+  # 核心配置（脚本工程师编写业务逻辑）
+  config:
+    # 检测焦点（业务概念）
+    detection_focus: '检测用户对话中的情绪变化，识别情绪波动、情绪转换和情绪异常'
+
+    # 情绪维度定义（业务逻辑）
     emotion_dimensions:
       - dimension: 'valence'
         description: '情绪效价：积极-消极维度'
@@ -55,7 +50,7 @@ consciousness:
         range: [0, 1] # 0(被动/无助) 到 1(主动/掌控)
         threshold: 0.3
 
-    # 基础情绪类型
+    # 基础情绪类型（业务逻辑）
     primary_emotions:
       - emotion: 'joy'
         chinese: '喜悦'
@@ -117,13 +112,13 @@ consciousness:
         valence: 0.7
         arousal: 0.4
 
-    # 情绪变化模式
+    # 情绪变化模式（业务逻辑）
     change_patterns:
       - pattern: 'sudden_shift'
         description: '突然转变：情绪在短时间内剧烈变化'
         detection_criteria:
-          message_span: 2 # 在2条消息内
-          valence_change: 0.5 # 效价变化超过0.5
+          message_span: 2
+          valence_change: 0.5
         clinical_significance: '可能反映情绪不稳定或触及敏感话题'
 
       - pattern: 'gradual_decline'
@@ -137,32 +132,58 @@ consciousness:
       - pattern: 'emotional_fluctuation'
         description: '情绪波动：频繁的情绪起伏'
         detection_criteria:
-          fluctuation_count: 3 # 在窗口内波动次数
+          fluctuation_count: 3
           min_amplitude: 0.3
         clinical_significance: '可能反映情绪调节困难或内心冲突'
 
       - pattern: 'emotional_blunting'
         description: '情感平淡：情绪反应减弱'
         detection_criteria:
-          arousal_average: 0.2 # 平均唤醒度低
-          valence_range: 0.2 # 效价范围窄
+          arousal_average: 0.2
+          valence_range: 0.2
         clinical_significance: '可能反映抑郁症状或情感隔离'
 
       - pattern: 'suppressed_emotion'
         description: '情绪压抑：内容与情绪表达不一致'
         detection_criteria:
-          content_valence: 0.5 # 内容显示积极
-          expression_valence: -0.3 # 表达显示消极
+          content_valence: 0.5
+          expression_valence: -0.3
           discrepancy: 0.5
         clinical_significance: '可能反映防御机制或情感压抑'
 
-    # 检测阈值
+    # 输出变量定义（从检测结果中提取）
+    output:
+      - get: 'current_emotion'
+        define: '当前主要情绪（joy/sadness/anger/fear/surprise/disgust/trust/anticipation/anxiety/shame/guilt/hope）'
+
+      - get: 'emotion_trajectory'
+        define: '情绪变化轨迹（JSON数组）'
+
+      - get: 'change_detected'
+        define: '是否检测到显著情绪变化（true/false）'
+
+      - get: 'change_pattern'
+        define: '情绪变化模式（sudden_shift/gradual_decline/emotional_fluctuation/emotional_blunting/suppressed_emotion）'
+
+      - get: 'valence_change'
+        define: '情绪效价变化值（-1到1）'
+
+      - get: 'arousal_change'
+        define: '情绪唤醒度变化值（0到1）'
+
+      - get: 'clinical_notes'
+        define: '临床意义描述'
+
+      - get: 'suggested_intervention'
+        define: '建议的干预方向'
+
+    # 阈值配置（业务参数）
     thresholds:
       confidence_threshold: 0.7
       change_significance_threshold: 0.3
-      crisis_emotion_threshold: 0.8 # 负面情绪强度超过此值触发关注
+      crisis_emotion_threshold: 0.8
 
-    # 危机情绪标记
+    # 危机情绪标记（业务逻辑）
     crisis_emotions:
       - emotion: 'despair'
         triggers: ['绝望', '无望', '没有意义', '活着没意思']
@@ -176,17 +197,31 @@ consciousness:
         triggers: ['无法呼吸', '要疯了', '控制不住']
         severity: 'medium'
 
+    # LLM配置（技术参数）
+    llm_config:
+      model: 'claude-3-haiku'
+      temperature: 0.3
+      max_tokens: 1024
+
+  # 性能优化
+  performance_config:
+    caching:
+      enabled: true
+      ttl_seconds: 180
+
+    batching:
+      enabled: true
+      batch_size: 5
+
+    sampling:
+      enabled: true
+      sample_rate: 0.3
+
   # 输出配置
   output_config:
     output_format: 'structured'
-    output_fields:
-      - 'current_emotion'
-      - 'emotion_trajectory'
-      - 'change_detected'
-      - 'change_pattern'
-      - 'clinical_notes'
-      - 'suggested_intervention'
 
+    # 触发动作
     trigger_actions:
       - action_type: 'update_session_state'
         config:
@@ -234,14 +269,7 @@ examples:
     expected_output:
       change_detected: true
       change_pattern: 'sudden_shift'
-      previous_emotion:
-        primary: 'joy'
-        valence: 0.6
-        arousal: 0.3
-      current_emotion:
-        primary: 'anxiety'
-        valence: -0.5
-        arousal: 0.7
+      current_emotion: 'anxiety'
       valence_change: -1.1
       clinical_notes: '用户从积极情绪突然转为焦虑，可能反映工作相关压力是敏感话题'
 
@@ -265,17 +293,5 @@ examples:
     expected_output:
       change_detected: true
       change_pattern: 'gradual_decline'
-      emotion_trajectory:
-        - message_index: 0
-          emotion: 'neutral'
-          valence: 0.0
-        - message_index: 2
-          emotion: 'mild_stress'
-          valence: -0.2
-        - message_index: 4
-          emotion: 'fatigue'
-          valence: -0.4
-        - message_index: 6
-          emotion: 'despair'
-          valence: -0.7
+      emotion_trajectory: '[{"message_index": 0, "emotion": "neutral", "valence": 0.0}, {"message_index": 2, "emotion": "mild_stress", "valence": -0.2}, {"message_index": 4, "emotion": "fatigue", "valence": -0.4}, {"message_index": 6, "emotion": "despair", "valence": -0.7}]'
       clinical_notes: '情绪逐渐走低，最后出现绝望感表达，需要关注'

@@ -351,7 +351,7 @@ With this migration, DDD Strategic Design is now 83% complete (5/6 documents):
 4. **Template Fixes**: 18 placeholder links fixed in 3 template files
 5. **Project References Updated**: README.md updated with new OpenSpec references
 6. **AI Retrieval Optimization**: 51 documents with complete metadata (document_id, authority, status, tags, search_priority)
-7. **Archival Work**: Non-core documents archived to `docs/archive/`
+7. **Archival Work**: All non-core documents archived to `docs-archive/` with proper metadata
 
 ### Remaining Issues (Non-critical)
 
@@ -366,3 +366,45 @@ With this migration, DDD Strategic Design is now 83% complete (5/6 documents):
 ### Completion Report
 
 See detailed report: `openspec/migration-completion-report.md`
+
+## Archive Completion (2026-03-13)
+
+### Archive Statistics
+
+| Category     | Archived Files |
+| ------------ | -------------- |
+| architecture | 2              |
+| bugfix       | 7              |
+| domain       | 3              |
+| misc         | 60             |
+| product      | 1              |
+| research     | 5              |
+| temp         | 2              |
+| test         | 3              |
+| **Total**    | **83**         |
+
+### Archive Features
+
+1. **Complete Metadata**: All archived documents include frontmatter with document_id, authority, status, archived_date, source path, and tags
+2. **AI Retrieval Hints**: Clear warnings that documents are archived and OpenSpec should be prioritized
+3. **Search Priority**: docs-archive/ has lower search priority (0.5) than openspec/ (2.0)
+4. **Classification**: Documents categorized according to OpenSpec classification scheme
+
+### Archive Impact
+
+- ✅ **AI won't be confused**: Clear authority hierarchy established
+- ✅ **Historical reference preserved**: All docs/ content available for reference
+- ✅ **Clean active documentation**: openspec/ contains only current, authoritative documents
+- ✅ **Search optimization**: AI will prioritize openspec/ over docs-archive/
+
+### Next Steps for Archive
+
+1. **Monitor usage**: Track if archived documents are still being accessed
+2. **Periodic review**: Review archive relevance quarterly
+3. **Gradual cleanup**: Consider removing truly obsolete documents after 6-12 months
+
+---
+
+**Migration Status**: ✅ COMPLETE
+**Archive Status**: ✅ COMPLETE
+**Overall Documentation Restructure**: ✅ COMPLETE
