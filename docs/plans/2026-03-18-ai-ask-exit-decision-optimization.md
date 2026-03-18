@@ -103,22 +103,7 @@ export interface EnhancedAskLLMOutput {
   progress?: string; // 任务进度说明（结构化markdown）
   EXIT: string; // 退出标志（'true'/'false'）
   BRIEF?: string; // 退出/继续理由摘要
-  safety_risk?: {
-    detected: boolean;
-    risk_type: string | null;
-    confidence: 'high' | 'medium' | 'low';
-    reason: string | null;
-  };
-  metadata?: {
-    emotional_tone?: string;
-    crisis_signal?: boolean;
-    style_adaptation?: {
-      user_reply_length: number;
-      suggested_style: 'open' | 'choice' | 'example_guided';
-      style_used: 'open' | 'choice' | 'example_guided' | 'mixed';
-      adaptation_reason: string;
-    };
-  };
+  crisis_detected: boolean; // 仅明显危机时为true，触发同步危机处理
 }
 
 export const EnhancedAskLLMOutputSchema = z.object({
@@ -127,30 +112,19 @@ export const EnhancedAskLLMOutputSchema = z.object({
   progress: z.string().optional(),
   EXIT: z.enum(['true', 'false']),
   BRIEF: z.string().optional(),
-  safety_risk: z
-    .object({
-      detected: z.boolean(),
-      risk_type: z.string().nullable(),
-      confidence: z.enum(['high', 'medium', 'low']),
-      reason: z.string().nullable(),
-    })
-    .optional(),
-  metadata: z
-    .object({
-      emotional_tone: z.string().optional(),
-      crisis_signal: z.boolean().optional(),
-      style_adaptation: z
-        .object({
-          user_reply_length: z.number(),
-          suggested_style: z.enum(['open', 'choice', 'example_guided']),
-          style_used: z.enum(['open', 'choice', 'example_guided', 'mixed']),
-          adaptation_reason: z.string(),
-        })
-        .optional(),
-    })
-    .optional(),
+  crisis_detected: z.boolean().default(false),
 });
 ```
+
+**危机检测分层机制说明**：
+
+| 危机类型     | 触发条件                       | 处理方式                                    |
+| ------------ | ------------------------------ | ------------------------------------------- |
+| **明显危机** | `crisis_detected: true`        | 主线程同步启动危机处理LLM，评估是否修订回复 |
+| **隐蔽危机** | assessment中的风险识别细微信号 | 另一线程的ai_ask监控LLM异步分析             |
+
+- `crisis_detected` 仅用于**明显、紧急**的危机信号（如明确的自杀意念、自伤计划、他伤倾向）
+- 隐蔽危机嵌入在assessment的markdown描述中，由监控流程处理
 
 **Step 2: 更新shared-types的导出**
 
@@ -220,12 +194,7 @@ private getDefaultAskOutput(rawResponse: string): EnhancedAskLLMOutput {
     progress: '进度评估不可用',
     EXIT: 'NO',
     BRIEF: 'LLM输出JSON解析失败',
-    safety_risk: {
-      detected: false,
-      risk_type: null,
-      confidence: 'high',
-      reason: null,
-    },
+    crisis_detected: false,
   };
 }
 ```
@@ -279,16 +248,14 @@ private parseLLMResponse(
     const aiRole = this.getConfig('ai_role', '咨询师');
     const aiMessage = llmOutput.content || '';
 
-    // 提取安全风险信息
-    const safetyRisk = llmOutput.safety_risk || {
-      detected: false,
-      risk_type: null,
-      confidence: 'high' as const,
-      reason: null,
-    };
+    // 检查危机信号
+    const crisisDetected = llmOutput.crisis_detected || false;
 
-    // 提取元数据
-    const llmMetadata = llmOutput.metadata || {};
+    // 如果检测到明显危机，启动危机处理流程
+    if (crisisDetected) {
+      // TODO: 同步启动危机处理LLM，评估是否修订回复
+      console.warn('[AiAskAction] ⚠️ 危机信号检测到，启动危机处理流程');
+    }
 
     return {
       success: true,
@@ -299,16 +266,15 @@ private parseLLMResponse(
         actionType: AiAskAction.actionType,
         shouldExit,
         brief: llmOutput.BRIEF,
-        assessment: llmOutput.assessment,  // 新增
-        progress: llmOutput.progress,      // 新增
+        assessment: llmOutput.assessment,    // 新增
+        progress: llmOutput.progress,        // 新增
+        crisis_detected: crisisDetected,     // 简化危机检测
         currentRound: this.currentRound,
         llmRawOutput: parseResult.cleanedResponse,
         template_path: resolution.path,
         template_layer: resolution.layer,
         template_scheme: resolution.scheme,
         safety_check: safetyCheck,
-        safety_risk: safetyRisk,
-        llm_metadata: llmMetadata,
         parseError: (parseResult.parseError?.retryCount || 0) > 1,
         parseRetryCount: parseResult.parseError?.retryCount || 0,
         parseErrorDetails: parseResult.parseError,
@@ -361,20 +327,11 @@ git commit -m "refactor: update parseLLMResponse to handle new output structure"
 ```json
 {
   "content": "你生成的提问内容...",
-  "assessment": "## 阻抗分析\n阻抗程度：中等(65分)\n主要表现：回避倾向...\n\n## 风险识别\n无安全风险...\n\n## 用户理解\n用户理解程度良好...",
+  "assessment": "## 阻抗分析\n阻抗程度：中等(65分)\n主要表现：回避倾向...\n\n## 风险识别\n无明显安全风险\n\n## 用户理解\n用户理解程度良好",
   "progress": "## 进度评估\n- [x] 症状描述：已收集详细描述\n- [ ] 持续时间：用户未明确说明\n- [x] 严重程度：已确认中度\n\n## 成本与轮次\n当前轮次：3/5\n建议轮次：还需1-2轮",
   "EXIT": "false",
   "BRIEF": "信息不足，需要继续收集持续时间",
-  "safety_risk": {
-    "detected": false,
-    "risk_type": null,
-    "confidence": "high",
-    "reason": null
-  },
-  "metadata": {
-    "emotional_tone": "supportive",
-    "crisis_signal": false
-  }
+  "crisis_detected": false
 }
 ```
 ````
@@ -386,13 +343,16 @@ git commit -m "refactor: update parseLLMResponse to handle new output structure"
 - `content`: 你生成的提问内容（主要字段，将展示给用户）
 - `assessment`: 综合评估（markdown格式），包含：
   - 阻抗分析：用户回避、困惑、记忆缺失等程度评估
-  - 风险识别：安全边界遵守情况
+  - 风险识别：安全边界遵守情况、隐蔽危机信号
   - 用户理解：用户对问题的理解程度
 - `progress`: 任务进度说明（markdown格式），包含：
   - 进度评估：使用任务列表格式说明每个输出变量的收集状态
   - 成本与轮次：当前轮次、建议轮次、效率评估
 - `EXIT`: 是否满足退出条件（"true" 或 "false"）
 - `BRIEF`: 退出/继续的简短理由（不超过15个字）
+- `crisis_detected`: **仅明显危机**时设为true（如明确的自杀意念、自伤计划）
+  - true时将同步启动危机处理流程，评估是否需要修订回复
+  - 隐蔽或不确定的危机信号应写入assessment的风险识别部分
 
 ````
 
