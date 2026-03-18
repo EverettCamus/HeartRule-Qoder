@@ -1,6 +1,6 @@
 /**
  * 退出决策相关类型定义
- * 
+ *
  * 用于多轮对话的智能终止判断机制
  */
 
@@ -49,18 +49,25 @@ export const CustomExitConditionSchema = z.object({
 
 /**
  * 退出条件配置（通用 superset）
- * 
+ *
  * 针对不同的 action_type，实际可用字段有所不同：
- * - ai_ask: understanding_threshold, has_questions, min_rounds, custom_conditions
+ * - ai_ask: understanding_threshold, has_questions, min_rounds, max_rounds, max_tokens,
+ *           max_cost, required_variables, min_response_length, max_silence_rounds, custom_conditions
  * - ai_say: understanding_threshold, has_questions, min_rounds, custom_conditions
  * - fill_form: min_rounds, custom_conditions (表单完整性由其他逻辑处理)
  * - 内部动作 (ai_think, use_skill, show_pic): 不使用 exit_criteria
  */
 export interface ExitCriteria {
-  understanding_threshold?: number;  // 理解度阈值（0-100）
-  has_questions?: boolean;           // 是否允许有疑问时退出
-  min_rounds?: number;               // 最小轮次要求
-  custom_conditions?: CustomExitCondition[];  // 自定义条件数组
+  understanding_threshold?: number; // 理解度阈值（0-100）
+  has_questions?: boolean; // 是否允许有疑问时退出
+  min_rounds?: number; // 最小轮次要求
+  max_rounds?: number; // 最大轮次限制（新增）
+  max_tokens?: number; // 最大token消耗（新增）
+  max_cost?: number; // 最大成本限制（新增）
+  required_variables?: string[]; // 必须收集的变量列表（新增）
+  min_response_length?: number; // 最小响应长度（新增）
+  max_silence_rounds?: number; // 连续无实质内容轮次（新增）
+  custom_conditions?: CustomExitCondition[]; // 自定义条件数组
 }
 
 /**
@@ -70,17 +77,23 @@ export const ExitCriteriaSchema = z.object({
   understanding_threshold: z.number().min(0).max(100).optional(),
   has_questions: z.boolean().optional(),
   min_rounds: z.number().int().min(1).optional(),
+  max_rounds: z.number().int().min(1).optional(),
+  max_tokens: z.number().int().min(100).optional(),
+  max_cost: z.number().min(0).optional(),
+  required_variables: z.array(z.string()).optional(),
+  min_response_length: z.number().int().min(1).optional(),
+  max_silence_rounds: z.number().int().min(1).optional(),
   custom_conditions: z.array(CustomExitConditionSchema).optional(),
 });
 
 /**
  * Action 退出策略配置
- * 
+ *
  * 用于声明 Action 是否支持多轮退出机制
  */
 export interface ExitPolicy {
-  supportsExit: boolean;  // 是否支持多轮退出判定
-  enabledSources?: ExitDecisionSource[];  // 启用的判定来源（如果 supportsExit 为 true）
+  supportsExit: boolean; // 是否支持多轮退出判定
+  enabledSources?: ExitDecisionSource[]; // 启用的判定来源（如果 supportsExit 为 true）
 }
 
 /**
@@ -88,7 +101,9 @@ export interface ExitPolicy {
  */
 export const ExitPolicySchema = z.object({
   supportsExit: z.boolean(),
-  enabledSources: z.array(z.enum(['max_rounds', 'exit_flag', 'exit_criteria', 'llm_suggestion'])).optional(),
+  enabledSources: z
+    .array(z.enum(['max_rounds', 'exit_flag', 'exit_criteria', 'llm_suggestion']))
+    .optional(),
 });
 
 /**
