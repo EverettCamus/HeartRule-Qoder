@@ -1,0 +1,214 @@
+# AI_Ask退出判断机制优化设计
+
+> **日期**: 2026-03-18
+> **版本**: v1.0
+> **状态**: 已批准，待实施
+
+## 1. 背景与目标
+
+### 1.1 现有问题分析
+
+当前AI_Ask退出判断机制存在5个核心痛点：
+
+1. **对话轮次过多但信息仍未收集完整** - AI陷入循环追问却无法获得所需变量
+2. **用户明显不愿继续但AI仍追问** - 阻抗检测不够灵敏
+3. **退出条件不够灵活** - 难以适应不同咨询场景的个性化需求
+4. **成本控制不佳** - LLM调用过多导致费用过高
+5. **偏题识别不足** - 用户偏离主题时无法智能引导或退出
+
+### 1.2 设计目标
+
+- 建立清晰的退出条件分类体系（规则控制 vs LLM控制）
+- 简化LLM评估字段结构，使用markdown格式表达复杂语义
+- 实现成本感知的退出决策机制
+- 保持向后兼容性，逐步升级现有代码
+
+## 2. 架构设计
+
+### 2.1 决策流程
+
+```
+用户输入 → LLM生成(回复+评估) → 规则引擎检查 → 综合决策
+         (统一JSON输出)      (硬性条件)
+```
+
+**流程说明**：
+
+1. 每轮对话后，LLM生成回复并输出结构化评估
+2. 规则引擎检查硬性条件（轮次、token、成本等）
+3. 综合LLM建议和规则引擎结果，得出最终退出决策
+
+### 2.2 退出条件分类
+
+#### 规则控制类（代码实现）
+
+适用于所有咨询领域，通过计数、比较、存在性检查等纯代码逻辑实现：
+
+| 字段                  | 说明               |
+| --------------------- | ------------------ |
+| `max_rounds`          | 最大轮次限制       |
+| `max_tokens`          | 最大token消耗      |
+| `max_cost`            | 最大成本限制       |
+| `min_rounds`          | 最小轮次要求       |
+| `required_variables`  | 必须收集的变量列表 |
+| `max_silence_rounds`  | 连续无实质内容轮次 |
+| `min_response_length` | 最小响应长度       |
+| `custom_conditions`   | 自定义条件         |
+
+#### LLM控制类（语义理解）
+
+需要理解用户回答的语义、情感和相关性：
+
+| 字段                        | 说明                   |
+| --------------------------- | ---------------------- |
+| `impedance_threshold`       | 阻抗检测阈值           |
+| `topic_drift_threshold`     | 偏题识别阈值           |
+| `understanding_threshold`   | 理解度阈值             |
+| `has_questions`             | 是否允许有疑问时退出   |
+| `min_variable_completeness` | 变量完整度阈值（混合） |
+
+## 3. LLM输出格式设计
+
+### 3.1 统一JSON输出结构
+
+```json
+{
+  "content": "您能再具体说一下这个症状持续多久了吗？",
+  "assessment": "## 阻抗分析\n阻抗程度：中等(65分)\n主要表现：回避倾向，回答简短\n\n## 风险识别\n无安全风险\n\n## 用户理解\n用户理解程度良好",
+  "progress": "## 进度评估\n- [x] 症状描述：已收集详细描述\n- [ ] 持续时间：用户未明确说明\n- [x] 严重程度：已确认中度\n\n## 成本与轮次\n当前轮次：3/5\n建议轮次：还需1-2轮",
+  "EXIT": "false",
+  "BRIEF": "信息不足，需要继续收集持续时间",
+  "safety_risk": {
+    "detected": false,
+    "risk_type": null,
+    "confidence": "high",
+    "reason": null
+  },
+  "metadata": {
+    "emotional_tone": "supportive",
+    "crisis_signal": false,
+    "style_adaptation": {
+      "user_reply_length": 45,
+      "suggested_style": "example_guided",
+      "style_used": "example_guided",
+      "adaptation_reason": "用户回复简短，需要示例引导"
+    }
+  }
+}
+```
+
+### 3.2 字段说明
+
+| 字段          | 类型   | 说明                                                       |
+| ------------- | ------ | ---------------------------------------------------------- |
+| `content`     | string | AI生成的提问内容（展示给用户）                             |
+| `assessment`  | string | 综合评估（markdown格式），包含阻抗分析、风险识别、用户理解 |
+| `progress`    | string | 任务进度说明（markdown格式），包含变量收集状态、成本与轮次 |
+| `EXIT`        | string | 退出标志（"true" 或 "false"）                              |
+| `BRIEF`       | string | 退出/继续的简短理由（不超过15个字）                        |
+| `safety_risk` | object | 安全风险检测（系统功能）                                   |
+| `metadata`    | object | 元数据，包含风格适配等信息                                 |
+
+### 3.3 assessment字段内容
+
+- **阻抗分析**：用户回避、困惑、记忆缺失等程度评估
+- **风险识别**：安全边界遵守情况
+- **用户理解**：用户对问题的理解程度
+
+### 3.4 progress字段内容
+
+- **进度评估**：使用任务列表格式说明每个变量的收集状态
+  - `- [x] 变量名：状态描述` 表示已完成
+  - `- [ ] 变量名：状态描述` 表示未完成
+- **成本与轮次**：当前轮次、建议轮次、效率评估
+
+## 4. 向后兼容性设计
+
+### 4.1 YAML配置格式
+
+保持现有`output`字段结构，添加`require`字段标识变量重要性：
+
+```yaml
+output:
+  - get: '症状描述'
+    define: '来访者描述的影响日常生活，工作，健康的客观表现'
+    require: '关键' # 关键|重要|补充，默认"重要"
+  - get: '持续时间'
+    define: '有这个症状大致的时间长度描述'
+    require: '重要'
+```
+
+### 4.2 兼容性策略
+
+采用**一次性升级**策略：
+
+- 移除`metrics`和`progress_suggestion`字段
+- 新增`assessment`和`progress`字段
+- 更新所有依赖现有字段的代码
+- 现有YAML脚本添加`require`字段（可选，默认"重要"）
+
+## 5. 规则引擎设计
+
+### 5.1 硬性条件检查
+
+```typescript
+interface RuleEvaluationResult {
+  shouldExit: boolean;
+  reason: string;
+  triggeredRules: string[];
+}
+```
+
+### 5.2 检查项目
+
+1. **最大轮次**：`currentRound >= maxRounds`
+2. **最大token**：`totalTokens >= maxTokens`
+3. **最大成本**：`estimatedCost >= maxCost`
+4. **最小响应长度**：`userInputLength < minResponseLength`
+5. **沉默轮次**：`silentRounds >= maxSilenceRounds`
+6. **必需变量**：`requiredVariables` 全部已收集
+
+### 5.3 决策综合
+
+```typescript
+interface ExitDecision {
+  shouldExit: boolean;
+  reason: string;
+  source: 'llm' | 'rules' | 'combined';
+  llmExit: boolean;
+  ruleExit: boolean;
+}
+```
+
+## 6. 实施优先级
+
+1. **阶段1**：扩展ExitCriteria类型定义（shared-types）
+2. **阶段2**：创建EnhancedAskLLMOutput类型（shared-types）
+3. **阶段3**：更新AiAskAction接口引用（core-engine）
+4. **阶段4**：更新parseLLMResponse方法（core-engine）
+5. **阶段5**：更新AI_Ask模板文件（\_system/config/）
+6. **阶段6**：更新监控处理器（core-engine）
+7. **阶段7**：清理依赖metrics的代码（全部包）
+8. **阶段8**：实现规则引擎基础检查（core-engine）
+9. **阶段9**：集成ExitDecisionEngine到AiAskAction（core-engine）
+10. **阶段10**：更新YAML脚本配置格式（scripts/）
+11. **阶段11**：完整端到端测试（全部包）
+12. **阶段12**：文档更新（docs/）
+
+## 7. 风险与缓解
+
+| 风险                        | 缓解措施                   |
+| --------------------------- | -------------------------- |
+| 一次性升级导致测试失败      | 每个任务包含测试，逐步验证 |
+| LLM输出格式变化影响现有逻辑 | 保持JSON解析的重试机制     |
+| 向后兼容性问题              | 更新所有引用metrics的代码  |
+| 模板验证失败                | 开发环境自动验证模板完整性 |
+
+## 8. 验收标准
+
+- [ ] 所有单元测试通过
+- [ ] 所有端到端测试通过
+- [ ] TypeScript类型检查无错误
+- [ ] 现有YAML脚本继续正常工作
+- [ ] LLM输出格式符合新规范
+- [ ] 规则引擎正确处理硬性条件
