@@ -21,7 +21,7 @@
 
 import path from 'path';
 
-import { VariableScope } from '@heartrule/shared-types';
+import { VariableScope, type EnhancedAskLLMOutput, type ExitCriteria } from '@heartrule/shared-types';
 
 import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager, TemplateResolver } from '../../engines/prompt-template/index.js';
@@ -35,33 +35,7 @@ import type {
   ExitReason,
 } from './base-action.js';
 
-interface AskLLMOutput {
-  // 新格式字段
-  content?: string;
-  EXIT: string;
-  BRIEF?: string;
-  metrics?: ActionMetrics; // 精细化状态指标
-  progress_suggestion?: ProgressSuggestion; // 进度建议
-  safety_risk?: {
-    detected: boolean;
-    risk_type: string | null;
-    confidence: 'high' | 'medium' | 'low';
-    reason: string | null;
-  };
-  metadata?: {
-    emotional_tone?: string;
-    crisis_signal?: boolean;
-    style_adaptation?: {
-      user_reply_length: number;
-      suggested_style: 'open' | 'choice' | 'example_guided';
-      style_used: 'open' | 'choice' | 'example_guided' | 'mixed';
-      adaptation_reason: string;
-    };
-  };
 
-  // 兼容旧格式：支持动态的 ai_role 字段
-  [key: string]: any;
-}
 
 /**
  * 模板类型枚举
@@ -339,7 +313,7 @@ export class AiAskAction extends BaseAction {
   /**
    * 从 JSON 中提取变量
    */
-  private extractVariablesFromJson(llmOutput: AskLLMOutput): Record<string, any> {
+  private extractVariablesFromJson(llmOutput: EnhancedAskLLMOutput): Record<string, any> {
     const extractedVariables: Record<string, any> = {};
     const outputConfig = this.getConfig('output', []);
 
@@ -593,7 +567,7 @@ ${historyText}
    * 解析多轮JSON输出（支持3次重试机制）
    */
   private parseMultiRoundOutput(rawResponse: string): {
-    output: AskLLMOutput;
+    output: EnhancedAskLLMOutput;
     cleanedResponse: string;
     parseError?: {
       retryCount: number;
@@ -617,7 +591,7 @@ ${historyText}
 
       try {
         cleanedResponse = this.applyParseStrategy(rawResponse, strategy);
-        const output = JSON.parse(cleanedResponse) as AskLLMOutput;
+        const output = JSON.parse(cleanedResponse) as EnhancedAskLLMOutput;
 
         // 解析成功，记录日志
         if (parseAttempt > 1) {
@@ -704,13 +678,14 @@ ${historyText}
   /**
    * 获取默认Ask输出（解析失败时降级）
    */
-  private getDefaultAskOutput(rawResponse: string): AskLLMOutput {
+  private getDefaultAskOutput(rawResponse: string): EnhancedAskLLMOutput {
     return {
       content: rawResponse.trim(),
-      EXIT: 'NO',
+      assessment: 'JSON解析失败，使用默认评估',
+      progress: '进度评估不可用',
+      EXIT: 'false',
       BRIEF: 'LLM输出JSON解析失败',
-      metrics: this.getDefaultMetrics(),
-      progress_suggestion: 'continue_needed',
+      crisis_detected: false,
     };
   }
 
@@ -729,7 +704,7 @@ ${historyText}
   /**
    * 提取metrics字段，填充缺失值
    */
-  private extractMetrics(llmOutput: AskLLMOutput): ActionMetrics {
+  private extractMetrics(llmOutput: EnhancedAskLLMOutput): ActionMetrics {
     const metrics = llmOutput.metrics || {};
     const defaultMetrics = this.getDefaultMetrics();
 
@@ -745,7 +720,7 @@ ${historyText}
   /**
    * 提取progress_suggestion，验证合法性
    */
-  private extractProgressSuggestion(llmOutput: AskLLMOutput): ProgressSuggestion {
+  private extractProgressSuggestion(llmOutput: EnhancedAskLLMOutput): ProgressSuggestion {
     const suggestion = llmOutput.progress_suggestion;
     const validSuggestions: ProgressSuggestion[] = [
       'continue_needed',
