@@ -21,8 +21,13 @@
 
 import path from 'path';
 
-import { VariableScope, type EnhancedAskLLMOutput } from '@heartrule/shared-types';
+import {
+  VariableScope,
+  type EnhancedAskLLMOutput,
+  type ExitCriteria,
+} from '@heartrule/shared-types';
 
+import { ExitDecisionEngine } from '../../engines/exit-decision/index.js';
 import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager, TemplateResolver } from '../../engines/prompt-template/index.js';
 
@@ -43,11 +48,13 @@ export class AiAskAction extends BaseAction {
   private templateManager: PromptTemplateManager;
   private templateResolver: TemplateResolver;
   private templateType: AskTemplateType;
+  private exitDecisionEngine: ExitDecisionEngine;
 
   constructor(actionId: string, config: Record<string, any>, llmOrchestrator?: LLMOrchestrator) {
     super(actionId, config);
     this.maxRounds = this.getConfig('max_rounds', 3);
     this.llmOrchestrator = llmOrchestrator;
+    this.exitDecisionEngine = new ExitDecisionEngine();
 
     // 计算模板路径
     const templateBasePath = this.resolveTemplatePath();
@@ -152,24 +159,38 @@ export class AiAskAction extends BaseAction {
       ? JSON.parse(this.cleanJsonOutput(llmResult.metadata.llmRawOutput))
       : {};
 
-    // 使用统一的退出决策方法
-    const exitDecision = this.evaluateExitCondition(context, llmOutput);
+    // 使用ExitDecisionEngine进行综合决策
+    const exitCriteria = this.buildExitCriteriaFromConfig();
+    const decisionContext = {
+      currentRound: this.currentRound,
+      totalTokens: this.calculateTokensUsed(context),
+      estimatedCost: this.estimateCost(context),
+      userInputLength: (userInput || '').length,
+      silentRounds: this.calculateSilentRounds(context, userInput),
+      collectedVariables: this.getCollectedVariables(context),
+      requiredVariables: exitCriteria.required_variables || [],
+      llmOutput: llmOutput as EnhancedAskLLMOutput,
+    };
+
+    const exitDecision = this.exitDecisionEngine.evaluate(exitCriteria, decisionContext);
 
     // 计算 exit_reason
     let exitReason: ExitReason | undefined;
-    if (this.currentRound >= this.maxRounds) {
+    if (exitDecision.source === 'rules' && exitDecision.ruleExit) {
       exitReason = 'max_rounds_reached';
-    } else if (exitDecision.should_exit && exitDecision.decision_source === 'exit_flag') {
-      exitReason = 'exit_criteria_met';
-    } else if (llmOutput.assessment?.includes('阻抗')) {
-      exitReason = 'user_blocked';
-    } else if (llmOutput.assessment?.includes('偏题')) {
-      exitReason = 'off_topic';
+    } else if (exitDecision.source === 'llm' && exitDecision.llmExit) {
+      if (llmOutput.assessment?.includes('阻抗')) {
+        exitReason = 'user_blocked';
+      } else if (llmOutput.assessment?.includes('偏题')) {
+        exitReason = 'off_topic';
+      } else {
+        exitReason = 'exit_criteria_met';
+      }
     }
 
     console.log(`[AiAskAction] 🎯 Exit decision:`, exitDecision, `exit_reason:`, exitReason);
 
-    if (exitDecision.should_exit) {
+    if (exitDecision.shouldExit) {
       console.log(`[AiAskAction] ✅ Decided to exit: ${exitDecision.reason}`);
       const finalResult = await this.finishAction(context, userInput);
       return {
@@ -177,6 +198,7 @@ export class AiAskAction extends BaseAction {
         metadata: {
           ...finalResult.metadata,
           exit_reason: exitReason,
+          exit_decision: exitDecision,
         },
       };
     }
@@ -915,5 +937,51 @@ ${historyText}
         },
       };
     }
+  }
+
+  private buildExitCriteriaFromConfig(): ExitCriteria {
+    return {
+      max_rounds: this.getConfig('max_rounds'),
+      max_tokens: this.getConfig('max_tokens'),
+      max_cost: this.getConfig('max_cost'),
+      required_variables: this.getConfig('output')
+        ?.map((v: any) => v.get)
+        .filter(Boolean),
+      min_response_length: this.getConfig('min_response_length'),
+      max_silence_rounds: this.getConfig('max_silence_rounds'),
+      understanding_threshold: this.getConfig('understanding_threshold'),
+      has_questions: this.getConfig('has_questions'),
+      min_rounds: this.getConfig('min_rounds'),
+      custom_conditions: this.getConfig('custom_conditions'),
+    };
+  }
+
+  private calculateTokensUsed(context: ActionContext): number {
+    const historyText = context.conversationHistory.map((msg) => msg.content).join(' ');
+    return Math.ceil(historyText.length / 4);
+  }
+
+  private estimateCost(context: ActionContext): number {
+    const tokens = this.calculateTokensUsed(context);
+    return (tokens / 1000) * 0.0015;
+  }
+
+  private calculateSilentRounds(context: ActionContext, userInput?: string | null): number {
+    if (!userInput || userInput.trim().length < 5) {
+      return (context.metadata?.silentRounds || 0) + 1;
+    }
+    return 0;
+  }
+
+  private getCollectedVariables(context: ActionContext): string[] {
+    const outputConfig = this.getConfig('output', []);
+    return outputConfig
+      .map((v: any) => v.get)
+      .filter((name: string) => {
+        const position = { phaseId: '', topicId: '', actionId: this.actionId };
+        const value =
+          context.scopeResolver?.resolveVariable(name, position)?.value || context.variables[name];
+        return value !== undefined && value !== null && value !== '';
+      });
   }
 }
