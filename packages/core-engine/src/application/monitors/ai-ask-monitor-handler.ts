@@ -43,19 +43,17 @@ export class AiAskMonitorHandler extends BaseMonitorHandler {
   }
 
   /**
-   * 解析并验证metrics
+   * 解析并验证assessment和progress
    */
-  parseMetrics(result: ActionResult): ActionMetrics {
-    if (!result.metrics) {
-      console.warn('[AiAskMonitorHandler] ActionResult缺少metrics字段');
-      return {};
-    }
+  parseMetrics(result: ActionResult): Record<string, any> {
+    const assessment = result.metadata?.assessment || '';
+    const progress = result.metadata?.progress || '';
 
     return {
-      information_completeness: result.metrics.information_completeness || '',
-      user_engagement: result.metrics.user_engagement || '',
-      emotional_intensity: result.metrics.emotional_intensity || '',
-      reply_relevance: result.metrics.reply_relevance || '',
+      assessment,
+      progress,
+      brief: result.metadata?.brief || '',
+      shouldExit: result.metadata?.shouldExit || false,
     };
   }
 
@@ -134,18 +132,17 @@ export class AiAskMonitorHandler extends BaseMonitorHandler {
    * 构建监控变量
    */
   private buildMonitorVariables(
-    metrics: ActionMetrics,
+    metrics: Record<string, any>,
     context: MonitorContext
   ): Record<string, string> {
     const vars: Record<string, string> = {
       current_round: context.currentRound.toString(),
       max_rounds: context.maxRounds.toString(),
       target_variables: this.extractTargetVariables(context),
-      information_completeness: metrics.information_completeness || '',
-      user_engagement: metrics.user_engagement || '',
-      emotional_intensity: metrics.emotional_intensity || '',
-      reply_relevance: metrics.reply_relevance || '',
-      progress_suggestion: context.actionResult.progress_suggestion || '',
+      assessment: metrics.assessment || '',
+      progress: metrics.progress || '',
+      brief: metrics.brief || '',
+      shouldExit: String(metrics.shouldExit || false),
     };
 
     // Topic策略配置（可选）
@@ -153,12 +150,6 @@ export class AiAskMonitorHandler extends BaseMonitorHandler {
       vars.min_completeness_requirement = context.topicStrategy.min_completeness_requirement || '';
       vars.retry_strategy = context.topicStrategy.retry_strategy || '';
       vars.max_retry_count = context.topicStrategy.max_retry_count?.toString() || '';
-    }
-
-    // 历史趋势（可选）
-    if (context.metricsHistory && context.metricsHistory.length > 0) {
-      vars.engagement_trend = this.buildEngagementTrend(context.metricsHistory);
-      vars.emotion_trend = this.buildEmotionTrend(context.metricsHistory);
     }
 
     return vars;
@@ -175,31 +166,5 @@ export class AiAskMonitorHandler extends BaseMonitorHandler {
 
     const varNames = outputConfig.map((v: any) => v.get || '').filter(Boolean);
     return varNames.join(', ') || '未指定';
-  }
-
-  /**
-   * 构建投入度趋势
-   */
-  private buildEngagementTrend(history: MonitorContext['metricsHistory']): string {
-    if (!history || history.length === 0) return '';
-
-    const recent = history.slice(-3);
-    const trends = recent.map((h) => `第${h.round}轮: ${h.metrics.user_engagement || '未评估'}`);
-
-    return trends.join(' → ');
-  }
-
-  /**
-   * 构建情绪趋势
-   */
-  private buildEmotionTrend(history: MonitorContext['metricsHistory']): string {
-    if (!history || history.length === 0) return '';
-
-    const recent = history.slice(-3);
-    const trends = recent.map(
-      (h) => `第${h.round}轮: ${h.metrics.emotional_intensity || '未评估'}`
-    );
-
-    return trends.join(' → ');
   }
 }
