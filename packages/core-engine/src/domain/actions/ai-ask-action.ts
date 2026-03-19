@@ -21,21 +21,13 @@
 
 import path from 'path';
 
-import { VariableScope, type EnhancedAskLLMOutput, type ExitCriteria } from '@heartrule/shared-types';
+import { VariableScope, type EnhancedAskLLMOutput } from '@heartrule/shared-types';
 
 import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager, TemplateResolver } from '../../engines/prompt-template/index.js';
 
 import { BaseAction } from './base-action.js';
-import type {
-  ActionContext,
-  ActionResult,
-  ActionMetrics,
-  ProgressSuggestion,
-  ExitReason,
-} from './base-action.js';
-
-
+import type { ActionContext, ActionResult, ExitReason } from './base-action.js';
 
 /**
  * 模板类型枚举
@@ -316,18 +308,16 @@ export class AiAskAction extends BaseAction {
   private extractVariablesFromJson(llmOutput: EnhancedAskLLMOutput): Record<string, any> {
     const extractedVariables: Record<string, any> = {};
     const outputConfig = this.getConfig('output', []);
+    const llmOutputRecord = llmOutput as unknown as Record<string, unknown>;
 
     if (outputConfig.length > 0) {
       for (const varConfig of outputConfig) {
         const varName = varConfig.get;
         if (!varName) continue;
 
-        if (
-          llmOutput[varName] !== undefined &&
-          llmOutput[varName] !== null &&
-          llmOutput[varName] !== ''
-        ) {
-          extractedVariables[varName] = llmOutput[varName];
+        const value = llmOutputRecord[varName];
+        if (value !== undefined && value !== null && value !== '') {
+          extractedVariables[varName] = value;
           console.log(`[AiAskAction] ✅ Extracted variable from JSON: ${varName}`);
         }
       }
@@ -690,60 +680,6 @@ ${historyText}
   }
 
   /**
-   * 获取默认metrics（解析失败时）
-   */
-  private getDefaultMetrics(): ActionMetrics {
-    return {
-      information_completeness: 'LLM输出JSON解析失败，无法评估',
-      user_engagement: 'LLM输出JSON解析失败，无法评估',
-      emotional_intensity: 'LLM输出JSON解析失败，无法评估',
-      reply_relevance: 'LLM输出JSON解析失败，无法评估',
-    };
-  }
-
-  /**
-   * 提取metrics字段，填充缺失值
-   */
-  private extractMetrics(llmOutput: EnhancedAskLLMOutput): ActionMetrics {
-    const metrics = llmOutput.metrics || {};
-    const defaultMetrics = this.getDefaultMetrics();
-
-    return {
-      information_completeness:
-        metrics.information_completeness || defaultMetrics.information_completeness,
-      user_engagement: metrics.user_engagement || defaultMetrics.user_engagement,
-      emotional_intensity: metrics.emotional_intensity || defaultMetrics.emotional_intensity,
-      reply_relevance: metrics.reply_relevance || defaultMetrics.reply_relevance,
-    };
-  }
-
-  /**
-   * 提取progress_suggestion，验证合法性
-   */
-  private extractProgressSuggestion(llmOutput: EnhancedAskLLMOutput): ProgressSuggestion {
-    const suggestion = llmOutput.progress_suggestion;
-    const validSuggestions: ProgressSuggestion[] = [
-      'continue_needed',
-      'completed',
-      'blocked',
-      'off_topic',
-    ];
-
-    if (suggestion && validSuggestions.includes(suggestion as ProgressSuggestion)) {
-      return suggestion as ProgressSuggestion;
-    }
-
-    // 默认返回 continue_needed
-    if (suggestion && !validSuggestions.includes(suggestion as ProgressSuggestion)) {
-      console.warn(
-        `[AiAskAction] 非法的progress_suggestion值: ${suggestion}，使用默认值: continue_needed`
-      );
-    }
-
-    return 'continue_needed';
-  }
-
-  /**
    * 注册 output 变量到 scopeResolver
    */
   private registerOutputVariables(context: ActionContext): void {
@@ -944,30 +880,20 @@ ${historyText}
       // 🔧 立即提取 output 中配置的变量
       const extractedVariables = this.extractVariablesFromJson(llmOutput);
 
-      // 提取 metrics 和 progress_suggestion
-      const metrics = this.extractMetrics(llmOutput);
-      const progressSuggestion = this.extractProgressSuggestion(llmOutput);
-
       // 判断是否退出
       const shouldExit = llmOutput.EXIT === 'true';
 
-      // 提取 AI 消息：优先使用 content 字段（新格式），兼容旧格式
-      const aiRole = this.getConfig('ai_role', '咨询师');
-      const aiMessage = llmOutput.content || llmOutput[aiRole] || llmOutput.response || '';
+      // 提取 AI 消息：优先使用 content 字段（新格式）
+      const aiMessage = llmOutput.content || '';
 
-      // 提取安全风险信息
-      const safetyRisk = llmOutput.safety_risk || {
-        detected: false,
-        risk_type: null,
-        confidence: 'high',
-        reason: null,
-      };
+      // 检查危机信号
+      const crisisDetected = llmOutput.crisis_detected || false;
 
-      // 提取元数据
-      const llmMetadata = llmOutput.metadata || {};
-
-      // 提取话术风格适配信息
-      const styleAdaptation = llmMetadata.style_adaptation;
+      // 如果检测到明显危机，启动危机处理流程
+      if (crisisDetected) {
+        // TODO: 同步启动危机处理LLM，评估是否修订回复
+        console.warn('[AiAskAction] ⚠️ 危机信号检测到，启动危机处理流程');
+      }
 
       return {
         success: true,
@@ -975,25 +901,23 @@ ${historyText}
         aiMessage,
         extractedVariables:
           Object.keys(extractedVariables).length > 0 ? extractedVariables : undefined,
-        metrics, // 新增：精细化状态指标
-        progress_suggestion: progressSuggestion, // 新增：进度建议
         debugInfo: llmResult.debugInfo,
         metadata: {
           actionType: AiAskAction.actionType,
           shouldExit,
           brief: llmOutput.BRIEF,
+          assessment: llmOutput.assessment,
+          progress: llmOutput.progress,
+          crisis_detected: crisisDetected,
           currentRound: this.currentRound,
           llmRawOutput: parseResult.cleanedResponse,
           template_path: resolution.path,
           template_layer: resolution.layer,
           template_scheme: resolution.scheme,
           safety_check: safetyCheck,
-          safety_risk: safetyRisk,
-          llm_metadata: llmMetadata,
-          style_adaptation: styleAdaptation, // 新增：话术风格适配信息
-          parseError: (parseResult.parseError?.retryCount || 0) > 1, // 是否发生过解析失败
-          parseRetryCount: parseResult.parseError?.retryCount || 0, // 重试次数
-          parseErrorDetails: parseResult.parseError, // 解析错误详情
+          parseError: (parseResult.parseError?.retryCount || 0) > 1,
+          parseRetryCount: parseResult.parseError?.retryCount || 0,
+          parseErrorDetails: parseResult.parseError,
         },
       };
     }
