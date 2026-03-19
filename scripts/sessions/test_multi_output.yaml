@@ -24,30 +24,34 @@ session:
               action_id: "ask_name"
               config:
                 question_template: "你好，请问怎么称呼你？"
-                tone: "亲切、自然"
+                tone: "亲切，自然"
                 exit: "用户提供了姓名或昵称"
                 required: true
                 max_rounds: 3
                 output:
                   - get: "用户名"
                     define: "从用户回复中提取姓名或昵称"
+                    require: "关键"
             
             # 示例2：多个变量（使用 output_list）
             - action_type: "ai_ask"
               action_id: "ask_symptoms"
               config:
                 question_template: "请详细描述一下你的症状，包括症状表现、持续时间和严重程度"
-                tone: "温和、专业、关切"
+                tone: "温和，专业、关切"
                 exit: "用户提供了症状描述、持续时间和严重程度的信息"
                 required: true
                 max_rounds: 5
                 output:
                   - get: "症状描述"
                     define: "用户描述的主要症状表现"
+                    require: "关键"
                   - get: "持续时间"
                     define: "症状持续的时间长度"
+                    require: "重要"
                   - get: "严重程度"
                     define: "症状严重程度的评估（轻度/中度/重度）"
+                    require: "重要"
             
             # 示例3：更多变量
             - action_type: "ai_ask"
@@ -61,14 +65,19 @@ session:
                 output:
                   - get: "年龄"
                     define: "用户的年龄"
+                    require: "重要"
                   - get: "职业"
                     define: "用户的职业或工作情况"
+                    require: "可选"
                   - get: "教育背景"
                     define: "用户的学历和教育经历"
+                    require: "可选"
                   - get: "家庭状况"
                     define: "婚姻状况、家庭成员等"
+                    require: "可选"
                   - get: "生活环境"
-                    # 这个字段没有 define，测试兼容性
+                    define: "用户的居住环境"
+                    require: "可选"
             
             # 使用提取的变量
             - action_type: "ai_say"

@@ -84,6 +84,8 @@ session:
                 extraction_prompt: "提取用户描述的主要问题和困扰"
                 required: true
                 max_rounds: 5
+                max_tokens: 2000
+                required_variables: ['chief_complaint']
             
             - action_type: "ai_think"
               action_id: "analyze_complaint"
