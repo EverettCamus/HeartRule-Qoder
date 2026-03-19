@@ -147,10 +147,6 @@ export class AiAskAction extends BaseAction {
     // 调用 LLM 生成下一轮问题或决定退出
     const llmResult = await this.generateQuestionFromTemplate(context, AskTemplateType.MULTI_ROUND);
 
-    // 提取 metrics 和 progress_suggestion（从 llmResult 中）
-    const metrics = llmResult.metrics;
-    const progressSuggestion = llmResult.progress_suggestion;
-
     // 提取 LLM 输出的原始数据
     const llmOutput = llmResult.metadata?.llmRawOutput
       ? JSON.parse(this.cleanJsonOutput(llmResult.metadata.llmRawOutput))
@@ -165,9 +161,9 @@ export class AiAskAction extends BaseAction {
       exitReason = 'max_rounds_reached';
     } else if (exitDecision.should_exit && exitDecision.decision_source === 'exit_flag') {
       exitReason = 'exit_criteria_met';
-    } else if (progressSuggestion === 'blocked') {
+    } else if (llmOutput.assessment?.includes('阻抗')) {
       exitReason = 'user_blocked';
-    } else if (progressSuggestion === 'off_topic') {
+    } else if (llmOutput.assessment?.includes('偏题')) {
       exitReason = 'off_topic';
     }
 
@@ -178,8 +174,6 @@ export class AiAskAction extends BaseAction {
       const finalResult = await this.finishAction(context, userInput);
       return {
         ...finalResult,
-        metrics, // 保留metrics
-        progress_suggestion: progressSuggestion, // 保留progress_suggestion
         metadata: {
           ...finalResult.metadata,
           exit_reason: exitReason,
