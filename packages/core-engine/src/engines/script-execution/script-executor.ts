@@ -323,6 +323,10 @@ export class ScriptExecutor {
       console.log('[ScriptExecutor] 🔍 Before resumeCurrentActionIfNeeded:', {
         hasCurrentAction: !!executionState.currentAction,
         currentActionId: executionState.currentAction?.actionId,
+        conversationHistoryLength: executionState.conversationHistory.length,
+        conversationHistoryContent: executionState.conversationHistory.map(
+          (m) => `${m.role}: ${m.content.substring(0, 30)}...`
+        ),
       });
       const shouldContinue = await this.resumeCurrentActionIfNeeded(
         executionState,
@@ -1054,6 +1058,11 @@ export class ScriptExecutor {
     sessionId: string,
     userInput?: string | null
   ): Promise<ActionResult> {
+    console.log('[ScriptExecutor] 📝 continueAction called:', {
+      userInput: userInput?.substring(0, 50),
+      conversationHistoryLength: executionState.conversationHistory.length,
+    });
+
     // Update conversation history (user input)
     if (userInput) {
       executionState.conversationHistory.push({

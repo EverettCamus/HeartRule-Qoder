@@ -20,8 +20,8 @@ import {
   scriptFiles,
   type NewVariable,
 } from '../db/schema.js';
-import { buildDetailedError } from '../utils/error-handler.js';
 import { container } from '../ioc/container.js';
+import { buildDetailedError } from '../utils/error-handler.js';
 
 import { DatabaseTemplateProvider } from './database-template-provider.js';
 
@@ -236,8 +236,8 @@ export class SessionManager {
     });
 
     console.log(`[SessionManager] 📋 Loaded ${history.length} messages from database:`, {
-      aiMessages: history.filter(m => m.role === 'assistant').length,
-      userMessages: history.filter(m => m.role === 'user').length,
+      aiMessages: history.filter((m) => m.role === 'assistant').length,
+      userMessages: history.filter((m) => m.role === 'user').length,
     });
 
     return history.map((m) => ({
@@ -346,6 +346,10 @@ export class SessionManager {
       actionIdx: executionState.currentActionIdx,
       hasActionState: !!executionState.metadata.actionState,
       hasLastActionRoundInfo: !!executionState.metadata.lastActionRoundInfo,
+      conversationHistoryLength: executionState.conversationHistory.length,
+      conversationHistoryContent: executionState.conversationHistory.map(
+        (m) => `${m.role}: ${m.content.substring(0, 30)}...`
+      ),
       metadata: executionState.metadata,
     });
 
@@ -539,14 +543,15 @@ export class SessionManager {
           if (!sourceActionId) return undefined;
           // 从脚本中查找 sourceActionId 对应的 actionType
           try {
-            const scriptObj = typeof script.scriptContent === 'string' 
-              ? yaml.parse(script.scriptContent) 
-              : script.scriptContent;
+            const scriptObj =
+              typeof script.scriptContent === 'string'
+                ? yaml.parse(script.scriptContent)
+                : script.scriptContent;
             const sessionData = scriptObj.session || scriptObj;
             for (const phase of sessionData.phases) {
               for (const topic of phase.topics) {
-                const action = topic.actions.find((a: any) => 
-                  (a.action_id === sourceActionId || a.id === sourceActionId)
+                const action = topic.actions.find(
+                  (a: any) => a.action_id === sourceActionId || a.id === sourceActionId
                 );
                 if (action) return action.action_type || action.type;
               }
@@ -739,7 +744,13 @@ export class SessionManager {
       await this.updateSessionState(sessionId, executionState, globalVariables);
 
       // 7. 构建并返回响应
-      const result = this.buildSessionResponse(executionState, session, script, globalVariables, false);
+      const result = this.buildSessionResponse(
+        executionState,
+        session,
+        script,
+        globalVariables,
+        false
+      );
       console.log('[SessionManager] 🏁 initializeSession completed:', result);
       return result;
     } catch (error) {
@@ -764,7 +775,7 @@ export class SessionManager {
 
       // 3. 保存用户消息（先保存，再加载，确保 conversationHistory 完整）
       await this.saveUserMessage(sessionId, userInput);
-      
+
       // 4. 加载对话历史（包含刚保存的用户消息）
       const conversationHistory = await this.loadConversationHistory(sessionId);
 
@@ -775,9 +786,9 @@ export class SessionManager {
         conversationHistory
       );
 
-      // 6. 执行脚本（注意：userInput 已经保存到 conversationHistory，不再重复传递）
+      // 6. 执行脚本（传递 userInput 以便 continueAction 正确处理）
       const prevHistoryLength = executionState.conversationHistory.length;
-      executionState = await this.executeScript(script, sessionId, executionState, null);
+      executionState = await this.executeScript(script, sessionId, executionState, userInput);
 
       // 7. 保存执行结果
       await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
@@ -785,7 +796,13 @@ export class SessionManager {
       await this.updateSessionState(sessionId, executionState, globalVariables);
 
       // 8. 构建并返回响应
-      const result = this.buildSessionResponse(executionState, session, script, globalVariables, true);
+      const result = this.buildSessionResponse(
+        executionState,
+        session,
+        script,
+        globalVariables,
+        true
+      );
       console.log('[SessionManager] 🏁 processUserInput completed:', {
         aiMessage: result.aiMessage,
         aiMessageLength: result.aiMessage?.length || 0,
