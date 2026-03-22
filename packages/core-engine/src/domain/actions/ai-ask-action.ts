@@ -175,10 +175,13 @@ export class AiAskAction extends BaseAction {
     const exitDecision = this.exitDecisionEngine.evaluate(exitCriteria, decisionContext);
 
     // 计算 exit_reason
+    // 优先级：rules > combined > llm（硬性规则优先）
     let exitReason: ExitReason | undefined;
-    if (exitDecision.source === 'rules' && exitDecision.ruleExit) {
+    if (exitDecision.ruleExit) {
+      // 规则触发（包括 combined 和 rules 情况）
       exitReason = 'max_rounds_reached';
-    } else if (exitDecision.source === 'llm' && exitDecision.llmExit) {
+    } else if (exitDecision.llmExit) {
+      // 仅 LLM 建议退出
       if (llmOutput.assessment?.includes('阻抗')) {
         exitReason = 'user_blocked';
       } else if (llmOutput.assessment?.includes('偏题')) {

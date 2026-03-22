@@ -1054,14 +1054,10 @@ export class ScriptExecutor {
     sessionId: string,
     userInput?: string | null
   ): Promise<ActionResult> {
-    // Update conversation history (user input)
-    if (userInput) {
-      executionState.conversationHistory.push({
-        role: 'user',
-        content: userInput,
-        actionId: action.actionId,
-      });
-    }
+    // NOTE: Do NOT push userInput to conversationHistory here!
+    // conversationHistory is already loaded from database (via loadConversationHistory)
+    // which includes the user message. Pushing again would cause duplication.
+    // userInput is still passed to action.execute() below for the action's logic.
 
     // Create scope resolver
     let scopeResolver: VariableScopeResolver | undefined;
