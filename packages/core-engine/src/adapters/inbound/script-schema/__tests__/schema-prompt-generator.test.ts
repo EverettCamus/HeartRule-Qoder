@@ -49,7 +49,7 @@ describe('SchemaPromptGenerator', () => {
       const prompt = generator.generatePrompt('ai-ask-config');
 
       expect(prompt).toContain('max_rounds');
-      expect(prompt).toContain('范围1-10');
+      expect(prompt).toContain('范围1-200');
     });
 
     it('应该包含废弃字段警告（ai-ask-config）', () => {
