@@ -46,7 +46,7 @@ export class MonitorOrchestrator {
         actionId,
         actionType,
         currentRound: result.metadata?.currentRound || 1,
-        maxRounds: result.metadata?.maxRounds || 3,
+        maxRounds: result.metadata?.maxRounds || 20,
         actionResult: result,
         metricsHistory: executionState.metadata.actionMetricsHistory || [],
         metadata: {

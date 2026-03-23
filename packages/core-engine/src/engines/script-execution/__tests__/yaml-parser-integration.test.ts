@@ -196,7 +196,7 @@ describe('YAMLParser Schema Validation Integration', () => {
                       action_type: 'ai_ask',
                       action_id: 'ask',
                       config: {
-                        max_rounds: 100, // 超出范围 (1-10)
+                        max_rounds: 250, // 超出范围 (1-200)
                       },
                     },
                   ],

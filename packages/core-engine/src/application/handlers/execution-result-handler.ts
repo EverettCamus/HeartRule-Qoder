@@ -81,7 +81,7 @@ export class ExecutionResultHandler {
       executionState.metadata.actionRoundInfo[executionState.currentAction?.actionId || 'unknown'] =
         {
           currentRound: result.metadata.currentRound,
-          maxRounds: result.metadata.maxRounds || 3,
+          maxRounds: result.metadata.maxRounds || 20,
           lastUpdated: new Date().toISOString(),
         };
     }

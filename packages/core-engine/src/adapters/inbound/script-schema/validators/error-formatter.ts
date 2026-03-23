@@ -324,7 +324,7 @@ export class ErrorFormatter {
         break;
       case 'maximum':
         if (error.schemaPath.includes('max_rounds')) {
-          return `max_rounds: 5  # 范围：1-10`;
+          return `max_rounds: 20  # 范围：1-200`;
         }
         break;
     }

@@ -206,7 +206,7 @@ describe('SchemaValidator', () => {
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
       const errorMessages = result.errors.map((e) => e.message).join(' ');
-      expect(errorMessages).toContain('15');
+      expect(errorMessages).toContain('250');
     });
 
     it('应该检测废弃字段question_template', () => {
