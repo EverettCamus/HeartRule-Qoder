@@ -76,8 +76,8 @@
   "content": "您能再具体说一下这个症状持续多久了吗？",
   "assessment": "## 阻抗分析\n阻抗程度：中等(65分)\n主要表现：回避倾向，回答简短\n\n## 风险识别\n无明显安全风险\n\n## 用户理解\n用户理解程度良好",
   "progress": "## 进度评估\n- [x] 症状描述：已收集详细描述\n- [ ] 持续时间：用户未明确说明\n- [x] 严重程度：已确认中度\n\n## 成本与轮次\n当前轮次：3/5\n建议轮次：还需1-2轮",
-  "EXIT": "false",
-  "BRIEF": "信息不足，需要继续收集持续时间",
+  "exit": "false",
+  "brief": "信息不足，需要继续收集持续时间",
   "crisis_detected": false
 }
 ```
@@ -89,8 +89,8 @@
 | `content`         | string  | AI生成的提问内容（展示给用户）                             |
 | `assessment`      | string  | 综合评估（markdown格式），包含阻抗分析、风险识别、用户理解 |
 | `progress`        | string  | 任务进度说明（markdown格式），包含变量收集状态、成本与轮次 |
-| `EXIT`            | string  | 退出标志（"true" 或 "false"）                              |
-| `BRIEF`           | string  | 退出/继续的简短理由（不超过15个字）                        |
+| `exit`            | string  | 退出标志（"true" 或 "false"）                              |
+| `brief`           | string  | 退出/继续的简短理由（不超过15个字）                        |
 | `crisis_detected` | boolean | **仅明显危机**时为true，触发同步危机处理流程               |
 
 ### 3.3 assessment字段内容
