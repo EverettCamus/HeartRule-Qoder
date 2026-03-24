@@ -45,7 +45,7 @@ export class ActionStateManager {
       actionType: (action.constructor as any).actionType,
       config: action['config'],
       currentRound: action['currentRound'] || 0,
-      maxRounds: action['maxRounds'] || 3,
+      maxRounds: action['maxRounds'] || 20,
     };
   }
 
@@ -59,7 +59,7 @@ export class ActionStateManager {
       actionState.config
     );
     action.currentRound = actionState.currentRound || 0;
-    action.maxRounds = actionState.maxRounds || 3;
+    action.maxRounds = actionState.maxRounds || 20;
     return action;
   }
 

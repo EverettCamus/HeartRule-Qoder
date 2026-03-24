@@ -52,7 +52,7 @@ export class AiAskAction extends BaseAction {
 
   constructor(actionId: string, config: Record<string, any>, llmOrchestrator?: LLMOrchestrator) {
     super(actionId, config);
-    this.maxRounds = this.getConfig('max_rounds', 3);
+    this.maxRounds = this.getConfig('max_rounds', 20);
     this.llmOrchestrator = llmOrchestrator;
     this.exitDecisionEngine = new ExitDecisionEngine();
 

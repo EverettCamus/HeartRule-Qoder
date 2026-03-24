@@ -187,7 +187,7 @@ export abstract class BaseAction {
   constructor(actionId: string, config: Record<string, any>) {
     this.actionId = actionId;
     this.config = config;
-    this.maxRounds = config.maxRounds || config.max_rounds || 5;
+    this.maxRounds = config.maxRounds || config.max_rounds || 20;
     this.exitCriteria = config.exit_criteria || config.exitCriteria;
 
     // 默认退出策略：不支持退出机制（由子类覆盖）
