@@ -10,10 +10,10 @@
  * - Setup session metadata
  */
 
-import type { ActionFactory } from '../actions/action-factory.js';
 import type { BaseAction } from '../../domain/actions/base-action.js';
 import type { TemplateProvider } from '../../engines/prompt-template/template-provider.js';
 import type { ExecutionState } from '../../engines/script-execution/script-executor.js';
+import type { ActionFactory } from '../actions/action-factory.js';
 
 /**
  * Action State Snapshot
@@ -67,13 +67,28 @@ export class ActionStateManager {
    * Restore action state from metadata if exists
    */
   restoreActionIfNeeded(executionState: ExecutionState): void {
+    const savedActionId = executionState.metadata.actionState?.actionId;
+    const currentActionId = executionState.currentActionId;
+
     console.log('[ActionStateManager] 🔍 Checking if action needs restore:', {
       hasActionState: !!executionState.metadata.actionState,
       hasCurrentAction: !!executionState.currentAction,
+      savedActionId,
+      currentActionId,
       actionStateSnapshot: executionState.metadata.actionState,
     });
 
+    // 只有当 actionId 匹配时才恢复
     if (executionState.metadata.actionState && !executionState.currentAction) {
+      if (savedActionId !== currentActionId) {
+        console.log('[ActionStateManager] ⚠️ ActionId mismatch, not restoring:', {
+          savedActionId,
+          currentActionId,
+        });
+        delete executionState.metadata.actionState;
+        return;
+      }
+
       console.log('[ActionStateManager] 🔄 Deserializing action state:', {
         actionId: executionState.metadata.actionState.actionId,
         currentRound: executionState.metadata.actionState.currentRound,
