@@ -497,6 +497,9 @@ export class AiAskAction extends BaseAction {
     // 构建 output_list（多变量输出格式）
     const outputList = this.buildOutputList();
 
+    // 构建已收集变量列表
+    const collectedVariables = this.buildCollectedVariables(context);
+
     console.log(
       `[AiAskAction] 📊 buildSystemVariables: currentRound=${this.currentRound}, maxRounds=${this.maxRounds}`
     );
@@ -511,7 +514,33 @@ export class AiAskAction extends BaseAction {
       output_list: outputList,
       current_round: this.currentRound,
       max_rounds: this.maxRounds,
+      collected_variables: collectedVariables,
     };
+  }
+
+  /**
+   * 构建已收集变量列表
+   */
+  private buildCollectedVariables(context: ActionContext): string {
+    const outputConfig = this.getConfig('output', []);
+    if (outputConfig.length === 0) {
+      return '';
+    }
+
+    const lines: string[] = ['已收集变量：'];
+    for (const varConfig of outputConfig) {
+      const varName = varConfig.get;
+      if (!varName) continue;
+
+      const value = context.variables[varName];
+      if (value !== undefined && value !== null && value !== '') {
+        lines.push(`- ${varName}: ${String(value).substring(0, 50)}`);
+      } else {
+        lines.push(`- ${varName}: (未收集)`);
+      }
+    }
+
+    return lines.join('\n');
   }
 
   /**
