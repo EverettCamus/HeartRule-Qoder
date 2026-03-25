@@ -497,6 +497,10 @@ export class AiAskAction extends BaseAction {
     // 构建 output_list（多变量输出格式）
     const outputList = this.buildOutputList();
 
+    console.log(
+      `[AiAskAction] 📊 buildSystemVariables: currentRound=${this.currentRound}, maxRounds=${this.maxRounds}`
+    );
+
     return {
       time,
       who,
@@ -505,6 +509,8 @@ export class AiAskAction extends BaseAction {
       chat,
       ai_role: aiRole,
       output_list: outputList,
+      current_round: this.currentRound,
+      max_rounds: this.maxRounds,
     };
   }
 
