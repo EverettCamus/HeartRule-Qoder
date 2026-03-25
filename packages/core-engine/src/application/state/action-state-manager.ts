@@ -65,16 +65,35 @@ export class ActionStateManager {
 
   /**
    * Restore action state from metadata if exists
+   * @param executionState 当前执行状态
+   * @param phases 脚本的所有 phases，用于确定正确的 currentActionId
    */
-  restoreActionIfNeeded(executionState: ExecutionState): void {
+  restoreActionIfNeeded(executionState: ExecutionState, phases?: any[]): void {
     const savedActionId = executionState.metadata.actionState?.actionId;
-    const currentActionId = executionState.currentActionId;
+
+    // 如果提供了 phases，从中获取正确的 currentActionId
+    let correctActionId: string | undefined;
+    if (phases && phases.length > 0) {
+      const phase = phases[executionState.currentPhaseIdx];
+      if (phase) {
+        const topic = phase.topics?.[executionState.currentTopicIdx];
+        if (topic) {
+          const actionConfig = topic.actions?.[executionState.currentActionIdx];
+          if (actionConfig) {
+            correctActionId = actionConfig.action_id;
+          }
+        }
+      }
+    }
+    // 如果没有提供 phases，使用 executionState 中的 currentActionId
+    const currentActionId = correctActionId ?? executionState.currentActionId;
 
     console.log('[ActionStateManager] 🔍 Checking if action needs restore:', {
       hasActionState: !!executionState.metadata.actionState,
       hasCurrentAction: !!executionState.currentAction,
       savedActionId,
       currentActionId,
+      correctActionId,
       actionStateSnapshot: executionState.metadata.actionState,
     });
 

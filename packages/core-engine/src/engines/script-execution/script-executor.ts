@@ -370,7 +370,7 @@ export class ScriptExecutor {
       projectId,
       templateProvider
     );
-    this.actionStateManager.restoreActionIfNeeded(executionState);
+    this.actionStateManager.restoreActionIfNeeded(executionState, phases);
 
     console.log('[ScriptExecutor] 📊 After restoreActionIfNeeded:', {
       hasCurrentAction: !!executionState.currentAction,
