@@ -26,7 +26,7 @@ describe('RuleBasedEvaluator', () => {
 
       const result = evaluator.evaluate(criteria, context);
       expect(result.shouldExit).toBe(true);
-      expect(result.triggeredRules).toContain('max_rounds: 5 >= 3');
+      expect(result.triggeredRules).toContain('max_rounds: 5 > 3');
     });
 
     it('should exit when max_tokens exceeded', () => {

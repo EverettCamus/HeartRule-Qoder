@@ -173,7 +173,7 @@ export function createActionWithInvalidEnum() {
  */
 export function createActionWithOutOfRangeValue() {
   const action = createValidAction('ai_ask');
-  action.config.max_rounds = 15; // 超过最大值10
+  action.config.max_rounds = 250; // 超过最大值200
   return action;
 }
 

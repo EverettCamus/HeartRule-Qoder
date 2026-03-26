@@ -151,7 +151,7 @@ describe('SchemaValidator', () => {
         action_id: 'ask_age',
         config: {
           content: '请问年龄？',
-          max_rounds: 15, // 超过最大值 10
+          max_rounds: 250, // 超过最大值 200
         },
       };
 

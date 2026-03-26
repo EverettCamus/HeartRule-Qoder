@@ -20,8 +20,8 @@ export class RuleBasedEvaluator {
   evaluate(criteria: ExitCriteria, context: RuleContext): RuleEvaluationResult {
     const triggeredRules: string[] = [];
 
-    if (criteria.max_rounds && context.currentRound >= criteria.max_rounds) {
-      triggeredRules.push(`max_rounds: ${context.currentRound} >= ${criteria.max_rounds}`);
+    if (criteria.max_rounds && context.currentRound > criteria.max_rounds) {
+      triggeredRules.push(`max_rounds: ${context.currentRound} > ${criteria.max_rounds}`);
     }
 
     if (criteria.max_tokens && context.totalTokens >= criteria.max_tokens) {

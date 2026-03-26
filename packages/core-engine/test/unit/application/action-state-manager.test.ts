@@ -11,11 +11,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { DefaultActionFactory } from '../../../src/application/actions/action-factory.js';
+import type { ILLMProvider } from '../../../src/application/ports/outbound/llm-provider.port.js';
+import { ActionStateManager } from '../../../src/application/state/action-state-manager.js';
 import type { BaseAction } from '../../../src/domain/actions/base-action.js';
 import { LLMOrchestrator } from '../../../src/engines/llm-orchestration/orchestrator.js';
-import type { ILLMProvider } from '../../../src/application/ports/outbound/llm-provider.port.js';
 import { ScriptExecutor } from '../../../src/engines/script-execution/script-executor.js';
-import { ActionStateManager } from '../../../src/application/state/action-state-manager.js';
 
 describe('Phase 6 重构：ActionStateManager 状态管理能力分离', () => {
   let actionFactory: DefaultActionFactory;
@@ -41,12 +41,14 @@ describe('Phase 6 重构：ActionStateManager 状态管理能力分离', () => {
           timestamp: new Date().toISOString(),
         },
       }),
-      streamText: vi.fn().mockReturnValue((async function* () {
-        yield 'mock';
-        yield ' response';
-      })()),
+      streamText: vi.fn().mockReturnValue(
+        (async function* () {
+          yield 'mock';
+          yield ' response';
+        })()
+      ),
     };
-    
+
     mockLLM = new LLMOrchestrator(mockProvider);
     actionFactory = new DefaultActionFactory(mockLLM);
     stateManager = new ActionStateManager(actionFactory);
@@ -100,6 +102,7 @@ describe('Phase 6 重构：ActionStateManager 状态管理能力分离', () => {
           },
         },
         currentAction: null,
+        currentActionId: 'test-action',
       } as any;
 
       stateManager.restoreActionIfNeeded(executionState);
