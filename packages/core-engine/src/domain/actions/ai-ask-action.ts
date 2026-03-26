@@ -151,6 +151,9 @@ export class AiAskAction extends BaseAction {
       };
     }
 
+    // 递增轮次，确保 LLM 看到正确的当前轮次
+    this.currentRound += 1;
+
     // 调用 LLM 生成下一轮问题或决定退出
     const llmResult = await this.generateQuestionFromTemplate(context, AskTemplateType.MULTI_ROUND);
 
@@ -207,7 +210,6 @@ export class AiAskAction extends BaseAction {
     }
 
     // 继续追问
-    this.currentRound += 1;
     return {
       ...llmResult,
       completed: false,
