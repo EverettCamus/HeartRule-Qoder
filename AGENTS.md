@@ -18,6 +18,39 @@ packages/
 └── script-editor/   # React-based script editor UI
 ```
 
+## Directory Conventions
+
+### Template Directories
+
+| Directory                                | Purpose                          | Notes                                   |
+| ---------------------------------------- | -------------------------------- | --------------------------------------- |
+| `config/prompts/_system/config/default/` | Default templates (dev source)   | Project initialization copies from here |
+| `config/prompts/_system/config/custom/`  | Custom scheme templates          | Extensible per project                  |
+| `_system/config/default/`                | Database virtual path (contract) | Documentation reference only            |
+
+### Path Mapping
+
+- **Development path**: `config/prompts/_system/config/default/ai_ask_v1.md`
+- **Database virtual path**: `_system/config/default/ai_ask_v1.md`
+
+**Note:** Database virtual path prefix `_system/config/default/` is a naming contract and should not be changed for backward compatibility.
+
+### Script Directories
+
+| Directory                | Purpose               | Notes                               |
+| ------------------------ | --------------------- | ----------------------------------- |
+| `scripts/`               | YAML script storage   | Sessions, consciousness, techniques |
+| `scripts/sessions/`      | Session scripts       | Main consultation flows             |
+| `scripts/consciousness/` | Consciousness scripts | Detection triggers config           |
+| `scripts/techniques/`    | Technique scripts     | Therapeutic techniques              |
+
+### Template Files
+
+| Directory                  | Purpose              | Notes                                     |
+| -------------------------- | -------------------- | ----------------------------------------- |
+| `templates/consciousness/` | LLM prompt templates | Paired with scripts/consciousness/\*.yaml |
+| `_system/config/default/`  | Action templates     | ai_ask, ai_say, monitor versions          |
+
 ## Commands
 
 ### Installation & Development
