@@ -155,6 +155,84 @@ describe('AI_Ask max_rounds Semantics', () => {
     });
   });
 
+  describe('debugInfo preservation on exit', () => {
+    it('should include debugInfo in result when shouldExit=true (max_rounds reached)', async () => {
+      const config = {
+        content: '您最近感觉如何？',
+        max_rounds: 1,
+        output: [{ get: '用户状态', define: '用户当前状态' }],
+      };
+
+      const crisisDebugInfo = {
+        prompt: 'LLM detected crisis',
+        response: {
+          text: '危机干预内容',
+          crisis_detected: true,
+        },
+        model: 'test-model',
+        timestamp: new Date().toISOString(),
+        tokensUsed: 150,
+      };
+
+      mockLlmOrchestrator.generateText.mockResolvedValueOnce({
+        text: JSON.stringify({
+          content: '听说你想结束这一切让我很担心',
+          EXIT: 'true',
+          BRIEF: '危机干预',
+          crisis_detected: true,
+        }),
+        debugInfo: crisisDebugInfo,
+      });
+
+      const action = new AiAskAction('crisis-test', config, mockLlmOrchestrator);
+      action.currentRound = 1;
+
+      const result = await action.execute(mockContext, '我想结束这一切');
+
+      expect(result.completed).toBe(true);
+      expect(result.debugInfo).toBeDefined();
+      expect(result.debugInfo?.response?.crisis_detected).toBe(true);
+    });
+
+    it('should include debugInfo when required_variables collected and exit', async () => {
+      const config = {
+        content: '请描述症状',
+        max_rounds: 5,
+        output: [{ get: '症状', define: '用户症状描述' }],
+      };
+
+      const mockDebugInfo = {
+        prompt: '请描述症状',
+        response: {
+          text: '感谢描述',
+          crisis_detected: false,
+        },
+        model: 'test-model',
+        timestamp: new Date().toISOString(),
+      };
+
+      mockLlmOrchestrator.generateText.mockResolvedValueOnce({
+        text: JSON.stringify({
+          content: '感谢描述',
+          EXIT: 'true',
+          BRIEF: '信息已收集',
+          crisis_detected: false,
+          症状: '头痛三天',
+        }),
+        debugInfo: mockDebugInfo,
+      });
+
+      const action = new AiAskAction('test-action', config, mockLlmOrchestrator);
+      action.currentRound = 1;
+
+      const result = await action.execute(mockContext, '头痛三天了');
+
+      expect(result.completed).toBe(true);
+      expect(result.debugInfo).toBeDefined();
+      expect(result.debugInfo?.response?.crisis_detected).toBe(false);
+    });
+  });
+
   describe('evaluateExitCondition max_rounds check', () => {
     it('should return should_exit=true when currentRound >= maxRounds', async () => {
       const config = {
