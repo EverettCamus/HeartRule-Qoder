@@ -201,8 +201,11 @@ export class AiAskAction extends BaseAction {
       const finalResult = await this.finishAction(context, userInput);
       return {
         ...finalResult,
+        aiMessage: llmResult.aiMessage || finalResult.aiMessage,
+        debugInfo: llmResult.debugInfo,
         metadata: {
           ...finalResult.metadata,
+          ...llmResult.metadata,
           exit_reason: exitReason,
           exit_decision: exitDecision,
         },
@@ -982,16 +985,11 @@ ${historyText}
   private buildExitCriteriaFromConfig(): ExitCriteria {
     return {
       max_rounds: this.getConfig('max_rounds'),
-      max_tokens: this.getConfig('max_tokens'),
-      max_cost: this.getConfig('max_cost'),
       required_variables: this.getConfig('output')
         ?.map((v: any) => v.get)
         .filter(Boolean),
-      min_response_length: this.getConfig('min_response_length'),
-      max_silence_rounds: this.getConfig('max_silence_rounds'),
       understanding_threshold: this.getConfig('understanding_threshold'),
       has_questions: this.getConfig('has_questions'),
-      min_rounds: this.getConfig('min_rounds'),
       custom_conditions: this.getConfig('custom_conditions'),
     };
   }
