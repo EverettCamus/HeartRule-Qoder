@@ -48,6 +48,7 @@ const DebugFilterModal: React.FC<DebugFilterModalProps> = ({
       showVariable: false,
       showExecutionLog: false,
       showPosition: false,
+      showCrisisAlert: true,
     });
   };
 
@@ -59,6 +60,7 @@ const DebugFilterModal: React.FC<DebugFilterModalProps> = ({
       showVariable: true,
       showExecutionLog: true,
       showPosition: true,
+      showCrisisAlert: true,
     });
   };
 
@@ -89,10 +91,7 @@ const DebugFilterModal: React.FC<DebugFilterModalProps> = ({
           </div>
         </Checkbox>
 
-        <Checkbox
-          checked={filter.showLLMPrompt}
-          onChange={handleCheckboxChange('showLLMPrompt')}
-        >
+        <Checkbox checked={filter.showLLMPrompt} onChange={handleCheckboxChange('showLLMPrompt')}>
           <strong>💡 LLM 提示词</strong>
           <div style={{ fontSize: '12px', color: '#666', marginLeft: '24px' }}>
             显示发送给AI的完整提示
@@ -133,11 +132,19 @@ const DebugFilterModal: React.FC<DebugFilterModalProps> = ({
           </div>
         </Checkbox>
 
+        <Checkbox
+          checked={filter.showCrisisAlert}
+          onChange={handleCheckboxChange('showCrisisAlert')}
+        >
+          <strong>⚠️ 危机警告</strong>
+          <div style={{ fontSize: '12px', color: '#666', marginLeft: '24px' }}>
+            显示危机检测信号
+          </div>
+        </Checkbox>
+
         <Divider style={{ margin: '16px 0' }} />
 
-        <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '8px' }}>
-          快捷操作:
-        </div>
+        <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '8px' }}>快捷操作:</div>
 
         <Space wrap>
           <Button size="small" onClick={handleExpandAll}>
