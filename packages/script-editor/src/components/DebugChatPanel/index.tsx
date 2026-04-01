@@ -13,7 +13,6 @@ import type {
   LLMPromptBubbleContent,
   LLMResponseBubbleContent,
   PositionBubbleContent,
-  CrisisAlertBubbleContent,
 } from '../../types/debug';
 import type { DetailedError } from '../../types/error';
 import type {
@@ -25,7 +24,6 @@ import type {
 } from '../../types/navigation';
 import { loadDebugFilter, saveDebugFilter } from '../../utils/debug-filter-storage';
 import { analyzeActionVariables, categorizeVariablesByScope } from '../../utils/variableAnalyzer';
-import CrisisAlertBubble from '../DebugBubbles/CrisisAlertBubble';
 import ErrorBubble from '../DebugBubbles/ErrorBubble';
 import LLMPromptBubble from '../DebugBubbles/LLMPromptBubble';
 import LLMResponseBubble from '../DebugBubbles/LLMResponseBubble';
@@ -748,29 +746,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         addDebugBubble(responseBubble);
 
         console.log('[DebugChat] ✅ Created LLM prompt and response bubbles');
-
-        if ((debugInfo.response as any)?.crisis_detected) {
-          console.log('[DebugChat] ⚠️ Crisis detected!');
-          const crisisBubble: DebugBubble = {
-            id: uuidv4(),
-            type: 'crisis_alert',
-            timestamp: debugInfo.timestamp || new Date().toISOString(),
-            isExpanded: false,
-            actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
-            actionType:
-              (response.position as any)?.sourceActionType || response.position?.actionType,
-            content: {
-              type: 'crisis_alert',
-              crisisType: 'other',
-              severity: 'high',
-              triggerText: userMessage,
-              summary: '检测到危机信号',
-              timestamp: debugInfo.timestamp || new Date().toISOString(),
-            } as CrisisAlertBubbleContent,
-          };
-          addDebugBubble(crisisBubble);
-          console.log('[DebugChat] ✅ Created crisis alert bubble');
-        }
       }
 
       // 更新执行位置（如果响应中包含）
@@ -1052,28 +1027,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           } as LLMResponseBubbleContent,
         };
         addDebugBubble(responseBubble);
-
-        if ((debugInfo.response as any)?.crisis_detected) {
-          console.log('[DebugChat] ⚠️ Crisis detected in acknowledgment!');
-          const crisisBubble: DebugBubble = {
-            id: uuidv4(),
-            type: 'crisis_alert',
-            timestamp: debugInfo.timestamp || new Date().toISOString(),
-            isExpanded: false,
-            actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
-            actionType:
-              (response.position as any)?.sourceActionType || response.position?.actionType,
-            content: {
-              type: 'crisis_alert',
-              crisisType: 'other',
-              severity: 'high',
-              triggerText: '(空输入确认)',
-              summary: '检测到危机信号',
-              timestamp: debugInfo.timestamp || new Date().toISOString(),
-            } as CrisisAlertBubbleContent,
-          };
-          addDebugBubble(crisisBubble);
-        }
       }
 
       // 更新执行位置
@@ -1669,14 +1622,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                         {item.data.type === 'position' && (
                           <PositionBubble
                             content={item.data.content as PositionBubbleContent}
-                            isExpanded={item.data.isExpanded}
-                            timestamp={item.data.timestamp}
-                            onToggleExpand={() => toggleBubbleExpand(item.data.id)}
-                          />
-                        )}
-                        {item.data.type === 'crisis_alert' && (
-                          <CrisisAlertBubble
-                            content={item.data.content as CrisisAlertBubbleContent}
                             isExpanded={item.data.isExpanded}
                             timestamp={item.data.timestamp}
                             onToggleExpand={() => toggleBubbleExpand(item.data.id)}

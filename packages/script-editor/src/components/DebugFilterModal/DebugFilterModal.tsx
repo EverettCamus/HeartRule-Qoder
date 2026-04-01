@@ -48,7 +48,6 @@ const DebugFilterModal: React.FC<DebugFilterModalProps> = ({
       showVariable: false,
       showExecutionLog: false,
       showPosition: false,
-      showCrisisAlert: true,
     });
   };
 
@@ -60,7 +59,6 @@ const DebugFilterModal: React.FC<DebugFilterModalProps> = ({
       showVariable: true,
       showExecutionLog: true,
       showPosition: true,
-      showCrisisAlert: true,
     });
   };
 
@@ -129,16 +127,6 @@ const DebugFilterModal: React.FC<DebugFilterModalProps> = ({
           <strong>🧭 位置信息</strong>
           <div style={{ fontSize: '12px', color: '#666', marginLeft: '24px' }}>
             显示当前执行位置路径
-          </div>
-        </Checkbox>
-
-        <Checkbox
-          checked={filter.showCrisisAlert}
-          onChange={handleCheckboxChange('showCrisisAlert')}
-        >
-          <strong>⚠️ 危机警告</strong>
-          <div style={{ fontSize: '12px', color: '#666', marginLeft: '24px' }}>
-            显示危机检测信号
           </div>
         </Checkbox>
 

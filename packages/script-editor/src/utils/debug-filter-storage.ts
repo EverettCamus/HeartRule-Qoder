@@ -30,7 +30,6 @@ export const loadDebugFilter = (): DebugOutputFilter => {
         showVariable: parsed.showVariable ?? DEFAULT_DEBUG_FILTER.showVariable,
         showExecutionLog: parsed.showExecutionLog ?? DEFAULT_DEBUG_FILTER.showExecutionLog,
         showPosition: parsed.showPosition ?? DEFAULT_DEBUG_FILTER.showPosition,
-        showCrisisAlert: parsed.showCrisisAlert ?? DEFAULT_DEBUG_FILTER.showCrisisAlert,
       };
     }
   } catch (error) {
