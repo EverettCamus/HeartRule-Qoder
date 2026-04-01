@@ -18,20 +18,16 @@ export interface SessionConfig {
 }
 
 /**
- * 模板解析器（两层方案机制）
+ * 模板解析器
  *
- * 负责两层模板路径解析：
- * 1. Custom 层 - 可自定义方案（优先级高）
- * 2. Default 层 - 系统默认模板（倕底层）
+ * 负责模板路径解析：
+ * - 文件系统模式：从 config/templates/default/ 读取
+ * - 数据库模式：使用虚拟路径 _system/config/default/
  *
  * 设计原则：
  * - 独立模块，不与 BaseAction 耦合
- * - 简化架构，只保留两层
- * - Session 级配置，通过 template_scheme 指定方案
  * - 模板文件名固定：ai_ask_v1.md, ai_say_v1.md
  * - 支持数据库和文件系统两种模板源
- *
- * 参考设计文档：template-security-boundary-addition.md 第3.5-3.7节
  */
 export class TemplateResolver {
   private projectId?: string;
@@ -136,49 +132,18 @@ export class TemplateResolver {
   }
 
   /**
-   * 从文件系统解析模板（兼容旧版本）
+   * 从文件系统解析模板
    */
   private async resolveTemplateFromFilesystem(
     templateFileName: string,
-    sessionConfig?: SessionConfig
+    _sessionConfig?: SessionConfig
   ): Promise<TemplateResolutionResult> {
     const fs = await import('fs/promises');
     const path = await import('path');
     const projectPath = this.projectPath || process.cwd();
 
-    // 第1层：Custom 层（优先级高）
-    if (sessionConfig?.template_scheme) {
-      const customAbsPath = path.join(
-        projectPath,
-        '_system/config/custom',
-        sessionConfig.template_scheme,
-        templateFileName
-      );
-
-      const exists = await this.fileExists(customAbsPath, fs);
-      if (exists) {
-        const relativePath = path.join(
-          '_system/config/custom',
-          sessionConfig.template_scheme,
-          templateFileName
-        );
-
-        return {
-          path: relativePath,
-          layer: 'custom',
-          scheme: sessionConfig.template_scheme,
-          exists: true,
-        };
-      }
-
-      console.warn(
-        `[TemplateResolver] Custom template not found: ${customAbsPath}. ` +
-          `Falling back to default template.`
-      );
-    }
-
-    // 第2层：Default 层（倕底）
-    const defaultAbsPath = path.join(projectPath, '_system/config/default', templateFileName);
+    // 从 config/templates/default/ 读取
+    const defaultAbsPath = path.join(projectPath, 'config/templates/default', templateFileName);
 
     const exists = await this.fileExists(defaultAbsPath, fs);
     if (!exists) {
@@ -188,7 +153,8 @@ export class TemplateResolver {
       );
     }
 
-    const relativePath = path.join('_system/config/default', templateFileName);
+    // 返回相对于项目根目录的路径，不包含 config/templates
+    const relativePath = path.join('config/templates/default', templateFileName);
 
     return {
       path: relativePath,

@@ -36,7 +36,11 @@ export class DatabaseTemplateProvider implements TemplateProvider {
         return null;
       }
 
-      const content = (templateFile.fileContent as { content?: string })?.content || '';
+      // 优先从 yamlContent 读取，兼容 fileContent.content
+      const content =
+        templateFile.yamlContent ||
+        (templateFile.fileContent as { content?: string })?.content ||
+        '';
 
       return {
         content,

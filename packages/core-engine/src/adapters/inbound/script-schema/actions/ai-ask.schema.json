@@ -32,6 +32,38 @@
       "maximum": 200,
       "default": 20,
       "description": "最大轮数"
+    },
+    "understanding_threshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "理解度阈值（0-100）"
+    },
+    "has_questions": {
+      "type": "boolean",
+      "description": "是否允许有疑问时退出"
+    },
+    "custom_conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "variable": {
+            "type": "string",
+            "description": "变量名"
+          },
+          "operator": {
+            "type": "string",
+            "enum": ["==", "!=", ">", "<", ">=", "<=", "contains"],
+            "description": "比较操作符"
+          },
+          "value": {
+            "description": "比较值"
+          }
+        },
+        "required": ["variable", "operator", "value"]
+      },
+      "description": "自定义退出条件"
     }
   },
   "additionalProperties": false

@@ -27,10 +27,6 @@ export class ExitDecisionEngine {
 
     const ruleResult = this.ruleEvaluator.evaluate(criteria, {
       currentRound: context.currentRound,
-      totalTokens: context.totalTokens,
-      estimatedCost: context.estimatedCost,
-      userInputLength: context.userInputLength,
-      silentRounds: context.silentRounds,
       collectedVariables: context.collectedVariables,
       requiredVariables: criteria.required_variables || [],
     });

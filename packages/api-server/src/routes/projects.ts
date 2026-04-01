@@ -190,11 +190,8 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
 
       // 初始化默认模板到数据库
       try {
-        // 使用 config/prompts/_system/config/default 作为模板源
-        const systemTemplatesPath = path.resolve(
-          __dirname,
-          '../../../../config/prompts/_system/config/default'
-        );
+        // 使用 config/templates/default 作为模板源
+        const systemTemplatesPath = path.resolve(__dirname, '../../../../config/templates/default');
 
         const templateFiles = await fs.readdir(systemTemplatesPath);
 
@@ -917,12 +914,12 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         console.log(`[PUT Template] Template not found in DB, attempting to create: ${filePath}`);
 
         try {
-          // 从 config/prompts/_system/config/default 读取默认模板内容
+          // 从 config/templates/default 读取默认模板内容
           const systemTemplatesPath = path.resolve(
             __dirname,
-            '../../../../config/prompts/_system/config/default'
+            '../../../../config/templates/default'
           );
-          const systemFilePath = path.join(systemTemplatesPath, fileName);
+          const systemFilePath = path.join(systemTemplatesPath, templatePath);
 
           let initialContent = content; // 使用请求中的content作为初始内容
 

@@ -271,8 +271,8 @@ describe('Phase 7 重构：VariableScopeResolver 变量管理能力完善', () =
         test: 'value',
       });
 
-      // 等待 1ms 确保时间戳不同
-      await new Promise((resolve) => setTimeout(resolve, 1));
+      // 等待 10ms 确保时间戳不同（JavaScript 时间精度问题）
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       const store2 = VariableScopeResolver.migrateToVariableStore({
         test: 'value',

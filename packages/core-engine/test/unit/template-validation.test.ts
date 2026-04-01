@@ -404,7 +404,7 @@ JSON 示例：
 
       const result = templateManager.validateTemplate(
         systemTemplate,
-        'config/prompts/_system/config/default/ai_ask_v1.md',
+        'config/templates/default/ai_ask_v1.md',
         ['who', 'user', 'chat'], // 必需系统变量（去掉 time，因为模板中没有使用）
         ['task', 'exit'] // 必需脚本变量
       );

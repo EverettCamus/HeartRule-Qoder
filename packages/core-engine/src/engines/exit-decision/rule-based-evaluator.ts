@@ -8,10 +8,6 @@ export interface RuleEvaluationResult {
 
 export interface RuleContext {
   currentRound: number;
-  totalTokens: number;
-  estimatedCost: number;
-  userInputLength: number;
-  silentRounds: number;
   collectedVariables: string[];
   requiredVariables: string[];
 }
@@ -24,29 +20,9 @@ export class RuleBasedEvaluator {
       triggeredRules.push(`max_rounds: ${context.currentRound} > ${criteria.max_rounds}`);
     }
 
-    if (criteria.max_tokens && context.totalTokens >= criteria.max_tokens) {
-      triggeredRules.push(`max_tokens: ${context.totalTokens} >= ${criteria.max_tokens}`);
-    }
-
-    if (criteria.max_cost && context.estimatedCost >= criteria.max_cost) {
-      triggeredRules.push(`max_cost: ${context.estimatedCost} >= ${criteria.max_cost}`);
-    }
-
-    if (criteria.min_response_length && context.userInputLength < criteria.min_response_length) {
-      triggeredRules.push(
-        `min_response_length: ${context.userInputLength} < ${criteria.min_response_length}`
-      );
-    }
-
-    if (criteria.max_silence_rounds && context.silentRounds >= criteria.max_silence_rounds) {
-      triggeredRules.push(
-        `max_silence_rounds: ${context.silentRounds} >= ${criteria.max_silence_rounds}`
-      );
-    }
-
     if (criteria.required_variables && criteria.required_variables.length > 0) {
       const missingVars = criteria.required_variables.filter(
-        (v) => !context.collectedVariables.includes(v)
+        (v: string) => !context.collectedVariables.includes(v)
       );
       if (missingVars.length === 0) {
         triggeredRules.push('required_variables: all collected');

@@ -1,62 +1,41 @@
-# 两层模板方案机制使用指南
+# 模板系统使用指南
 
 ## 概述
 
-HeartRule 引擎支持两层模板方案机制，允许您为不同的咨询场景定制专属的LLM提示词模板。
+HeartRule 引擎使用统一的LLM提示词模板系统，为新工程提供默认模板初始化。
 
 ## 架构设计
 
 **虚拟路径约定**（数据库路径标识）：
 
 ```
-_system/
-└── config/
-    ├── default/          # 第1层：系统默认模板（兜底）
-    │   ├── ai_ask_v1.md
-    │   ├── ai_say_v1.md
-    │   ├── ai_ask_monitor_v1.md
-    │   └── ai_say_monitor_v1.md
-    └── custom/           # 第2层：自定义方案模板（优先）
-        ├── crisis_intervention/
-        │   └── ai_ask_v1.md    # 危机干预专用模板
-        └── adolescent_friendly/
-            ├── ai_ask_v1.md    # 青少年友好版模板
-            └── ai_say_v1.md
+_system/config/default/          # 数据库虚拟路径（命名契约）
+├── ai_ask_v1.md
+├── ai_say_v1.md
+├── ai_ask_monitor_v1.md
+└── ai_say_monitor_v1.md
 ```
 
 **物理文件路径**（开发时模板源）：
 
 ```
-config/prompts/_system/
-└── config/
-    ├── default/          # 开发时模板源目录
-    │   ├── ai_ask_v1.md
-    │   ├── ai_say_v1.md
-    │   ├── ai_ask_monitor_v1.md
-    │   └── ai_say_monitor_v1.md
-    └── custom/           # 自定义方案模板
-        ├── crisis_intervention/
-        │   └── ai_ask_v1.md
-        └── adolescent_friendly/
-            ├── ai_ask_v1.md
-            └── ai_say_v1.md
+config/templates/default/        # 开发时模板源目录
+├── ai_ask_v1.md
+├── ai_say_v1.md
+├── ai_ask_monitor_v1.md
+└── ai_say_monitor_v1.md
 ```
 
-### 两层机制
+### 路径映射
 
-1. **Default层（系统默认）**
-   - **物理路径**：`config/prompts/_system/config/default/`
-   - **虚拟路径**：`_system/config/default/`
-   - **用途**：系统默认模板，适用于通用咨询场景
-   - **优先级**：低（兜底层）
-   - 必须存在，否则系统无法启动
+| 物理路径                    | 虚拟路径                  | 用途               |
+| --------------------------- | ------------------------- | ------------------ |
+| `config/templates/default/` | `_system/config/default/` | 工程初始化默认模板 |
 
-2. **Custom层（自定义方案）**
-   - **物理路径**：`config/prompts/_system/config/custom/{scheme_name}/`
-   - **虚拟路径**：`_system/config/custom/{scheme_name}/`
-   - **用途**：针对特定场景定制的模板（如危机干预、青少年咨询等）
-   - **优先级**：高（优先使用）
-   - 可选，不存在时自动回退到default层
+**强制要求**：
+
+- 数据库虚拟路径 `_system/config/default/` 是命名契约，不可更改（向后兼容性）
+- 所有模板文件在数据库中使用虚拟路径引用
 
 ### 回退机制
 
@@ -81,84 +60,11 @@ session:
       # ...
 ```
 
-**效果**：所有Action将使用 `_system/config/default/` 下的虚拟路径，实际文件从 `config/prompts/_system/config/default/` 读取
-
-### 2. 使用自定义模板方案
-
-在Session YAML的 `session` 节点下配置 `template_scheme`：
-
-```yaml
-session:
-  session_id: 'crisis_intervention_v1'
-  session_name: '危机干预会谈'
-  template_scheme: 'crisis_intervention' # 使用危机干预专用模板
-
-  phases:
-    - phase_id: 'phase_1'
-      # ...
-```
-
 **效果**：
 
-- 如果虚拟路径 `_system/config/custom/crisis_intervention/ai_ask_v1.md` 存在，优先使用
-- 实际文件从 `config/prompts/_system/config/custom/crisis_intervention/` 读取
-- 如果不存在，回退到 `_system/config/default/ai_ask_v1.md`
-
-## 创建自定义模板方案
-
-### 步骤1：创建方案目录
-
-```bash
-mkdir -p config/prompts/_system/custom/your_scheme_name
-```
-
-### 步骤2：复制默认模板作为起点
-
-```bash
-cp config/prompts/_system/config/default/ai_ask_v1.md config/prompts/_system/custom/your_scheme_name/
-cp config/prompts/_system/config/default/ai_say_v1.md config/prompts/_system/custom/your_scheme_name/
-```
-
-### 步骤3：根据场景需求修改模板
-
-编辑 `config/prompts/_system/custom/your_scheme_name/ai_ask_v1.md`，根据具体场景调整：
-
-- **语气风格**：调整语言风格（温和、专业、活泼等）
-- **安全边界**：针对特定场景强调特定的安全规范
-- **输出格式**：保持JSON结构一致，但可以调整字段说明
-- **注意事项**：增加场景特定的注意事项
-
-### 步骤4：在Session中配置使用
-
-```yaml
-session:
-  template_scheme: 'your_scheme_name'
-```
-
-## 示例：危机干预模板方案
-
-项目中已包含一个危机干预模板方案示例：
-
-**虚拟路径**：`_system/config/custom/crisis_intervention/ai_ask_v1.md`
-**物理路径**：`config/prompts/_system/custom/crisis_intervention/ai_ask_v1.md`
-
-**特点**：
-
-- 高度警觉危机信号（自伤、自杀、他伤）
-- 强化危机响应原则（冷静、支持、不评判）
-- 优先询问安全计划和求助意愿
-- 增加"urgent"情绪色调选项
-
-**使用方法**：
-
-```yaml
-session:
-  session_id: 'crisis_test_v1'
-  session_name: '危机干预测试'
-  template_scheme: 'crisis_intervention'
-```
-
-## 测试验证
+- 工程初始化时，从物理路径 `config/templates/default/` 读取模板文件
+- 模板文件导入到数据库，使用虚拟路径 `_system/config/default/`
+- 运行时Action通过虚拟路径从数据库加载模板
 
 ### 运行测试脚本
 

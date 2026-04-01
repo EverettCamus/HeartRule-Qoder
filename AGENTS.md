@@ -22,15 +22,14 @@ packages/
 
 ### Template Directories
 
-| Directory                                | Purpose                          | Notes                                   |
-| ---------------------------------------- | -------------------------------- | --------------------------------------- |
-| `config/prompts/_system/config/default/` | Default templates (dev source)   | Project initialization copies from here |
-| `config/prompts/_system/config/custom/`  | Custom scheme templates          | Extensible per project                  |
-| `_system/config/default/`                | Database virtual path (contract) | Documentation reference only            |
+| Directory                   | Purpose                          | Notes                                   |
+| --------------------------- | -------------------------------- | --------------------------------------- |
+| `config/templates/default/` | Default templates (dev source)   | Project initialization copies from here |
+| `_system/config/default/`   | Database virtual path (contract) | Document reference/lookup only          |
 
 ### Path Mapping
 
-- **Development path**: `config/prompts/_system/config/default/ai_ask_v1.md`
+- **Development path**: `config/templates/default/ai_ask_v1.md`
 - **Database virtual path**: `_system/config/default/ai_ask_v1.md`
 
 **Note:** Database virtual path prefix `_system/config/default/` is a naming contract and should not be changed for backward compatibility.

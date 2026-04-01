@@ -1,0 +1,37 @@
+# 测试场景：LLM语义控制退出 - 理解度检测
+# 目的：验证LLM通过理解度判断退出
+# 预期行为：LLM根据语义分析结果决定是否退出
+
+metadata:
+  name: "测试 LLM语义控制退出"
+  version: "1.0"
+  description: "验证LLM基于语义理解的退出决策 - understanding_threshold=80"
+  test_scenario: "llm_semantic_understanding"
+
+session:
+  session_id: "test_llm_semantic"
+  session_name: "LLM语义退出测试"
+  
+  phases:
+    - phase_id: "test_phase"
+      phase_name: "测试阶段"
+      
+      topics:
+        - topic_id: "test_topic"
+          topic_name: "语义退出测试"
+          
+          actions:
+            # 测试：LLM评估理解度和用户状态
+            - action_type: "ai_ask"
+              action_id: "llm_understanding_test"
+              config:
+                content: "我们来聊聊你的压力情况。你平时工作压力大吗？"
+                output:
+                  - get: "压力描述"
+                    define: "用户对压力的描述"
+                  - get: "压力来源"
+                    define: "压力的主要来源"
+                max_rounds: 5
+                understanding_threshold: 80
+                has_questions: false
+                exit: "用户已清晰表达压力情况"

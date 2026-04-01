@@ -51,23 +51,22 @@ export const CustomExitConditionSchema = z.object({
  * 退出条件配置（通用 superset）
  *
  * 针对不同的 action_type，实际可用字段有所不同：
- * - ai_ask: understanding_threshold, has_questions, min_rounds, max_rounds, max_tokens,
- *           max_cost, required_variables, min_response_length, max_silence_rounds, custom_conditions
- * - ai_say: understanding_threshold, has_questions, min_rounds, custom_conditions
- * - fill_form: min_rounds, custom_conditions (表单完整性由其他逻辑处理)
+ * - ai_ask: understanding_threshold, has_questions, custom_conditions, max_rounds, required_variables
+ * - ai_say: understanding_threshold, has_questions, custom_conditions
+ * - fill_form: custom_conditions (表单完整性由其他逻辑处理)
  * - 内部动作 (ai_think, use_skill, show_pic): 不使用 exit_criteria
+ *
+ * 设计决策：
+ * - 已移除 min_rounds（无实际场景）
+ * - 已移除 max_tokens、max_cost（应在系统层控制）
+ * - 已移除 max_silence_rounds、min_response_length（与LLM阻抗检测重复，判断交给LLM）
  */
 export interface ExitCriteria {
   understanding_threshold?: number; // 理解度阈值（0-100）
   has_questions?: boolean; // 是否允许有疑问时退出
-  min_rounds?: number; // 最小轮次要求
-  max_rounds?: number; // 最大轮次限制（新增）
-  max_tokens?: number; // 最大token消耗（新增）
-  max_cost?: number; // 最大成本限制（新增）
-  required_variables?: string[]; // 必须收集的变量列表（新增）
-  min_response_length?: number; // 最小响应长度（新增）
-  max_silence_rounds?: number; // 连续无实质内容轮次（新增）
   custom_conditions?: CustomExitCondition[]; // 自定义条件数组
+  max_rounds?: number; // 最大轮次限制（安全网，防止LLM陷入死循环）
+  required_variables?: string[]; // 必须收集的变量列表（确保任务完成）
 }
 
 /**
@@ -76,14 +75,9 @@ export interface ExitCriteria {
 export const ExitCriteriaSchema = z.object({
   understanding_threshold: z.number().min(0).max(100).optional(),
   has_questions: z.boolean().optional(),
-  min_rounds: z.number().int().min(1).optional(),
-  max_rounds: z.number().int().min(1).optional(),
-  max_tokens: z.number().int().min(100).optional(),
-  max_cost: z.number().min(0).optional(),
-  required_variables: z.array(z.string()).optional(),
-  min_response_length: z.number().int().min(1).optional(),
-  max_silence_rounds: z.number().int().min(1).optional(),
   custom_conditions: z.array(CustomExitConditionSchema).optional(),
+  max_rounds: z.number().int().min(1).optional(),
+  required_variables: z.array(z.string()).optional(),
 });
 
 /**

@@ -1,0 +1,36 @@
+# 测试场景：max_rounds=3 多轮测试
+# 目的：验证 max_rounds 在多轮交互后强制退出
+# 预期行为：当达到 max_rounds=3 时强制退出
+
+metadata:
+  name: "测试 max_rounds=3 多轮交互"
+  version: "1.0"
+  description: "验证最大轮次限制 - max_rounds=3多轮测试"
+  test_scenario: "max_rounds_3"
+
+session:
+  session_id: "test_max_rounds_3"
+  session_name: "max_rounds=3 测试"
+  
+  phases:
+    - phase_id: "test_phase"
+      phase_name: "测试阶段"
+      
+      topics:
+        - topic_id: "test_topic"
+          topic_name: "多轮测试"
+          
+          actions:
+            - action_type: "ai_ask"
+              action_id: "test_max_rounds_3"
+              config:
+                content: "请详细描述你的症状，包括持续时间、严重程度和影响。"
+                output:
+                  - get: "症状描述"
+                    define: "用户描述的症状"
+                  - get: "持续时间"
+                    define: "症状持续的时间"
+                  - get: "严重程度"
+                    define: "症状的严重程度"
+                max_rounds: 3
+                exit: "已收集足够的症状信息"
