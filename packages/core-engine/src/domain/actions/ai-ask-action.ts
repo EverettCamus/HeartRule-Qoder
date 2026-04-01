@@ -21,47 +21,18 @@
 
 import path from 'path';
 
-import { VariableScope } from '@heartrule/shared-types';
+import {
+  VariableScope,
+  type EnhancedAskLLMOutput,
+  type ExitCriteria,
+} from '@heartrule/shared-types';
 
+import { ExitDecisionEngine } from '../../engines/exit-decision/index.js';
 import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager, TemplateResolver } from '../../engines/prompt-template/index.js';
 
 import { BaseAction } from './base-action.js';
-import type {
-  ActionContext,
-  ActionResult,
-  ActionMetrics,
-  ProgressSuggestion,
-  ExitReason,
-} from './base-action.js';
-
-interface AskLLMOutput {
-  // 新格式字段
-  content?: string;
-  EXIT: string;
-  BRIEF?: string;
-  metrics?: ActionMetrics; // 精细化状态指标
-  progress_suggestion?: ProgressSuggestion; // 进度建议
-  safety_risk?: {
-    detected: boolean;
-    risk_type: string | null;
-    confidence: 'high' | 'medium' | 'low';
-    reason: string | null;
-  };
-  metadata?: {
-    emotional_tone?: string;
-    crisis_signal?: boolean;
-    style_adaptation?: {
-      user_reply_length: number;
-      suggested_style: 'open' | 'choice' | 'example_guided';
-      style_used: 'open' | 'choice' | 'example_guided' | 'mixed';
-      adaptation_reason: string;
-    };
-  };
-
-  // 兼容旧格式：支持动态的 ai_role 字段
-  [key: string]: any;
-}
+import type { ActionContext, ActionResult, ExitReason } from './base-action.js';
 
 /**
  * 模板类型枚举
@@ -77,11 +48,13 @@ export class AiAskAction extends BaseAction {
   private templateManager: PromptTemplateManager;
   private templateResolver: TemplateResolver;
   private templateType: AskTemplateType;
+  private exitDecisionEngine: ExitDecisionEngine;
 
   constructor(actionId: string, config: Record<string, any>, llmOrchestrator?: LLMOrchestrator) {
     super(actionId, config);
     this.maxRounds = this.getConfig('max_rounds', 20);
     this.llmOrchestrator = llmOrchestrator;
+    this.exitDecisionEngine = new ExitDecisionEngine();
 
     // 计算模板路径
     const templateBasePath = this.resolveTemplatePath();
@@ -178,51 +151,68 @@ export class AiAskAction extends BaseAction {
       };
     }
 
+    // 递增轮次，确保 LLM 看到正确的当前轮次
+    this.currentRound += 1;
+
     // 调用 LLM 生成下一轮问题或决定退出
     const llmResult = await this.generateQuestionFromTemplate(context, AskTemplateType.MULTI_ROUND);
-
-    // 提取 metrics 和 progress_suggestion（从 llmResult 中）
-    const metrics = llmResult.metrics;
-    const progressSuggestion = llmResult.progress_suggestion;
 
     // 提取 LLM 输出的原始数据
     const llmOutput = llmResult.metadata?.llmRawOutput
       ? JSON.parse(this.cleanJsonOutput(llmResult.metadata.llmRawOutput))
       : {};
 
-    // 使用统一的退出决策方法
-    const exitDecision = this.evaluateExitCondition(context, llmOutput);
+    // 使用ExitDecisionEngine进行综合决策
+    const exitCriteria = this.buildExitCriteriaFromConfig();
+    const decisionContext = {
+      currentRound: this.currentRound,
+      totalTokens: this.calculateTokensUsed(context),
+      estimatedCost: this.estimateCost(context),
+      userInputLength: (userInput || '').length,
+      silentRounds: this.calculateSilentRounds(context, userInput),
+      collectedVariables: this.getCollectedVariables(context),
+      requiredVariables: exitCriteria.required_variables || [],
+      llmOutput: llmOutput as EnhancedAskLLMOutput,
+    };
+
+    const exitDecision = this.exitDecisionEngine.evaluate(exitCriteria, decisionContext);
 
     // 计算 exit_reason
+    // 优先级：rules > combined > llm（硬性规则优先）
     let exitReason: ExitReason | undefined;
-    if (this.currentRound >= this.maxRounds) {
+    if (exitDecision.ruleExit) {
+      // 规则触发（包括 combined 和 rules 情况）
       exitReason = 'max_rounds_reached';
-    } else if (exitDecision.should_exit && exitDecision.decision_source === 'exit_flag') {
-      exitReason = 'exit_criteria_met';
-    } else if (progressSuggestion === 'blocked') {
-      exitReason = 'user_blocked';
-    } else if (progressSuggestion === 'off_topic') {
-      exitReason = 'off_topic';
+    } else if (exitDecision.llmExit) {
+      // 仅 LLM 建议退出
+      if (llmOutput.assessment?.includes('阻抗')) {
+        exitReason = 'user_blocked';
+      } else if (llmOutput.assessment?.includes('偏题')) {
+        exitReason = 'off_topic';
+      } else {
+        exitReason = 'exit_criteria_met';
+      }
     }
 
     console.log(`[AiAskAction] 🎯 Exit decision:`, exitDecision, `exit_reason:`, exitReason);
 
-    if (exitDecision.should_exit) {
+    if (exitDecision.shouldExit) {
       console.log(`[AiAskAction] ✅ Decided to exit: ${exitDecision.reason}`);
       const finalResult = await this.finishAction(context, userInput);
       return {
         ...finalResult,
-        metrics, // 保留metrics
-        progress_suggestion: progressSuggestion, // 保留progress_suggestion
+        aiMessage: llmResult.aiMessage || finalResult.aiMessage,
+        debugInfo: llmResult.debugInfo,
         metadata: {
           ...finalResult.metadata,
+          ...llmResult.metadata,
           exit_reason: exitReason,
+          exit_decision: exitDecision,
         },
       };
     }
 
     // 继续追问
-    this.currentRound += 1;
     return {
       ...llmResult,
       completed: false,
@@ -339,21 +329,19 @@ export class AiAskAction extends BaseAction {
   /**
    * 从 JSON 中提取变量
    */
-  private extractVariablesFromJson(llmOutput: AskLLMOutput): Record<string, any> {
+  private extractVariablesFromJson(llmOutput: EnhancedAskLLMOutput): Record<string, any> {
     const extractedVariables: Record<string, any> = {};
     const outputConfig = this.getConfig('output', []);
+    const llmOutputRecord = llmOutput as unknown as Record<string, unknown>;
 
     if (outputConfig.length > 0) {
       for (const varConfig of outputConfig) {
         const varName = varConfig.get;
         if (!varName) continue;
 
-        if (
-          llmOutput[varName] !== undefined &&
-          llmOutput[varName] !== null &&
-          llmOutput[varName] !== ''
-        ) {
-          extractedVariables[varName] = llmOutput[varName];
+        const value = llmOutputRecord[varName];
+        if (value !== undefined && value !== null && value !== '') {
+          extractedVariables[varName] = value;
           console.log(`[AiAskAction] ✅ Extracted variable from JSON: ${varName}`);
         }
       }
@@ -514,6 +502,13 @@ export class AiAskAction extends BaseAction {
     // 构建 output_list（多变量输出格式）
     const outputList = this.buildOutputList();
 
+    // 构建已收集变量列表
+    const collectedVariables = this.buildCollectedVariables(context);
+
+    console.log(
+      `[AiAskAction] 📊 buildSystemVariables: currentRound=${this.currentRound}, maxRounds=${this.maxRounds}`
+    );
+
     return {
       time,
       who,
@@ -522,7 +517,35 @@ export class AiAskAction extends BaseAction {
       chat,
       ai_role: aiRole,
       output_list: outputList,
+      current_round: this.currentRound,
+      max_rounds: this.maxRounds,
+      collected_variables: collectedVariables,
     };
+  }
+
+  /**
+   * 构建已收集变量列表
+   */
+  private buildCollectedVariables(context: ActionContext): string {
+    const outputConfig = this.getConfig('output', []);
+    if (outputConfig.length === 0) {
+      return '';
+    }
+
+    const lines: string[] = ['已收集变量：'];
+    for (const varConfig of outputConfig) {
+      const varName = varConfig.get;
+      if (!varName) continue;
+
+      const value = context.variables[varName];
+      if (value !== undefined && value !== null && value !== '') {
+        lines.push(`- ${varName}: ${String(value).substring(0, 50)}`);
+      } else {
+        lines.push(`- ${varName}: (未收集)`);
+      }
+    }
+
+    return lines.join('\n');
   }
 
   /**
@@ -593,7 +616,7 @@ ${historyText}
    * 解析多轮JSON输出（支持3次重试机制）
    */
   private parseMultiRoundOutput(rawResponse: string): {
-    output: AskLLMOutput;
+    output: EnhancedAskLLMOutput;
     cleanedResponse: string;
     parseError?: {
       retryCount: number;
@@ -617,7 +640,7 @@ ${historyText}
 
       try {
         cleanedResponse = this.applyParseStrategy(rawResponse, strategy);
-        const output = JSON.parse(cleanedResponse) as AskLLMOutput;
+        const output = JSON.parse(cleanedResponse) as EnhancedAskLLMOutput;
 
         // 解析成功，记录日志
         if (parseAttempt > 1) {
@@ -704,68 +727,15 @@ ${historyText}
   /**
    * 获取默认Ask输出（解析失败时降级）
    */
-  private getDefaultAskOutput(rawResponse: string): AskLLMOutput {
+  private getDefaultAskOutput(rawResponse: string): EnhancedAskLLMOutput {
     return {
       content: rawResponse.trim(),
-      EXIT: 'NO',
+      assessment: 'JSON解析失败，使用默认评估',
+      progress: '进度评估不可用',
+      EXIT: 'false',
       BRIEF: 'LLM输出JSON解析失败',
-      metrics: this.getDefaultMetrics(),
-      progress_suggestion: 'continue_needed',
+      crisis_detected: false,
     };
-  }
-
-  /**
-   * 获取默认metrics（解析失败时）
-   */
-  private getDefaultMetrics(): ActionMetrics {
-    return {
-      information_completeness: 'LLM输出JSON解析失败，无法评估',
-      user_engagement: 'LLM输出JSON解析失败，无法评估',
-      emotional_intensity: 'LLM输出JSON解析失败，无法评估',
-      reply_relevance: 'LLM输出JSON解析失败，无法评估',
-    };
-  }
-
-  /**
-   * 提取metrics字段，填充缺失值
-   */
-  private extractMetrics(llmOutput: AskLLMOutput): ActionMetrics {
-    const metrics = llmOutput.metrics || {};
-    const defaultMetrics = this.getDefaultMetrics();
-
-    return {
-      information_completeness:
-        metrics.information_completeness || defaultMetrics.information_completeness,
-      user_engagement: metrics.user_engagement || defaultMetrics.user_engagement,
-      emotional_intensity: metrics.emotional_intensity || defaultMetrics.emotional_intensity,
-      reply_relevance: metrics.reply_relevance || defaultMetrics.reply_relevance,
-    };
-  }
-
-  /**
-   * 提取progress_suggestion，验证合法性
-   */
-  private extractProgressSuggestion(llmOutput: AskLLMOutput): ProgressSuggestion {
-    const suggestion = llmOutput.progress_suggestion;
-    const validSuggestions: ProgressSuggestion[] = [
-      'continue_needed',
-      'completed',
-      'blocked',
-      'off_topic',
-    ];
-
-    if (suggestion && validSuggestions.includes(suggestion as ProgressSuggestion)) {
-      return suggestion as ProgressSuggestion;
-    }
-
-    // 默认返回 continue_needed
-    if (suggestion && !validSuggestions.includes(suggestion as ProgressSuggestion)) {
-      console.warn(
-        `[AiAskAction] 非法的progress_suggestion值: ${suggestion}，使用默认值: continue_needed`
-      );
-    }
-
-    return 'continue_needed';
   }
 
   /**
@@ -969,30 +939,20 @@ ${historyText}
       // 🔧 立即提取 output 中配置的变量
       const extractedVariables = this.extractVariablesFromJson(llmOutput);
 
-      // 提取 metrics 和 progress_suggestion
-      const metrics = this.extractMetrics(llmOutput);
-      const progressSuggestion = this.extractProgressSuggestion(llmOutput);
-
       // 判断是否退出
       const shouldExit = llmOutput.EXIT === 'true';
 
-      // 提取 AI 消息：优先使用 content 字段（新格式），兼容旧格式
-      const aiRole = this.getConfig('ai_role', '咨询师');
-      const aiMessage = llmOutput.content || llmOutput[aiRole] || llmOutput.response || '';
+      // 提取 AI 消息：优先使用 content 字段（新格式）
+      const aiMessage = llmOutput.content || '';
 
-      // 提取安全风险信息
-      const safetyRisk = llmOutput.safety_risk || {
-        detected: false,
-        risk_type: null,
-        confidence: 'high',
-        reason: null,
-      };
+      // 检查危机信号
+      const crisisDetected = llmOutput.crisis_detected || false;
 
-      // 提取元数据
-      const llmMetadata = llmOutput.metadata || {};
-
-      // 提取话术风格适配信息
-      const styleAdaptation = llmMetadata.style_adaptation;
+      // 如果检测到明显危机，启动危机处理流程
+      if (crisisDetected) {
+        // TODO: 同步启动危机处理LLM，评估是否修订回复
+        console.warn('[AiAskAction] ⚠️ 危机信号检测到，启动危机处理流程');
+      }
 
       return {
         success: true,
@@ -1000,27 +960,66 @@ ${historyText}
         aiMessage,
         extractedVariables:
           Object.keys(extractedVariables).length > 0 ? extractedVariables : undefined,
-        metrics, // 新增：精细化状态指标
-        progress_suggestion: progressSuggestion, // 新增：进度建议
         debugInfo: llmResult.debugInfo,
         metadata: {
           actionType: AiAskAction.actionType,
           shouldExit,
           brief: llmOutput.BRIEF,
+          assessment: llmOutput.assessment,
+          progress: llmOutput.progress,
+          crisis_detected: crisisDetected,
           currentRound: this.currentRound,
           llmRawOutput: parseResult.cleanedResponse,
           template_path: resolution.path,
           template_layer: resolution.layer,
           template_scheme: resolution.scheme,
           safety_check: safetyCheck,
-          safety_risk: safetyRisk,
-          llm_metadata: llmMetadata,
-          style_adaptation: styleAdaptation, // 新增：话术风格适配信息
-          parseError: (parseResult.parseError?.retryCount || 0) > 1, // 是否发生过解析失败
-          parseRetryCount: parseResult.parseError?.retryCount || 0, // 重试次数
-          parseErrorDetails: parseResult.parseError, // 解析错误详情
+          parseError: (parseResult.parseError?.retryCount || 0) > 1,
+          parseRetryCount: parseResult.parseError?.retryCount || 0,
+          parseErrorDetails: parseResult.parseError,
         },
       };
     }
+  }
+
+  private buildExitCriteriaFromConfig(): ExitCriteria {
+    return {
+      max_rounds: this.getConfig('max_rounds'),
+      required_variables: this.getConfig('output')
+        ?.map((v: any) => v.get)
+        .filter(Boolean),
+      understanding_threshold: this.getConfig('understanding_threshold'),
+      has_questions: this.getConfig('has_questions'),
+      custom_conditions: this.getConfig('custom_conditions'),
+    };
+  }
+
+  private calculateTokensUsed(context: ActionContext): number {
+    const historyText = context.conversationHistory.map((msg) => msg.content).join(' ');
+    return Math.ceil(historyText.length / 4);
+  }
+
+  private estimateCost(context: ActionContext): number {
+    const tokens = this.calculateTokensUsed(context);
+    return (tokens / 1000) * 0.0015;
+  }
+
+  private calculateSilentRounds(context: ActionContext, userInput?: string | null): number {
+    if (!userInput || userInput.trim().length < 5) {
+      return (context.metadata?.silentRounds || 0) + 1;
+    }
+    return 0;
+  }
+
+  private getCollectedVariables(context: ActionContext): string[] {
+    const outputConfig = this.getConfig('output', []);
+    return outputConfig
+      .map((v: any) => v.get)
+      .filter((name: string) => {
+        const position = { phaseId: '', topicId: '', actionId: this.actionId };
+        const value =
+          context.scopeResolver?.resolveVariable(name, position)?.value || context.variables[name];
+        return value !== undefined && value !== null && value !== '';
+      });
   }
 }

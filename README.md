@@ -255,7 +255,7 @@ session:
 
 > **AI_Ask 退出机制**: AI_Ask 采用混合退出决策架构，结合规则引擎与LLM语义理解：
 >
-> - **规则控制**: max_rounds、max_tokens、max_cost、required_variables 等硬性条件
+> - **规则控制**: max_rounds（安全网）、required_variables（任务完成）等硬性条件
 > - **LLM控制**: 阻抗检测、偏题识别、理解度评估等语义判断
 > - **决策引擎**: 综合规则与LLM建议，输出 exit_decision、exit_reason 等元数据
 

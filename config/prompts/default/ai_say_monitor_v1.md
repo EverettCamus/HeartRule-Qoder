@@ -7,22 +7,26 @@
 ## 输入信息
 
 【当前Action状态】
+
 - Action类型：ai_say
 - 执行轮次：{{current_round}}/{{max_rounds}}
 - 讲解主题：{{topic_content}}
 
 【系统变量】
+
 - 用户投入度：{{user_engagement}}
 - 情绪强度：{{emotional_intensity}}
 - 理解度评估：{{understanding_level}}
 - 进度建议：{{progress_suggestion}}
 
 【用户基础信息】
+
 - 教育背景：{{education_background}}
 - 心理学知识：{{psychology_knowledge}}
 - 学习风格：{{learning_style}}
 
 【历史趋势】（可选）
+
 - 前几轮理解度变化：{{understanding_trend}}
 - 用户提问频率：{{question_frequency}}
 
@@ -72,6 +76,7 @@
 ### 字段说明
 
 **核心判断字段**：
+
 - `understanding_issue`（布尔值）：是否存在理解障碍
   - true：检测到理解困难，需要优化表达
   - false：用户理解正常，无需调整
@@ -88,6 +93,7 @@
   - `"topic_orchestration"`：重组讲解结构（路径2，本Story预留）
 
 **优化建议字段**：
+
 - `feedback_for_action`（字符串）：给Action主线程的反馈文本
   - 用自然语言描述问题和优化方向
   - 这段文本将拼接到ai_say下一轮的LLM提示词中
@@ -101,6 +107,7 @@
   - 例如："先用通俗语言解释，再引入专业术语"
 
 **扩展点字段**：
+
 - `orchestration_needed`（布尔值）：是否需要触发动作编排
   - 本阶段固定返回false
   - 未来实现时，当intervention_level="topic_orchestration"时设为true
@@ -110,12 +117,14 @@
 ### 示例1：概念过于抽象
 
 **输入**：
+
 - user_engagement: "用户表现困惑，多次提问"
 - emotional_intensity: "语气略显焦虑"
 - understanding_level: "用户无法用自己的话解释概念"
 - progress_suggestion: "blocked"
 
 **输出**：
+
 ```json
 {
   "understanding_issue": true,
@@ -131,12 +140,14 @@
 ### 示例2：正常理解
 
 **输入**：
+
 - user_engagement: "用户积极回应，能够举例说明"
 - emotional_intensity: "语气平静，表现自信"
 - understanding_level: "用户能用自己的话解释概念，理解程度良好"
 - progress_suggestion: "completed"
 
 **输出**：
+
 ```json
 {
   "understanding_issue": false,
@@ -152,12 +163,14 @@
 ### 示例3：术语难度过高
 
 **输入**：
+
 - user_engagement: "用户反复询问术语含义"
 - emotional_intensity: "语气略显挫败"
 - understanding_level: "用户对专业术语不熟悉，理解受阻"
 - progress_suggestion: "blocked"
 
 **输出**：
+
 ```json
 {
   "understanding_issue": true,
@@ -173,12 +186,14 @@
 ### 示例4：信息量过大
 
 **输入**：
+
 - user_engagement: "用户表现被动，回应减少"
 - emotional_intensity: "语气有些疲惫"
 - understanding_level: "用户能理解部分内容，但感到信息过载"
 - progress_suggestion: "blocked"
 
 **输出**：
+
 ```json
 {
   "understanding_issue": true,

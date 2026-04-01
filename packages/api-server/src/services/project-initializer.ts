@@ -51,9 +51,9 @@ export class ProjectInitializer {
     if (systemTemplatesPath) {
       this.systemTemplatesPath = systemTemplatesPath;
     } else {
-      // 使用 __dirname 确保路径计算稳定，指向工作区根目录的 config/prompts
+      // 使用 __dirname 确保路径计算稳定，指向工作区根目录的 config/templates
       const projectRoot = path.resolve(__dirname, '../../../..');
-      this.systemTemplatesPath = path.join(projectRoot, 'config', 'prompts');
+      this.systemTemplatesPath = path.join(projectRoot, 'config', 'templates');
     }
   }
 
@@ -110,13 +110,8 @@ export class ProjectInitializer {
     );
 
     try {
-      // 默认模板路径：_system/config/default/
-      const defaultTemplatePath = path.join(
-        this.systemTemplatesPath,
-        '_system',
-        'config',
-        'default'
-      );
+      // 默认模板路径：default/
+      const defaultTemplatePath = path.join(this.systemTemplatesPath, 'default');
 
       // 检查系统模板路径是否存在
       try {

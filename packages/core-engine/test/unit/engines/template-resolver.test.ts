@@ -14,10 +14,12 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { PromptTemplateManager } from '../../../src/engines/prompt-template/template-manager.js';
 import { TemplateResolver } from '../../../src/engines/prompt-template/template-resolver.js';
 
-describe('TemplateResolver - 两层模板路径解析', () => {
+// 项目根目录：从 packages/core-engine 向上导航到项目根目录
+const PROJECT_ROOT = path.resolve(process.cwd(), '../..');
+
+describe('TemplateResolver - 模板路径解析', () => {
   let resolver: TemplateResolver;
-  // 使用项目根目录的config/prompts
-  const templateBasePath = path.resolve(process.cwd(), 'config/prompts');
+  const templateBasePath = PROJECT_ROOT;
 
   beforeAll(() => {
     resolver = new TemplateResolver(templateBasePath);
@@ -54,8 +56,7 @@ describe('TemplateResolver - 两层模板路径解析', () => {
 
 describe('PromptTemplateManager - 模板验证', () => {
   let manager: PromptTemplateManager;
-  // 使用项目根目录的config/prompts
-  const templateBasePath = path.resolve(process.cwd(), 'config/prompts');
+  const templateBasePath = PROJECT_ROOT;
 
   beforeAll(() => {
     manager = new PromptTemplateManager(templateBasePath);
@@ -118,12 +119,10 @@ describe('PromptTemplateManager - 模板验证', () => {
 
 describe('安全边界检测集成测试', () => {
   it('应该能加载包含安全边界的模板', async () => {
-    // 使用项目根目录的config/prompts/_system/config/default
-    const templateBasePath = path.resolve(process.cwd(), 'config/prompts');
-    const manager = new PromptTemplateManager(templateBasePath);
+    const manager = new PromptTemplateManager(PROJECT_ROOT);
 
-    // 加载我们更新过的模板（新的两层机制使用 _system/config/default/ai_ask_v1.md）
-    const template = await manager.loadTemplate('_system/config/default/ai_ask_v1.md');
+    // 加载模板（使用 config/templates/default/ai_ask_v1.md）
+    const template = await manager.loadTemplate('config/templates/default/ai_ask_v1.md');
 
     expect(template.content).toContain('【安全边界与伦理规范】');
     expect(template.content).toContain('诊断禁止');

@@ -18,6 +18,38 @@ packages/
 └── script-editor/   # React-based script editor UI
 ```
 
+## Directory Conventions
+
+### Template Directories
+
+| Directory                   | Purpose                          | Notes                                   |
+| --------------------------- | -------------------------------- | --------------------------------------- |
+| `config/templates/default/` | Default templates (dev source)   | Project initialization copies from here |
+| `_system/config/default/`   | Database virtual path (contract) | Document reference/lookup only          |
+
+### Path Mapping
+
+- **Development path**: `config/templates/default/ai_ask_v1.md`
+- **Database virtual path**: `_system/config/default/ai_ask_v1.md`
+
+**Note:** Database virtual path prefix `_system/config/default/` is a naming contract and should not be changed for backward compatibility.
+
+### Script Directories
+
+| Directory                | Purpose               | Notes                               |
+| ------------------------ | --------------------- | ----------------------------------- |
+| `scripts/`               | YAML script storage   | Sessions, consciousness, techniques |
+| `scripts/sessions/`      | Session scripts       | Main consultation flows             |
+| `scripts/consciousness/` | Consciousness scripts | Detection triggers config           |
+| `scripts/techniques/`    | Technique scripts     | Therapeutic techniques              |
+
+### Template Files
+
+| Directory                  | Purpose              | Notes                                     |
+| -------------------------- | -------------------- | ----------------------------------------- |
+| `templates/consciousness/` | LLM prompt templates | Paired with scripts/consciousness/\*.yaml |
+| `_system/config/default/`  | Action templates     | ai_ask, ai_say, monitor versions          |
+
 ## Commands
 
 ### Installation & Development

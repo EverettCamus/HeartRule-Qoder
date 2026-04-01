@@ -7,11 +7,13 @@
 ## 输入信息
 
 【当前Action状态】
+
 - Action类型：ai_ask
 - 执行轮次：{{current_round}}/{{max_rounds}}
 - 目标变量：{{target_variables}}
 
 【系统变量】
+
 - 信息完整度：{{information_completeness}}
 - 用户投入度：{{user_engagement}}
 - 情绪强度：{{emotional_intensity}}
@@ -19,11 +21,13 @@
 - 进度建议：{{progress_suggestion}}
 
 【Topic策略配置】
+
 - 最低信息要求：{{min_completeness_requirement}}
 - 重试策略：{{retry_strategy}}
 - 最大重试次数：{{max_retry_count}}
 
 【历史趋势】（可选）
+
 - 前3轮用户投入度变化：{{engagement_trend}}
 - 情绪强度变化：{{emotion_trend}}
 
@@ -71,6 +75,7 @@
 ### 字段说明
 
 **核心判断字段**：
+
 - `intervention_needed`（布尔值）：是否需要Topic层介入
   - true：检测到阻碍或异常，需要调整策略
   - false：进展正常，无需介入
@@ -86,6 +91,7 @@
   - `"topic_orchestration"`：需触发Topic动作编排（路径2，本Story预留）
 
 **策略建议字段**：
+
 - `strategy_suggestion`（字符串）：推荐策略
   - `"rephrase"`：调整话术
   - `"comfort"`：安抚情绪
@@ -101,6 +107,7 @@
   - 例如："可以先询问XX，再过渡到YY"
 
 **扩展点字段**：
+
 - `orchestration_needed`（布尔值）：是否需要触发动作编排
   - 本阶段固定返回false
   - 未来实现时，当intervention_level="topic_orchestration"时设为true
@@ -110,6 +117,7 @@
 ### 示例1：用户阻抗
 
 **输入**：
+
 - information_completeness: "用户仅说了'不想说'，未提供职业信息"
 - user_engagement: "用户回答极简短，表现出明显回避"
 - emotional_intensity: "提及父亲时语气抵触"
@@ -117,6 +125,7 @@
 - progress_suggestion: "blocked"
 
 **输出**：
+
 ```json
 {
   "intervention_needed": true,
@@ -132,6 +141,7 @@
 ### 示例2：正常进展
 
 **输入**：
+
 - information_completeness: "用户提供了职业信息，待补充工作年限"
 - user_engagement: "用户回答详细，主动分享"
 - emotional_intensity: "语气平静，未显示焦虑"
@@ -139,6 +149,7 @@
 - progress_suggestion: "continue_needed"
 
 **输出**：
+
 ```json
 {
   "intervention_needed": false,
@@ -154,6 +165,7 @@
 ### 示例3：用户偏题
 
 **输入**：
+
 - information_completeness: "用户未回答职业问题"
 - user_engagement: "用户回答较长但偏离主题"
 - emotional_intensity: "情绪正常"
@@ -161,6 +173,7 @@
 - progress_suggestion: "off_topic"
 
 **输出**：
+
 ```json
 {
   "intervention_needed": true,

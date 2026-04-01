@@ -1,0 +1,37 @@
+# 测试场景：custom_conditions 变量比较
+# 目的：验证自定义退出条件 - 数值比较
+# 预期行为：当满意度评分 >= 8 时退出
+
+metadata:
+  name: "测试 custom_conditions 分数比较"
+  version: "1.0"
+  description: "验证自定义退出条件 - 分数大于等于阈值退出"
+  test_scenario: "custom_conditions_score"
+
+session:
+  session_id: "test_custom_score"
+  session_name: "自定义条件分数测试"
+  
+  phases:
+    - phase_id: "test_phase"
+      phase_name: "测试阶段"
+      
+      topics:
+        - topic_id: "test_topic"
+          topic_name: "分数比较测试"
+          
+          actions:
+            # 测试：当满意度评分 >= 8 时退出
+            - action_type: "ai_ask"
+              action_id: "custom_condition_score"
+              config:
+                content: "请问你对今天的咨询满意度打几分？(1-10分)"
+                output:
+                  - get: "满意度评分"
+                    define: "用户给出的满意度评分，1-10的数字"
+                max_rounds: 3
+                custom_conditions:
+                  - variable: "满意度评分"
+                    operator: ">="
+                    value: 8
+                exit: "用户满意度较高"

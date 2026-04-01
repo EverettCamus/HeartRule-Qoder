@@ -329,11 +329,11 @@ export abstract class BaseAction {
       const cwd = process.cwd();
       // 检测运行目录：适配 monorepo 结构
       if (cwd.includes('packages/api-server') || cwd.includes('packages\\api-server')) {
-        templateBasePath = path.resolve(cwd, '../../config/prompts');
+        templateBasePath = path.resolve(cwd, '../../config/templates');
       } else if (cwd.includes('packages/core-engine') || cwd.includes('packages\\core-engine')) {
-        templateBasePath = path.resolve(cwd, '../../config/prompts');
+        templateBasePath = path.resolve(cwd, '../../config/templates');
       } else {
-        templateBasePath = path.resolve(cwd, './config/prompts');
+        templateBasePath = path.resolve(cwd, './config/templates');
       }
     }
     return templateBasePath;
@@ -343,26 +343,35 @@ export abstract class BaseAction {
    * 解析项目根目录（用于 TemplateResolver）
    */
   protected resolveProjectRoot(context?: ActionContext): string {
-    // 从 context.metadata 中读取 projectId
-    const projectId = context?.metadata?.projectId;
+    const cwd = process.cwd();
 
-    if (projectId) {
+    // 如果没有 context，回退到默认行为
+    if (!context) {
+      if (cwd.includes('packages/api-server') || cwd.includes('packages\\api-server')) {
+        return path.resolve(cwd, '../..');
+      } else if (cwd.includes('packages/core-engine') || cwd.includes('packages\\core-engine')) {
+        return path.resolve(cwd, '../..');
+      }
+      return cwd;
+    }
+
+    const projectId = context?.metadata?.projectId;
+    const hasTemplateProvider = context?.metadata?.templateProvider !== undefined;
+
+    if (projectId && hasTemplateProvider) {
       // 数据库模式,不需要物理路径
       // TemplateResolver在接收到空字符串时,完全依赖DatabaseTemplateProvider
       console.log(`[BaseAction] 💾 Using database mode for project: ${projectId}`);
       return '';
     }
 
-    // 如果没有 projectId，回退到默认行为（monorepo 结构）
-    const cwd = process.cwd();
-    // 检测运行目录：适配 monorepo 结构
+    // 如果没有 projectId 或没有 templateProvider，回退到文件系统模式
     if (cwd.includes('packages/api-server') || cwd.includes('packages\\api-server')) {
       return path.resolve(cwd, '../..');
     } else if (cwd.includes('packages/core-engine') || cwd.includes('packages\\core-engine')) {
       return path.resolve(cwd, '../..');
-    } else {
-      return cwd;
     }
+    return cwd;
   }
 
   /**
@@ -515,15 +524,6 @@ export abstract class BaseAction {
     }
 
     const conditions: string[] = [];
-
-    // 检查最小轮次要求
-    if (this.exitCriteria.min_rounds && this.currentRound < this.exitCriteria.min_rounds) {
-      return {
-        should_exit: false,
-        reason: `未达到最小轮次要求 (${this.currentRound}/${this.exitCriteria.min_rounds})`,
-        decision_source: 'exit_criteria',
-      };
-    }
 
     // 检查理解度阈值
     if (this.exitCriteria.understanding_threshold !== undefined && llmOutput) {

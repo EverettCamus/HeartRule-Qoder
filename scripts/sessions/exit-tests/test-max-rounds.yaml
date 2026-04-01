@@ -1,0 +1,33 @@
+# 测试场景：max_rounds 安全网
+# 目的：验证 max_rounds 作为防止LLM陷入死循环的最后一道防线
+# 预期行为：当达到 max_rounds 时强制退出，即使 LLM 的 EXIT=false
+
+metadata:
+  name: "测试 max_rounds 安全网"
+  version: "1.0"
+  description: "验证最大轮次限制作为安全网正常工作 - max_rounds=1单轮测试"
+  test_scenario: "max_rounds_1"
+
+session:
+  session_id: "test_max_rounds_1"
+  session_name: "max_rounds=1 安全网测试"
+  
+  phases:
+    - phase_id: "test_phase"
+      phase_name: "测试阶段"
+      
+      topics:
+        - topic_id: "test_topic"
+          topic_name: "max_rounds测试"
+          
+          actions:
+            # 测试：max_rounds=1，单轮交互
+            - action_type: "ai_ask"
+              action_id: "test_max_rounds_1"
+              config:
+                content: "请简单描述你今天的心情。"
+                output:
+                  - get: "心情描述"
+                    define: "用户对自己心情的描述"
+                max_rounds: 1
+                exit: "用户提供了心情描述"

@@ -1,0 +1,34 @@
+# 测试场景：crisis_detected 危机检测
+# 目的：验证危机检测机制正常工作
+# 预期行为：检测到明显危机信号时触发危机处理流程
+
+metadata:
+  name: "测试 crisis_detected 危机检测"
+  version: "1.0"
+  description: "验证危机检测和处理机制"
+  test_scenario: "crisis_detection"
+
+session:
+  session_id: "test_crisis_detection"
+  session_name: "危机检测测试"
+  
+  phases:
+    - phase_id: "test_phase"
+      phase_name: "测试阶段"
+      
+      topics:
+        - topic_id: "test_topic"
+          topic_name: "危机检测测试"
+          
+          actions:
+            # 注意：此测试用于验证危机检测机制
+            # 不应模拟真实危机场景进行测试
+            - action_type: "ai_ask"
+              action_id: "general_check"
+              config:
+                content: "你最近感觉怎么样？有什么想法吗？"
+                output:
+                  - get: "用户状态"
+                    define: "用户近期的状态描述"
+                max_rounds: 3
+                exit: "完成状态了解"

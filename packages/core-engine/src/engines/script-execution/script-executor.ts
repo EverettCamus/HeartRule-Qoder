@@ -374,7 +374,7 @@ export class ScriptExecutor {
       projectId,
       templateProvider
     );
-    this.actionStateManager.restoreActionIfNeeded(executionState);
+    this.actionStateManager.restoreActionIfNeeded(executionState, phases);
 
     console.log('[ScriptExecutor] 📊 After restoreActionIfNeeded:', {
       hasCurrentAction: !!executionState.currentAction,
@@ -437,8 +437,8 @@ export class ScriptExecutor {
     this.resultHandler.prepareNext(executionState, phases);
 
     // 关键修复：如果 action 完成且有 aiMessage，需要先返回给客户端显示
-    // 返回 waiting_input，让客户端显示消息后再继续
-    if (result.aiMessage) {
+    // 但如果脚本已完成（prepareNext 已设置 COMPLETED），不要覆盖状态
+    if (result.aiMessage && executionState.status !== ExecutionStatus.COMPLETED) {
       console.log('[ScriptExecutor] ✅ Action completed with aiMessage, returning to client');
       executionState.status = ExecutionStatus.WAITING_INPUT; // 等待客户端确认
       return false; // 返回给客户端

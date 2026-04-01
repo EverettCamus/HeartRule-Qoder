@@ -1,0 +1,34 @@
+# 测试场景：LLM阻抗检测退出
+# 目的：验证LLM检测到用户阻抗时的退出行为
+# 预期行为：LLM检测到用户回避倾向时退出
+
+metadata:
+  name: "测试阻抗检测退出"
+  version: "1.0"
+  description: "验证LLM检测到用户阻抗时的退出行为 - understanding_threshold=60"
+  test_scenario: "llm_impedance"
+
+session:
+  session_id: "test_impedance"
+  session_name: "阻抗检测测试"
+  
+  phases:
+    - phase_id: "test_phase"
+      phase_name: "测试阶段"
+      
+      topics:
+        - topic_id: "test_topic"
+          topic_name: "阻抗测试"
+          
+          actions:
+            # 测试：用户表现出回避/阻抗倾向
+            - action_type: "ai_ask"
+              action_id: "impedance_test"
+              config:
+                content: "能告诉我一些关于你家庭的情况吗？"
+                output:
+                  - get: "家庭情况"
+                    define: "用户描述的家庭情况"
+                max_rounds: 3
+                understanding_threshold: 60
+                exit: "用户提供了家庭信息或表示不愿继续"

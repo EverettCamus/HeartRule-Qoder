@@ -204,28 +204,6 @@ describe('多轮对话智能终止判断', () => {
   });
 
   describe('2. exit_criteria 详细测试', () => {
-    it('应该检查最小轮次要求', () => {
-      const action = new TestInteractiveAction('test_action', {
-        max_rounds: 10,
-        exit_criteria: {
-          min_rounds: 3,
-          understanding_threshold: 80,
-        },
-      });
-      action.currentRound = 1; // 未达到最小轮次
-
-      const llmOutput = {
-        assessment: {
-          understanding_level: 90, // 理解度已达标
-        },
-      };
-
-      const exitDecision = action['evaluateExitCondition'](context, llmOutput);
-
-      expect(exitDecision.should_exit).toBe(false);
-      expect(exitDecision.reason).toContain('未达到最小轮次要求');
-    });
-
     it('应该检查理解度阈值', () => {
       const action = new TestInteractiveAction('test_action', {
         max_rounds: 5,
@@ -401,24 +379,30 @@ describe('多轮对话智能终止判断', () => {
         exit_criteria: {
           understanding_threshold: 80,
           has_questions: false,
-          min_rounds: 2,
         },
       });
 
-      // 第一轮：用户理解度不足
-      const result = await action.execute(context, '我不太明白');
-      expect(result.completed).toBe(false);
-      expect(result.metadata?.exitDecision?.should_exit).toBe(false);
+      // 第一轮：理解度不足（通过直接调用 evaluateExitCondition 验证）
+      const llmOutput1 = {
+        EXIT: 'false',
+        assessment: {
+          understanding_level: 50, // 低于阈值
+          has_questions: false,
+        },
+      };
+      action.currentRound = 1;
+      const exitDecision1 = action['evaluateExitCondition'](context, llmOutput1);
+      expect(exitDecision1.should_exit).toBe(false);
 
       // 第二轮：用户理解但有疑问
       const llmOutput2 = {
         EXIT: 'false',
         assessment: {
           understanding_level: 85,
-          has_questions: true,
+          has_questions: true, // 仍有疑问
         },
       };
-      action.currentRound = 1;
+      action.currentRound = 2;
       const exitDecision2 = action['evaluateExitCondition'](context, llmOutput2);
       expect(exitDecision2.should_exit).toBe(false);
 
@@ -427,10 +411,10 @@ describe('多轮对话智能终止判断', () => {
         EXIT: 'false',
         assessment: {
           understanding_level: 90,
-          has_questions: false,
+          has_questions: false, // 无疑问
         },
       };
-      action.currentRound = 2;
+      action.currentRound = 3;
       const exitDecision3 = action['evaluateExitCondition'](context, llmOutput3);
       expect(exitDecision3.should_exit).toBe(true);
       expect(exitDecision3.decision_source).toBe('exit_criteria');

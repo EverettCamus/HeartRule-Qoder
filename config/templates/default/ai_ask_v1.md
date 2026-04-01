@@ -96,67 +96,30 @@
 
 ```json
 {
-  "content": "你生成的引导内容或提问...",
-  "EXIT": "false",
-  "BRIEF": "引导摘要(20字以内)",
+  "content": "<生成提问内容，展示给用户>",
+  "EXIT": "<判断是否满足退出条件，输出 true 或 false>",
+  "BRIEF": "<生成20字以内的内容摘要>",
 {{output_list}}
   "metrics": {
-    "information_completeness": "用户已提供的信息完整度描述",
-    "user_engagement": "用户回答的投入度描述",
-    "emotional_intensity": "情绪强度描述",
-    "reply_relevance": "回答相关性描述"
+    "information_completeness": "<描述用户已提供信息的完整度，对比【退出条件】中的要求，描述已收集、缺少或未明确的信息>",
+    "user_engagement": "<描述用户回答的投入程度>",
+    "emotional_intensity": "<描述用户情绪强度>",
+    "reply_relevance": "<描述回答相关性>"
   },
-  "progress_suggestion": "continue_needed",
+  "progress_suggestion": "<输出进度建议：若信息不足，需要继续追问，返回continue_needed；若信息已充分收集返回completed；若用户遇阻，无法继续返回blocked；若用户回答偏离主题返回off_topic>",
   "safety_risk": {
-    "detected": false,
-    "risk_type": null,
-    "confidence": "high",
-    "reason": null
+    "detected": "<判断content是否违反安全边界，输出 true 或 false>",
+    "risk_type": "<如果detected为true，输出诊断类型：diagnosis、prescription、guarantee、inappropriate_advice 之一，否则输出 null>",
+    "confidence": "<输出置信度：high、medium、low 之一>",
+    "reason": "<如果detected为true，输出违规原因，否则输出 null>"
   },
-  "crisis_detected": false
+  "crisis_detected": "<判断用户是否表达自伤/自杀/他伤意念，输出 true 或 false>"
 }
 ```
-
-【字段说明】
-
-**核心字段**：
-
-- `content`: 你生成的提问内容（主要字段，将展示给用户）
-- `EXIT`: 是否满足退出条件（"true" 或 "false"）
-- `BRIEF`: 提问的简短摘要（不超过20个字）
-  {{output_list}}
-
-**精细化状态指标（metrics）**：
-
-- `metrics.information_completeness`: 用自然语言描述用户已提供信息的完整度
-  - 例如："用户提供了职业信息，但未说明工作年限"
-  - 对比【退出条件】中的要求，描述已收集、缺少或未明确的信息
-- `metrics.user_engagement`: 描述用户的投入程度
-  - 例如："用户回答较为简短，表现出一定回避倾向"
-- `metrics.emotional_intensity`: 描述情绪强度
-  - 例如："语气平静，未显示明显焦虑或激动情绪"
-- `metrics.reply_relevance`: 描述回答相关性
-  - 例如："用户回答与问题直接相关，未偏离主题"
-- `progress_suggestion`: 进度建议，只能是以下值之一：
-  - `"continue_needed"`: 信息不足，需要继续追问
-  - `"completed"`: 信息已充分收集
-  - `"blocked"`: 用户遇阻，无法继续（如明确拒绝回答）
-  - `"off_topic"`: 用户回答偏离主题
-
-**安全检测字段**：
-
-- `safety_risk.detected`: 你的提问是否违反了【安全边界与伦理规范】
-  - 如果提问中包含诊断、处方、保证性表述，必须设置为 `true`
-- `safety_risk.risk_type`: 如果 detected=true，填写风险类型（"diagnosis"/"prescription"/"guarantee"/"inappropriate_advice"）
-- `safety_risk.confidence`: 判定置信度（"high"/"medium"/"low"）
-- `safety_risk.reason`: 如果 detected=true，简要说明原因
-- `crisis_detected`: 用户是否表达了自伤/自杀/他伤意念（true/false）
 
 【注意事项】
 
 1. **JSON格式**：必须严格按照上述JSON格式输出，确保所有字段都存在
 2. **content字段**：存放你生成的提问，不要包含问候语或开场白
-3. **EXIT字段**：只能是 "true" 或 "false"（字符串格式）
-4. **安全自查**：生成提问后，必须立即对照【安全边界与伦理规范】进行自我审查
-5. **提问风格**：应该是开放式的，鼓励用户详细表达
-6. **话题引导**：如果用户的回答跑题或回避，温和地引导回到主题
+3. **安全自查**：生成提问后，必须立即对照【安全边界与伦理规范】进行自我审查
+4. **话题引导**：如果用户的回答跑题或回避，温和地引导回到主题

@@ -1,0 +1,44 @@
+# 测试场景：required_variables 必需变量完整性检查
+# 目的：验证当所有必需变量都收集完成后正确退出
+# 预期行为：当 required_variables 全部收集完成时退出
+
+metadata:
+  name: "测试 required_variables 必需变量"
+  version: "1.0"
+  description: "验证必需变量收集完成后的退出行为"
+  test_scenario: "required_variables"
+
+session:
+  session_id: "test_required_variables"
+  session_name: "必需变量完整性测试"
+  
+  phases:
+    - phase_id: "test_phase"
+      phase_name: "测试阶段"
+      
+      topics:
+        - topic_id: "test_topic"
+          topic_name: "必需变量测试"
+          
+          actions:
+            # 测试：收集多个必需变量，完成后退出
+            - action_type: "ai_ask"
+              action_id: "collect_required_info"
+              config:
+                content: |
+                  我想了解一些基本信息。请问：
+                  1. 你的姓名是什么？
+                  2. 你的年龄是多少？
+                  3. 你今天来的主要目的是什么？
+                output:
+                  - get: "姓名"
+                    define: "用户的姓名或昵称"
+                    require: "关键"
+                  - get: "年龄"
+                    define: "用户的年龄数字"
+                    require: "关键"
+                  - get: "来访目的"
+                    define: "用户来访的主要目的"
+                    require: "关键"
+                max_rounds: 5
+                exit: "已收集所有必需信息"
