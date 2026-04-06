@@ -23,7 +23,7 @@
     "output": {
       "type": "array",
       "items": {
-        "$ref": "../common/output-field.schema.json"
+        "$ref": "output-field.schema.json"
       },
       "description": "输出变量配置"
     },
