@@ -30,30 +30,12 @@ export const ExitDecisionSchema = z.object({
 });
 
 /**
- * 自定义退出条件（用于 exit_criteria.custom_conditions）
- */
-export interface CustomExitCondition {
-  variable: string;
-  operator: '==' | '!=' | '>' | '<' | '>=' | '<=' | 'contains';
-  value: unknown;
-}
-
-/**
- * 自定义退出条件 Schema
- */
-export const CustomExitConditionSchema = z.object({
-  variable: z.string(),
-  operator: z.enum(['==', '!=', '>', '<', '>=', '<=', 'contains']),
-  value: z.unknown(),
-});
-
-/**
  * 退出条件配置（通用 superset）
  *
  * 针对不同的 action_type，实际可用字段有所不同：
- * - ai_ask: custom_conditions, max_rounds, required_variables
- * - ai_say: custom_conditions
- * - fill_form: custom_conditions (表单完整性由其他逻辑处理)
+ * - ai_ask: max_rounds, required_variables
+ * - ai_say: 无
+ * - fill_form: 无（表单完整性由其他逻辑处理）
  * - 内部动作 (ai_think, use_skill, show_pic): 不使用 exit_criteria
  *
  * 设计决策：
@@ -61,18 +43,17 @@ export const CustomExitConditionSchema = z.object({
  * - 已移除 max_tokens、max_cost（应在系统层控制）
  * - 已移除 max_silence_rounds、min_response_length（与LLM阻抗检测重复）
  * - 已移除 understanding_threshold、has_questions（语义判断交给LLM的exit字段）
+ * - 已移除 custom_conditions（功能与 exit_condition 文本描述重叠）
  */
 export interface ExitCriteria {
-  custom_conditions?: CustomExitCondition[]; // 自定义条件数组
-  max_rounds?: number; // 最大轮次限制（安全网，防止LLM陷入死循环）
-  required_variables?: string[]; // 必须收集的变量列表（确保任务完成）
+  max_rounds?: number;
+  required_variables?: string[];
 }
 
 /**
  * 退出条件配置 Schema
  */
 export const ExitCriteriaSchema = z.object({
-  custom_conditions: z.array(CustomExitConditionSchema).optional(),
   max_rounds: z.number().int().min(1).optional(),
   required_variables: z.array(z.string()).optional(),
 });
