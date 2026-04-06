@@ -15,14 +15,15 @@
       "type": "string",
       "description": "语气风格"
     },
-    "exit": {
+    "exit_condition": {
       "type": "string",
-      "description": "退出条件"
+      "description": "退出条件的文本描述（给LLM的语义提示）",
+      "default": "用户提供了足够的信息"
     },
     "output": {
       "type": "array",
       "items": {
-        "$ref": "output-field.schema.json"
+        "$ref": "../common/output-field.schema.json"
       },
       "description": "输出变量配置"
     },
@@ -30,30 +31,8 @@
       "type": "number",
       "minimum": 1,
       "maximum": 200,
-      "default": 20,
-      "description": "最大轮数"
-    },
-    "custom_conditions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "variable": {
-            "type": "string",
-            "description": "变量名"
-          },
-          "operator": {
-            "type": "string",
-            "enum": ["==", "!=", ">", "<", ">=", "<=", "contains"],
-            "description": "比较操作符"
-          },
-          "value": {
-            "description": "比较值"
-          }
-        },
-        "required": ["variable", "operator", "value"]
-      },
-      "description": "自定义退出条件"
+      "default": 100,
+      "description": "最大轮数（安全网，防止LLM陷入死循环）。默认100轮，大多数情况下脚本工程师无需修改"
     }
   },
   "additionalProperties": false

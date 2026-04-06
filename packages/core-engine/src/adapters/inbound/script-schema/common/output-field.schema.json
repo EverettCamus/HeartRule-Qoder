@@ -20,6 +20,12 @@
     "value": {
       "type": "string",
       "description": "直接设置的值"
+    },
+    "require": {
+      "type": "string",
+      "enum": ["即时", "本次对话内", "可推迟", "持续跟踪"],
+      "default": "可推迟",
+      "description": "信息收集紧迫度等级：即时（必须立刻获得）、本次对话内（优先本次获取）、可推迟（可推迟到下次，默认值）、持续跟踪（不主动提问，仅记录）"
     }
   },
   "additionalProperties": false
