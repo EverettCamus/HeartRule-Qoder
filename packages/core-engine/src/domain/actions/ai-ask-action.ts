@@ -63,9 +63,9 @@ export class AiAskAction extends BaseAction {
     // TemplateResolver 需要项目根目录，但此时还没有context，暂不初始化
     this.templateResolver = null as any; // 延迟初始化
 
-    // 选择模板类型：有 exit 或 output 使用多轮追问模板，否则使用简单问答模板
+    // 选择模板类型：有 exit_condition 或 output 使用多轮追问模板，否则使用简单问答模板
     this.templateType =
-      this.getConfig('output')?.length > 0 || this.getConfig('exit')
+      this.getConfig('output')?.length > 0 || this.getConfig('exit_condition')
         ? AskTemplateType.MULTI_ROUND
         : AskTemplateType.SIMPLE;
 
@@ -77,7 +77,7 @@ export class AiAskAction extends BaseAction {
 
     console.log(`[AiAskAction] 🔧 Constructor: templateType=${this.templateType}, config:`, {
       hasOutput: !!this.getConfig('output')?.length,
-      hasExit: !!this.getConfig('exit'),
+      hasExitCondition: !!this.getConfig('exit_condition'),
       maxRounds: this.maxRounds,
       supportsExit: this.exitPolicy.supportsExit,
     });
@@ -459,9 +459,9 @@ export class AiAskAction extends BaseAction {
     const task = this.substituteVariables(taskTemplate, context);
     variables.set('task', task);
 
-    // 退出条件
-    const exitCondition = this.getConfig('exit', '用户提供了足够的信息');
-    variables.set('exit', exitCondition);
+    // 退出条件文本描述
+    const exitCondition = this.getConfig('exit_condition', '用户提供了足够的信息');
+    variables.set('exit_condition', exitCondition);
 
     return variables;
   }
@@ -984,7 +984,6 @@ ${historyText}
       required_variables: this.getConfig('output')
         ?.map((v: any) => v.get)
         .filter(Boolean),
-      custom_conditions: this.getConfig('custom_conditions'),
     };
   }
 
