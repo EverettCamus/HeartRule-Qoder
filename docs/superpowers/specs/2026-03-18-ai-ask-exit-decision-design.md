@@ -1,8 +1,8 @@
 # AI_Ask退出判断机制优化设计
 
 > **日期**: 2026-03-18
-> **版本**: v1.2（移除沉默轮次检测）
-> **状态**: 实施中
+> **版本**: v1.3（移除custom_conditions，添加require紧迫度等级）
+> **状态**: 已实施
 
 ## 1. 背景与目标
 
@@ -46,7 +46,8 @@
 | -------------------- | ----------------------------------------- |
 | `max_rounds`         | 最大轮次限制（安全网，防止LLM陷入死循环） |
 | `required_variables` | 必须收集的变量列表（确保任务完成）        |
-| `custom_conditions`  | 自定义条件（极端场景扩展）                |
+
+**已移除**: `custom_conditions`（功能与 `exit_condition` 文本描述重叠，语义判断交给LLM）
 
 #### LLM控制类（语义理解）
 
@@ -129,26 +130,38 @@ crisis_detected: true
 
 ### 4.1 YAML配置格式
 
-保持现有`output`字段结构，添加`require`字段标识变量重要性：
+保持现有`output`字段结构，添加`require`字段标识信息收集紧迫度：
 
 ```yaml
 output:
   - get: '症状描述'
     define: '来访者描述的影响日常生活，工作，健康的客观表现'
-    require: '关键' # 关键|重要|补充，默认"重要"
+    require: '即时' # 即时|本次对话内|可推迟|持续跟踪，默认"可推迟"
   - get: '持续时间'
     define: '有这个症状大致的时间长度描述'
-    require: '重要'
+    require: '本次对话内'
 ```
+
+**紧迫度等级说明**：
+
+| 等级         | 说明         | 处理策略                                   |
+| ------------ | ------------ | ------------------------------------------ |
+| `即时`       | 必须立刻获得 | 用户不答则反复追问，仍拒绝则终止或转人工   |
+| `本次对话内` | 优先本次获取 | 暂时跳过则结束前补问一次，仍缺失则标注假设 |
+| `可推迟`     | 本次完全跳过 | 结尾提示下次可聊，用户主动提及才顺势收集   |
+| `持续跟踪`   | 不主动提问   | 仅记录用户自发报告，用于长期跟踪           |
 
 ### 4.2 兼容性策略
 
 采用**一次性升级**策略：
 
+- 重命名`exit`字段为`exit_condition`（避免与LLM输出字段混淆）
 - 移除`metrics`和`progress_suggestion`字段
+- 移除`custom_conditions`字段（语义判断交给LLM）
 - 新增`assessment`和`progress`字段
 - 更新所有依赖现有字段的代码
-- 现有YAML脚本添加`require`字段（可选，默认"重要"）
+- 现有YAML脚本添加`require`字段（可选，默认"可推迟"）
+- 设置`max_rounds`默认值为100（安全网，通常无需修改）
 
 ## 5. 规则引擎设计
 
@@ -222,9 +235,22 @@ interface ExitDecision {
 
 - 如果用户第一轮就提供了完整信息，强制继续N轮会损害用户体验
 - 无意义的追问会降低咨询质量
-- 如有特殊场景需要，可通过 `custom_conditions` 扩展
+- 如有特殊场景需要，可通过 `exit_condition` 文本描述引导LLM判断
 
-### 9.2 为何移除 `max_tokens` 和 `max_cost`
+### 9.2 为何移除 `custom_conditions`
+
+**移除原因**：功能与 `exit_condition` 文本描述重叠，语义判断应交给LLM。
+
+**分析**：
+
+1. **职责重叠**：`custom_conditions` 和 `exit_condition` 都用于控制退出时机
+2. **语义判断交给LLM**：`custom_conditions` 的变量比较本质上是语义理解
+3. **简化架构**：移除后退出决策更清晰
+   - 规则层：只做 `max_rounds` 兜底
+   - LLM层：处理所有语义判断（阻抗、理解度、话题偏离等）
+   - 脚本工程师：通过 `exit_condition` 文本描述引导LLM
+
+### 9.3 为何移除 `max_tokens` 和 `max_cost`
 
 **移除原因**：成本控制应在系统层而非Action层实现。
 
@@ -237,7 +263,7 @@ interface ExitDecision {
    - 监控层：成本预警（运营层）
    - 不应混入Action的退出条件
 
-### 9.3 `max_rounds` 的正确理解
+### 9.4 `max_rounds` 的正确理解
 
 **定位**：安全网（Safety Net），而非目标值。
 
@@ -254,7 +280,7 @@ interface ExitDecision {
 3. required_variables 全部收集 → 任务完成退出
 ```
 
-### 9.4 为何移除 `max_silence_rounds` 和 `min_response_length`
+### 9.5 为何移除 `max_silence_rounds` 和 `min_response_length`
 
 **移除原因**：字符长度判断不准确，且与LLM阻抗检测功能重复。
 
