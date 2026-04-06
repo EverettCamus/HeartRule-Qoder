@@ -5,10 +5,13 @@
  * - BaseAction.evaluateExitCondition 的四级优先级判定
  * - AiSayAction 和 AiAskAction 的退出决策集成
  * - ExecutionState.metadata 的退出历史记录
+ *
+ * 设计原则：
+ * - 代码层只处理硬性条件（max_rounds）
+ * - 语义理解（阻抗、偏题、理解度）由 LLM 的 exit 字段决定
  */
 
 import type { VariableStore } from '@heartrule/shared-types';
-import { VariableScope } from '@heartrule/shared-types';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { BaseAction } from '../../src/domain/actions/base-action.js';
@@ -21,7 +24,6 @@ class TestInteractiveAction extends BaseAction {
 
   constructor(actionId: string, config: Record<string, any>) {
     super(actionId, config);
-    // 设置为交互型 Action
     this.exitPolicy = {
       supportsExit: true,
       enabledSources: ['max_rounds', 'exit_flag', 'exit_criteria', 'llm_suggestion'],
@@ -31,17 +33,11 @@ class TestInteractiveAction extends BaseAction {
   async execute(context: ActionContext, _userInput?: string | null): Promise<ActionResult> {
     this.currentRound++;
 
-    // 模拟 LLM 输出
     const llmOutput = {
-      EXIT: 'false',
+      exit: 'false',
       response: 'Test response',
-      assessment: {
-        understanding_level: 85,
-        has_questions: false,
-      },
     };
 
-    // 使用统一的退出决策
     const exitDecision = this.evaluateExitCondition(context, llmOutput);
 
     return {
@@ -101,10 +97,10 @@ describe('多轮对话智能终止判断', () => {
       const action = new TestInteractiveAction('test_action', {
         max_rounds: 3,
       });
-      action.currentRound = 3; // 达到最大轮次
+      action.currentRound = 3;
 
       const llmOutput = {
-        EXIT: 'false',
+        exit: 'false',
         should_exit: false,
       };
 
@@ -115,14 +111,14 @@ describe('多轮对话智能终止判断', () => {
       expect(exitDecision.reason).toContain('最大轮次限制');
     });
 
-    it('优先级2: 应该在 EXIT 标志为 true 时退出', () => {
+    it('优先级2: 应该在 exit 标志为 true 时退出', () => {
       const action = new TestInteractiveAction('test_action', {
         max_rounds: 5,
       });
       action.currentRound = 1;
 
       const llmOutput = {
-        EXIT: 'true',
+        exit: 'true',
         exit_reason: '用户已充分理解',
       };
 
@@ -133,29 +129,22 @@ describe('多轮对话智能终止判断', () => {
       expect(exitDecision.reason).toBe('用户已充分理解');
     });
 
-    it('优先级3: 应该在满足 exit_criteria 时退出', () => {
+    it('优先级3: exit_criteria 不再处理自定义条件（已移除）', () => {
       const action = new TestInteractiveAction('test_action', {
         max_rounds: 5,
-        exit_criteria: {
-          understanding_threshold: 80,
-          has_questions: false,
-        },
+        exit_criteria: {},
       });
       action.currentRound = 1;
 
       const llmOutput = {
-        EXIT: 'false',
-        assessment: {
-          understanding_level: 85,
-          has_questions: false,
-        },
+        exit: 'false',
       };
 
       const exitDecision = action['evaluateExitCondition'](context, llmOutput);
 
-      expect(exitDecision.should_exit).toBe(true);
-      expect(exitDecision.decision_source).toBe('exit_criteria');
-      expect(exitDecision.reason).toContain('理解度达标');
+      // custom_conditions 已移除，exit_criteria 不再触发退出
+      expect(exitDecision.should_exit).toBe(false);
+      expect(exitDecision.decision_source).toBe('llm_suggestion');
     });
 
     it('优先级4: 应该在 LLM 建议退出时退出', () => {
@@ -165,7 +154,7 @@ describe('多轮对话智能终止判断', () => {
       action.currentRound = 1;
 
       const llmOutput = {
-        EXIT: 'false',
+        exit: 'false',
         should_exit: true,
         exit_reason: 'LLM 判断用户已理解',
       };
@@ -180,266 +169,99 @@ describe('多轮对话智能终止判断', () => {
     it('应该在所有退出条件都不满足时继续', () => {
       const action = new TestInteractiveAction('test_action', {
         max_rounds: 5,
-        exit_criteria: {
-          understanding_threshold: 90,
-        },
       });
       action.currentRound = 1;
 
       const llmOutput = {
-        EXIT: 'false',
+        exit: 'false',
         should_exit: false,
-        assessment: {
-          understanding_level: 70, // 未达到阈值
-        },
       };
 
       const exitDecision = action['evaluateExitCondition'](context, llmOutput);
 
       expect(exitDecision.should_exit).toBe(false);
-      // 现在会返回具体的失败原因而不是通用消息
-      expect(exitDecision.reason).toContain('理解度未达标');
-      expect(exitDecision.decision_source).toBe('exit_criteria');
+      expect(exitDecision.reason).toContain('未满足退出条件');
     });
   });
 
-  describe('2. exit_criteria 详细测试', () => {
-    it('应该检查理解度阈值', () => {
+  describe('2. exit_criteria 自定义条件已移除', () => {
+    it('custom_conditions 已移除，不再检查自定义条件', () => {
       const action = new TestInteractiveAction('test_action', {
         max_rounds: 5,
-        exit_criteria: {
-          understanding_threshold: 80,
-        },
+        exit_criteria: {},
       });
       action.currentRound = 2;
 
+      variableStore.topic['topic_1'] = {
+        用户情绪: { value: '平和', source: 'test' },
+      };
+
       const llmOutput = {
-        assessment: {
-          understanding_level: 75, // 未达到阈值
-        },
+        exit: 'false',
       };
 
       const exitDecision = action['evaluateExitCondition'](context, llmOutput);
 
-      expect(exitDecision.should_exit).toBe(false);
-      expect(exitDecision.reason).toContain('理解度未达标');
-    });
-
-    it('应该检查是否允许有疑问时退出', () => {
-      const action = new TestInteractiveAction('test_action', {
-        max_rounds: 5,
-        exit_criteria: {
-          understanding_threshold: 80,
-          has_questions: false, // 不允许有疑问
-        },
-      });
-      action.currentRound = 2;
-
-      const llmOutput = {
-        assessment: {
-          understanding_level: 85,
-          has_questions: true, // 用户有疑问
-        },
-      };
-
-      const exitDecision = action['evaluateExitCondition'](context, llmOutput);
-
-      expect(exitDecision.should_exit).toBe(false);
-      expect(exitDecision.reason).toContain('用户仍有疑问');
-    });
-
-    it('应该评估自定义退出条件', () => {
-      // 设置一个变量
-      scopeResolver.setVariable('用户情绪', '平和', VariableScope.SESSION, {
-        phaseId: 'phase_1',
-        topicId: 'topic_1',
-        actionId: 'action_1',
-      });
-
-      const action = new TestInteractiveAction('test_action', {
-        max_rounds: 5,
-        exit_criteria: {
-          custom_conditions: [
-            {
-              variable: '用户情绪',
-              operator: '==',
-              value: '平和',
-            },
-          ],
-        },
-      });
-      action.currentRound = 2;
-
-      const exitDecision = action['evaluateExitCondition'](context, {});
-
-      expect(exitDecision.should_exit).toBe(true);
-      expect(exitDecision.reason).toContain('满足退出条件');
-      expect(exitDecision.reason).toContain('用户情绪 == 平和');
-    });
-
-    it('应该在自定义条件不满足时继续', () => {
-      scopeResolver.setVariable('用户情绪', '焦虑', VariableScope.SESSION, {
-        phaseId: 'phase_1',
-        topicId: 'topic_1',
-        actionId: 'action_1',
-      });
-
-      const action = new TestInteractiveAction('test_action', {
-        max_rounds: 5,
-        exit_criteria: {
-          custom_conditions: [
-            {
-              variable: '用户情绪',
-              operator: '==',
-              value: '平和',
-            },
-          ],
-        },
-      });
-      action.currentRound = 2;
-
-      const exitDecision = action['evaluateExitCondition'](context, {});
-
-      expect(exitDecision.should_exit).toBe(false);
-      expect(exitDecision.reason).toContain('自定义条件不满足');
-    });
-  });
-
-  describe('3. ExitPolicy 支持测试', () => {
-    it('交互型 Action 应该支持退出机制', () => {
-      const action = new TestInteractiveAction('test_action', {
-        max_rounds: 3,
-      });
-
-      expect(action.exitPolicy.supportsExit).toBe(true);
-      expect(action.exitPolicy.enabledSources).toContain('max_rounds');
-    });
-
-    it('非交互型 Action 不应该触发退出判定', () => {
-      const action = new TestNonInteractiveAction('test_action', {
-        max_rounds: 3,
-      });
-
-      expect(action.exitPolicy.supportsExit).toBe(false);
-
-      // 即使达到最大轮次，也不应该退出（因为不支持）
-      action.currentRound = 3;
-      const exitDecision = action['evaluateExitCondition'](context, {});
-
-      expect(exitDecision.should_exit).toBe(false);
-      expect(exitDecision.reason).toContain('does not support exit mechanism');
-    });
-
-    it('应该支持选择性启用退出来源', () => {
-      class CustomAction extends BaseAction {
-        static actionType = 'custom';
-
-        constructor(actionId: string, config: Record<string, any>) {
-          super(actionId, config);
-          // 只启用 max_rounds 和 exit_flag
-          this.exitPolicy = {
-            supportsExit: true,
-            enabledSources: ['max_rounds', 'exit_flag'],
-          };
-        }
-
-        async execute(_context: ActionContext): Promise<ActionResult> {
-          return { success: true, completed: true };
-        }
-      }
-
-      const action = new CustomAction('test_action', {
-        max_rounds: 5,
-        exit_criteria: {
-          understanding_threshold: 80,
-        },
-      });
-      action.currentRound = 2;
-
-      // LLM 建议退出，但未启用 llm_suggestion
-      const llmOutput = {
-        should_exit: true,
-        assessment: {
-          understanding_level: 85,
-        },
-      };
-
-      const exitDecision = action['evaluateExitCondition'](context, llmOutput);
-
-      // 应该检查 exit_criteria（未启用），然后检查 llm_suggestion（也未启用）
-      // 最终不应该退出
+      // custom_conditions 已移除，即使变量满足条件也不会触发退出
       expect(exitDecision.should_exit).toBe(false);
     });
   });
 
-  describe('4. 综合场景测试', () => {
-    it('应该在 CBT 会话场景中正确应用退出决策', async () => {
-      const action = new TestInteractiveAction('concept_intro', {
+  describe('3. 不支持退出的 Action', () => {
+    it('应该在不支持退出的 Action 中默认继续', () => {
+      const action = new TestNonInteractiveAction('test_action', {});
+
+      const llmOutput = {
+        exit: 'true',
+        exit_reason: '测试',
+      };
+
+      const exitDecision = action['evaluateExitCondition'](context, llmOutput);
+
+      expect(exitDecision.should_exit).toBe(false);
+    });
+  });
+
+  describe('4. 综合场景', () => {
+    it('应该在 CBT 会话场景中正确应用退出决策', () => {
+      const action = new TestInteractiveAction('cbt_session', {
         max_rounds: 5,
-        exit_criteria: {
-          understanding_threshold: 80,
-          has_questions: false,
-        },
       });
 
-      // 第一轮：理解度不足（通过直接调用 evaluateExitCondition 验证）
+      // 第一轮：LLM 建议继续
       const llmOutput1 = {
-        EXIT: 'false',
-        assessment: {
-          understanding_level: 50, // 低于阈值
-          has_questions: false,
-        },
+        exit: 'false',
+        exit_reason: '继续收集',
       };
       action.currentRound = 1;
       const exitDecision1 = action['evaluateExitCondition'](context, llmOutput1);
       expect(exitDecision1.should_exit).toBe(false);
 
-      // 第二轮：用户理解但有疑问
+      // 第二轮：LLM 建议退出
       const llmOutput2 = {
-        EXIT: 'false',
-        assessment: {
-          understanding_level: 85,
-          has_questions: true, // 仍有疑问
-        },
+        exit: 'true',
+        exit_reason: '信息已完整',
       };
       action.currentRound = 2;
       const exitDecision2 = action['evaluateExitCondition'](context, llmOutput2);
-      expect(exitDecision2.should_exit).toBe(false);
-
-      // 第三轮：用户理解且无疑问
-      const llmOutput3 = {
-        EXIT: 'false',
-        assessment: {
-          understanding_level: 90,
-          has_questions: false, // 无疑问
-        },
-      };
-      action.currentRound = 3;
-      const exitDecision3 = action['evaluateExitCondition'](context, llmOutput3);
-      expect(exitDecision3.should_exit).toBe(true);
-      expect(exitDecision3.decision_source).toBe('exit_criteria');
+      expect(exitDecision2.should_exit).toBe(true);
+      expect(exitDecision2.decision_source).toBe('exit_flag');
     });
 
-    it('应该处理 EXIT 标志优先级高于 exit_criteria', () => {
+    it('应该处理 exit 标志优先级高于 exit_criteria', () => {
       const action = new TestInteractiveAction('test_action', {
         max_rounds: 5,
-        exit_criteria: {
-          understanding_threshold: 90, // 高阈值
-        },
+        exit_criteria: {},
       });
       action.currentRound = 1;
 
       const llmOutput = {
-        EXIT: 'true', // 显式退出标志
+        exit: 'true',
         exit_reason: '检测到用户不适合继续',
-        assessment: {
-          understanding_level: 50, // 未达到阈值
-        },
       };
 
       const exitDecision = action['evaluateExitCondition'](context, llmOutput);
 
-      // 应该因为 EXIT 标志而退出，而不是 exit_criteria
       expect(exitDecision.should_exit).toBe(true);
       expect(exitDecision.decision_source).toBe('exit_flag');
       expect(exitDecision.reason).toBe('检测到用户不适合继续');
