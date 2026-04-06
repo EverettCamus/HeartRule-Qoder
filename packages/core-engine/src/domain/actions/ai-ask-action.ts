@@ -32,7 +32,7 @@ import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrat
 import { PromptTemplateManager, TemplateResolver } from '../../engines/prompt-template/index.js';
 
 import { BaseAction } from './base-action.js';
-import type { ActionContext, ActionResult, ExitReason } from './base-action.js';
+import type { ActionContext, ActionResult } from './base-action.js';
 
 /**
  * 模板类型枚举
@@ -178,20 +178,14 @@ export class AiAskAction extends BaseAction {
     const exitDecision = this.exitDecisionEngine.evaluate(exitCriteria, decisionContext);
 
     // 计算 exit_reason
-    // 优先级：rules > combined > llm（硬性规则优先）
-    let exitReason: ExitReason | undefined;
-    if (exitDecision.ruleExit) {
-      // 规则触发（包括 combined 和 rules 情况）
-      exitReason = 'max_rounds_reached';
+    // 优先级：LLM输出的exit_reason > 规则推断
+    let exitReason: string | undefined;
+    if (llmOutput.exit_reason) {
+      exitReason = llmOutput.exit_reason;
+    } else if (exitDecision.ruleExit) {
+      exitReason = '达到最大轮次';
     } else if (exitDecision.llmExit) {
-      // 仅 LLM 建议退出
-      if (llmOutput.assessment?.includes('阻抗')) {
-        exitReason = 'user_blocked';
-      } else if (llmOutput.assessment?.includes('偏题')) {
-        exitReason = 'off_topic';
-      } else {
-        exitReason = 'exit_criteria_met';
-      }
+      exitReason = 'LLM建议退出';
     }
 
     console.log(`[AiAskAction] 🎯 Exit decision:`, exitDecision, `exit_reason:`, exitReason);
@@ -732,8 +726,9 @@ ${historyText}
       content: rawResponse.trim(),
       assessment: 'JSON解析失败，使用默认评估',
       progress: '进度评估不可用',
-      EXIT: 'false',
-      BRIEF: 'LLM输出JSON解析失败',
+      exit: 'false',
+      exit_reason: '继续收集',
+      brief: 'LLM输出JSON解析失败',
       crisis_detected: false,
     };
   }
@@ -940,7 +935,7 @@ ${historyText}
       const extractedVariables = this.extractVariablesFromJson(llmOutput);
 
       // 判断是否退出
-      const shouldExit = llmOutput.EXIT === 'true';
+      const shouldExit = llmOutput.exit === 'true';
 
       // 提取 AI 消息：优先使用 content 字段（新格式）
       const aiMessage = llmOutput.content || '';
@@ -964,16 +959,17 @@ ${historyText}
         metadata: {
           actionType: AiAskAction.actionType,
           shouldExit,
-          brief: llmOutput.BRIEF,
+          exit_reason: llmOutput.exit_reason,
+          brief: llmOutput.brief,
           assessment: llmOutput.assessment,
           progress: llmOutput.progress,
+          safety_check: llmOutput.safety_check,
           crisis_detected: crisisDetected,
           currentRound: this.currentRound,
           llmRawOutput: parseResult.cleanedResponse,
           template_path: resolution.path,
           template_layer: resolution.layer,
           template_scheme: resolution.scheme,
-          safety_check: safetyCheck,
           parseError: (parseResult.parseError?.retryCount || 0) > 1,
           parseRetryCount: parseResult.parseError?.retryCount || 0,
           parseErrorDetails: parseResult.parseError,
@@ -988,8 +984,6 @@ ${historyText}
       required_variables: this.getConfig('output')
         ?.map((v: any) => v.get)
         .filter(Boolean),
-      understanding_threshold: this.getConfig('understanding_threshold'),
-      has_questions: this.getConfig('has_questions'),
       custom_conditions: this.getConfig('custom_conditions'),
     };
   }
