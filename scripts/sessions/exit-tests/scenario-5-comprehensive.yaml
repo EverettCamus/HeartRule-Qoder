@@ -1,0 +1,97 @@
+# 场景5：混合条件退出 - 综合多个条件的智能决策
+# 预期行为：结合 required_variables、understanding_threshold、impedance_threshold 和 crisis_detected
+# 关键特性：展示完整的 LLM 输出格式（assessment、progress、crisis_detected）
+
+metadata:
+  name: "场景5：混合条件退出 - 综合评估"
+  version: "1.0"
+  description: "综合必需变量、理解度、阻抗、偏题和危机检测，展示完整的退出决策逻辑"
+  test_scenario: "comprehensive_mixed_exit"
+  created_date: "2026-03-20"
+  author: "Test Suite"
+
+session:
+  session_id: "scenario_5_comprehensive"
+  session_name: "综合条件退出场景测试"
+
+  phases:
+    - phase_id: "crisis_assessment"
+      phase_name: "危机评估阶段"
+      phase_goal: "识别用户是否存在危机风险"
+
+      topics:
+        - topic_id: "safety_assessment"
+          topic_name: "安全性评估"
+          topic_goal: "评估用户的自伤/自杀风险"
+
+          actions:
+            - action_type: "ai_ask"
+              action_id: "assess_safety_risk"
+              config:
+                content: |
+                  我需要确保你的安全。请诚实地回答：
+                  - 最近你有过伤害自己的想法吗？
+                  - 你现在感到安全吗？
+
+                output:
+                  - get: "自伤想法"
+                    define: "用户是否表达过自伤或自杀的想法"
+                    require: "关键"
+                  - get: "当前安全感"
+                    define: "用户对自身安全的主观感受"
+                    require: "关键"
+                  - get: "支持系统"
+                    define: "用户拥有的社交支持和资源"
+                    require: "重要"
+
+                # 退出条件配置
+                max_rounds: 5
+
+                # LLM 语义评估阈值
+                understanding_threshold: 75  # 危机评估需要高理解度
+                impedance_threshold: 40      # 对此类问题的阻抗可能指示隐蔽危机
+                topic_drift_threshold: 20    # 此话题不允许偏离
+
+                # 危机检测配置
+                crisis_thresholds:
+                  explicit_suicidal_ideation: true    # 明确自杀念头
+                  self_harm_plan: true                # 自伤计划
+                  imminent_danger: true               # 迫在眉睫的危害
+
+                # 退出说明
+                exit_condition: |
+                  退出决策逻辑：
+
+                  优先级1（最高）：crisis_detected = true
+                    → 同步启动危机处理流程，评估是否需要修订回复或转向专业支持
+
+                  优先级2：自伤想法 + 当前安全感 已收集
+                    → 规则检查 required_variables 完成 → 退出
+
+                  优先级3：用户表现出极高阻抗（>70分）
+                    → 即使变量未完整，也应退出以尊重心理边界
+
+                  优先级4：达到 max_rounds
+                    → 无条件退出
+
+                # 样本 LLM 输出格式演示
+                sample_llm_output: |
+                  {
+                    "content": "我听到你最近有这些想法。我很关心你的安全。",
+                    "assessment": "## 风险识别\\n危机等级：中等\\n- 用户承认有自伤想法\\n- 但语气平静，无即时威胁感\\n\\n## 阻抗分析\\n阻抗程度：低(25分)\\n用户对此问题的回答相对坦诚\\n\\n## 用户理解\\n用户理解程度：良好(80分)\\n用户理解咨询的保密性和目的",
+                    "progress": "## 进度评估\\n- [x] 自伤想法：用户已坦诚回答\\n- [x] 当前安全感：已收集\\n- [ ] 支持系统：未详细探索\\n\\n## 成本与轮次\\n当前轮次：2/5\\n建议轮次：再需1轮确认支持系统",
+                    "exit": "false",
+                    "brief": "需要继续探索支持系统",
+                    "crisis_detected": false
+                  }
+
+                # 测试目的
+                test_purpose: |
+                  演示完整的退出决策流程：
+                  1. LLM 输出包含 assessment 和 progress（markdown格式）
+                  2. crisis_detected 明确标注（仅真正危机时为 true）
+                  3. 规则引擎综合判断：
+                     - required_variables 检查
+                     - impedance/topic_drift 阈值检查
+                     - max_rounds 安全网
+                  4. 最终决策：shouldExit 基于优先级综合判定

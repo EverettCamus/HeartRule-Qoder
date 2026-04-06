@@ -3,66 +3,60 @@
 # 预期行为：按照优先级顺序触发退出
 
 metadata:
-  name: "AI_Ask退出机制综合测试"
-  version: "1.0"
-  description: "综合测试多种退出条件的交互"
-  test_scenario: "comprehensive"
+  name: 'AI_Ask退出机制综合测试'
+  version: '1.0'
+  description: '综合测试多种退出条件的交互'
+  test_scenario: 'comprehensive'
 
 session:
-  session_id: "test_exit_comprehensive"
-  session_name: "退出机制综合测试"
-  
+  session_id: 'test_exit_comprehensive'
+  session_name: '退出机制综合测试'
+
   phases:
-    - phase_id: "phase_1_basic"
-      phase_name: "基础退出测试"
-      
+    - phase_id: 'phase_1_basic'
+      phase_name: '基础退出测试'
+
       topics:
-        - topic_id: "topic_basic"
-          topic_name: "基础测试"
-          
+        - topic_id: 'topic_basic'
+          topic_name: '基础测试'
+
           actions:
             # 综合测试：混合规则和LLM控制
-            - action_type: "ai_ask"
-              action_id: "comprehensive_test"
+            - action_type: 'ai_ask'
+              action_id: 'comprehensive_test'
               config:
                 content: |
                   你好，我想了解一些基本信息：
                   请告诉我你的姓名、年龄和今天的来访目的。
                 output:
-                  - get: "姓名"
-                    define: "用户的姓名"
-                    require: "关键"
-                  - get: "年龄"
-                    define: "用户的年龄"
-                    require: "重要"
-                  - get: "来访目的"
-                    define: "用户来访的主要目的"
-                    require: "关键"
+                  - get: '姓名'
+                    define: '用户的姓名'
+                    require: '关键'
+                  - get: '年龄'
+                    define: '用户的年龄'
+                    require: '重要'
+                  - get: '来访目的'
+                    define: '用户来访的主要目的'
+                    require: '关键'
                 max_rounds: 4
-                understanding_threshold: 80
-                has_questions: false
-                custom_conditions:
-                  - variable: "姓名"
-                    operator: "!="
-                    value: ""
-                exit: "已收集基本访客信息"
-    
+                exit_condition: '已收集基本访客信息'
+
     # 测试优先级：max_rounds > LLM EXIT > required_variables
-    - phase_id: "phase_2_priority"
-      phase_name: "优先级测试"
-      
+    - phase_id: 'phase_2_priority'
+      phase_name: '优先级测试'
+
       topics:
-        - topic_id: "topic_priority"
-          topic_name: "优先级测试"
-          
+        - topic_id: 'topic_priority'
+          topic_name: '优先级测试'
+
           actions:
             # 优先级测试：验证退出决策优先级
-            - action_type: "ai_ask"
-              action_id: "priority_test"
+            - action_type: 'ai_ask'
+              action_id: 'priority_test'
               config:
-                content: "让我们深入了解你的情况。"
+                content: '让我们深入了解你的情况。'
                 output:
-                  - get: "详细信息"
-                    define: "用户提供的详细信息"
+                  - get: '详细信息'
+                    define: '用户提供的详细信息'
                 max_rounds: 2
-                exit: "完成信息收集"
+                exit_condition: '完成信息收集'

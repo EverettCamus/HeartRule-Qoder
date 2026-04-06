@@ -1,37 +1,35 @@
 # 测试场景：custom_conditions 自定义条件 - 情绪检测
-# 目的：验证自定义退出条件正常工作
-# 预期行为：当用户情绪为"平静"时退出
+# 注意：custom_conditions 已从 ai_ask 中移除，此脚本仅作为历史参考
+# 目的：验证退出条件描述正常工作
+# 预期行为：当用户情绪为"平静"时退出（由LLM语义判断）
 
 metadata:
-  name: "测试 custom_conditions 情绪条件"
-  version: "1.0"
-  description: "验证自定义退出条件 - 情绪等于平静时退出"
-  test_scenario: "custom_conditions_emotion"
+  name: '测试 custom_conditions 情绪条件'
+  version: '1.0'
+  description: '验证自定义退出条件 - 情绪等于平静时退出'
+  test_scenario: 'custom_conditions_emotion'
 
 session:
-  session_id: "test_custom_emotion"
-  session_name: "自定义条件情绪测试"
-  
+  session_id: 'test_custom_emotion'
+  session_name: '自定义条件情绪测试'
+
   phases:
-    - phase_id: "test_phase"
-      phase_name: "测试阶段"
-      
+    - phase_id: 'test_phase'
+      phase_name: '测试阶段'
+
       topics:
-        - topic_id: "test_topic"
-          topic_name: "情绪条件测试"
-          
+        - topic_id: 'test_topic'
+          topic_name: '情绪条件测试'
+
           actions:
-            # 测试：自定义条件 - 当用户情绪为"平静"时退出
-            - action_type: "ai_ask"
-              action_id: "custom_condition_emotion"
+            # 测试：退出条件描述 - 当用户情绪为"平静"时退出
+            - action_type: 'ai_ask'
+              action_id: 'custom_condition_emotion'
               config:
-                content: "你现在感觉怎么样？"
+                content: '你现在感觉怎么样？'
                 output:
-                  - get: "用户情绪"
-                    define: "用户当前的情绪状态"
+                  - get: '用户情绪'
+                    define: '用户当前的情绪状态'
+                    require: '即时'
                 max_rounds: 5
-                custom_conditions:
-                  - variable: "用户情绪"
-                    operator: "=="
-                    value: "平静"
-                exit: "用户情绪已平稳"
+                exit_condition: '用户情绪已平稳'

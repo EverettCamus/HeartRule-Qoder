@@ -33,4 +33,4 @@ session:
                   - get: "严重程度"
                     define: "症状的严重程度"
                 max_rounds: 3
-                exit: "已收集足够的症状信息"
+                exit_condition: "已收集足够的症状信息"

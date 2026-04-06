@@ -1,0 +1,62 @@
+# 场景4：最大轮次安全网 - 达到上限被迫退出
+# 预期行为：无论 LLM 输出如何，达到 max_rounds 后强制退出，规则引擎触发 "max_rounds reached" 规则
+# 关键字段：max_rounds 作为安全网，优先级最高
+
+metadata:
+  name: "场景4：最大轮次退出 - 安全网触发"
+  version: "1.0"
+  description: "无论LLM语义判断如何，达到最大轮数后强制退出，防止LLM陷入循环"
+  test_scenario: "max_rounds_safety_net"
+  created_date: "2026-03-20"
+  author: "Test Suite"
+
+session:
+  session_id: "scenario_4_max_rounds"
+  session_name: "最大轮次退出场景测试"
+
+  phases:
+    - phase_id: "detailed_history"
+      phase_name: "详细历史背景阶段"
+      phase_goal: "收集用户的长期背景信息"
+
+      topics:
+        - topic_id: "childhood_patterns"
+          topic_name: "童年模式探索"
+          topic_goal: "理解用户的早期生活模式"
+
+          actions:
+            - action_type: "ai_ask"
+              action_id: "explore_early_patterns"
+              config:
+                content: |
+                  为了更深入地理解你的心理模式，我想探索一下你的童年经历。
+                  请分享：
+                  1. 你印象中最早的焦虑或不安全感来自哪里？
+                  2. 你的父母是如何应对你的情绪的？
+
+                output:
+                  - get: "早期焦虑来源"
+                    define: "用户识别的童年期间的焦虑或不安全感根源"
+                    require: "补充"
+                  - get: "父母养育方式"
+                    define: "用户对父母养育风格和情绪反应的描述"
+                    require: "补充"
+
+                # 退出条件配置
+                max_rounds: 3  # ← 关键参数：设置较低的轮数限制，测试安全网
+
+                # LLM 语义评估阈值
+                understanding_threshold: 60
+                impedance_threshold: 50
+                topic_drift_threshold: 35
+
+                # 安全网说明
+                exit_condition: |
+                  此 action 的 max_rounds 设置为 3，用于测试安全网机制。
+                  即使 LLM 判断应该继续（exit=false），达到 3 轮后仍将被强制退出。
+
+                  规则引擎检查：
+                  if currentRound >= max_rounds → shouldExit = true (regardless of LLM output)
+
+                # 测试用途
+                test_purpose: "验证 max_rounds 作为最后防线的机制，防止 LLM 陷入死循环"

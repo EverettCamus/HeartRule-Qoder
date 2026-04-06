@@ -1,0 +1,64 @@
+# 场景3：偏题退出 - 用户开始离题
+# 预期行为：用户回答开始偏离主题，LLM 检测到偏题（topic_drift_score > 40），assessment 中标注"话题偏离"，建议重新聚焦或安全退出
+# 关键字段：topic_drift_threshold 用于触发话题管理
+
+metadata:
+  name: "场景3：偏题退出 - 用户离题"
+  version: "1.0"
+  description: "用户开始讲述与主题无关的内容，LLM检测到话题偏移，识别是否需要引导回焦或优雅退出"
+  test_scenario: "topic_drift_exit"
+  created_date: "2026-03-20"
+  author: "Test Suite"
+
+session:
+  session_id: "scenario_3_topic_drift"
+  session_name: "偏题退出场景测试"
+
+  phases:
+    - phase_id: "symptom_exploration"
+      phase_name: "症状探索阶段"
+      phase_goal: "收集用户的具体症状信息"
+
+      topics:
+        - topic_id: "symptom_details"
+          topic_name: "症状细节"
+          topic_goal: "详细了解用户经历的症状"
+
+          actions:
+            - action_type: "ai_ask"
+              action_id: "explore_anxiety_symptoms"
+              config:
+                content: |
+                  请详细描述你经历的焦虑症状。
+                  比如：
+                  - 身体上的感受（心跳加速、出汗等）
+                  - 这些症状通常在什么情况下出现
+                  - 持续多长时间
+
+                output:
+                  - get: "焦虑症状描述"
+                    define: "用户经历的焦虑症状，包括生理、心理、认知表现"
+                    require: "关键"
+                  - get: "症状触发情境"
+                    define: "触发焦虑症状的具体情景或环境"
+                    require: "关键"
+
+                # 退出条件配置
+                max_rounds: 5
+
+                # LLM 语义评估阈值（关键：偏题阈值）
+                understanding_threshold: 65
+                impedance_threshold: 45
+                topic_drift_threshold: 40  # ← 关键参数：当话题偏移超过40分时检测到偏题
+
+                # 偏题处理说明
+                exit_condition: |
+                  若检测到话题偏离主题（用户开始讨论无关话题如工作八卦、天气等），
+                  应首先尝试温和地引导回焦点。
+                  如用户仍然离题或表现出不适，则优雅地退出此 action
+
+                # 样本触发案例
+                sample_drift_signals:
+                  - "开始讨论与症状无关的个人经历"
+                  - "多次改变话题"
+                  - "用时间填充、避免直接回答"

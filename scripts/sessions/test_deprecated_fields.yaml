@@ -31,7 +31,7 @@ session:
               config:
                 content_template: "向来访者询问如何称呼"
                 question_template: "向来访者询问如何称呼"
-                exit: "收到来访者的称呼"
+                exit_condition: "收到来访者的称呼"
                 target_variable: "user_name"
                 extraction_prompt: "来访者可以接受的称呼"
                 required: false
@@ -42,7 +42,7 @@ session:
               action_id: "action_3"
               config:
                 content: "请告诉我你的名字"
-                exit: "获得用户名"
+                exit_condition: "获得用户名"
                 max_rounds: 3
                 output:
                   - get: "user_name"

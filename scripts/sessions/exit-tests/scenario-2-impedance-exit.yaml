@@ -1,0 +1,58 @@
+# 场景2：阻抗退出 - 用户表现出明显回避
+# 预期行为：用户回答简短/模糊，LLM 检测到高阻抗（impedance_score > 60），assessment 中标注"高阻抗"，exit="true", brief="用户表现出回避倾向"
+# 关键字段：impedance_threshold 用于触发规则侦查
+
+metadata:
+  name: "场景2：阻抗退出 - 用户回避"
+  version: "1.0"
+  description: "用户表现出明显回避、困惑或记忆缺失，LLM检测到高阻抗，在达到阻抗阈值时退出"
+  test_scenario: "impedance_based_exit"
+  created_date: "2026-03-20"
+  author: "Test Suite"
+
+session:
+  session_id: "scenario_2_impedance_exit"
+  session_name: "阻抗退出场景测试"
+
+  phases:
+    - phase_id: "deep_assessment"
+      phase_name: "深度评估阶段"
+      phase_goal: "探索用户的家庭背景和人际关系"
+
+      topics:
+        - topic_id: "relationship_exploration"
+          topic_name: "人际关系探索"
+          topic_goal: "了解用户的家庭和人际关系情况"
+
+          actions:
+            - action_type: "ai_ask"
+              action_id: "explore_family_dynamics"
+              config:
+                content: |
+                  我想更了解一下你的人生背景。能告诉我：
+                  1. 你和家人的关系怎么样？
+                  2. 最近与他们的互动中有什么值得注意的吗？
+
+                output:
+                  - get: "家庭关系描述"
+                    define: "用户对家庭成员关系和互动的描述"
+                    require: "重要"
+                  - get: "最近家庭事件"
+                    define: "最近发生在家庭中的重要事件"
+                    require: "补充"
+
+                # 退出条件配置
+                max_rounds: 4
+
+                # LLM 语义评估阈值（关键：阻抗阈值）
+                understanding_threshold: 50
+                impedance_threshold: 60  # ← 关键参数：当用户阻抗超过60分时，倾向于退出
+                topic_drift_threshold: 25
+
+                # 阻抗检测说明
+                exit_condition: |
+                  用户可能对此话题感到不舒适或存在记忆困难。
+                  即使未收集完整信息，也应尊重用户的心理边界而退出
+
+                # 风险考量
+                crisis_risk: false

@@ -30,4 +30,4 @@ session:
                   - get: "心情描述"
                     define: "用户对自己心情的描述"
                 max_rounds: 1
-                exit: "用户提供了心情描述"
+                exit_condition: "用户提供了心情描述"

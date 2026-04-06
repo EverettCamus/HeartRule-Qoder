@@ -31,4 +31,4 @@ session:
                   - get: "用户状态"
                     define: "用户近期的状态描述"
                 max_rounds: 3
-                exit: "完成状态了解"
+                exit_condition: "完成状态了解"

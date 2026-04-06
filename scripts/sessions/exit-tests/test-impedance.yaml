@@ -31,4 +31,4 @@ session:
                     define: "用户描述的家庭情况"
                 max_rounds: 3
                 understanding_threshold: 60
-                exit: "用户提供了家庭信息或表示不愿继续"
+                exit_condition: "用户提供了家庭信息或表示不愿继续"

@@ -34,4 +34,4 @@ session:
                 max_rounds: 5
                 understanding_threshold: 80
                 has_questions: false
-                exit: "用户已清晰表达压力情况"
+                exit_condition: "用户已清晰表达压力情况"

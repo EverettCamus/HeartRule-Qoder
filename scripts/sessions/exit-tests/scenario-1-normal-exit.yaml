@@ -1,0 +1,61 @@
+# 场景1：正常退出 - 用户完整回答所有必需变量
+# 预期行为：用户在2-3轮内提供完整信息，规则引擎检测到 required_variables 全部满足，正常退出
+# LLM 输出：exit="true", brief="已收集所有关键信息"
+
+metadata:
+  name: "场景1：正常退出 - 信息完整"
+  version: "1.0"
+  description: "用户快速、完整地回答问题，收集齐所有必需变量后正常退出"
+  test_scenario: "normal_exit_complete_info"
+  created_date: "2026-03-20"
+  author: "Test Suite"
+
+session:
+  session_id: "scenario_1_normal_exit"
+  session_name: "正常退出场景测试"
+
+  phases:
+    - phase_id: "assessment_phase"
+      phase_name: "初步评估阶段"
+      phase_goal: "收集用户的基本情况和主要困扰"
+
+      topics:
+        - topic_id: "initial_assessment"
+          topic_name: "初步评估"
+          topic_goal: "快速了解用户的基本情况和来访原因"
+
+          actions:
+            # 这个 ai_ask 是测试重点
+            - action_type: "ai_ask"
+              action_id: "collect_basic_info"
+              config:
+                content: |
+                  你好，欢迎来到心理咨询。为了更好地帮助你，我想先了解一些基本信息。
+                  请告诉我：
+                  1. 最近困扰你的主要问题是什么？
+                  2. 这个问题大概持续了多长时间？
+
+                output:
+                  - get: "主要问题"
+                    define: "用户描述的影响日常生活、工作或健康的客观困扰"
+                    require: "关键"
+                  - get: "问题持续时间"
+                    define: "问题存在的时间长度（如：几周、几个月等）"
+                    require: "关键"
+                  - get: "当前症状表现"
+                    define: "问题带来的具体症状和表现"
+                    require: "重要"
+
+                # 退出条件配置
+                max_rounds: 5
+                required_variables:
+                  - "主要问题"
+                  - "问题持续时间"
+
+                # LLM 语义评估阈值
+                understanding_threshold: 70
+                impedance_threshold: 40
+                topic_drift_threshold: 30
+
+                # 退出说明
+                exit_condition: "已完整收集必需信息，用户理解充分，无阻抗"

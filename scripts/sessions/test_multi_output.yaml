@@ -25,7 +25,7 @@ session:
               config:
                 question_template: "你好，请问怎么称呼你？"
                 tone: "亲切，自然"
-                exit: "用户提供了姓名或昵称"
+                exit_condition: "用户提供了姓名或昵称"
                 required: true
                 max_rounds: 3
                 output:
@@ -39,7 +39,7 @@ session:
               config:
                 question_template: "请详细描述一下你的症状，包括症状表现、持续时间和严重程度"
                 tone: "温和，专业、关切"
-                exit: "用户提供了症状描述、持续时间和严重程度的信息"
+                exit_condition: "用户提供了症状描述、持续时间和严重程度的信息"
                 required: true
                 max_rounds: 5
                 output:
@@ -59,7 +59,7 @@ session:
               config:
                 question_template: "为了更好地了解你的情况，能否分享一下你的基本信息？"
                 tone: "温和、尊重"
-                exit: "收集到年龄、职业、教育背景和家庭状况等信息"
+                exit_condition: "收集到年龄、职业、教育背景和家庭状况等信息"
                 required: false
                 max_rounds: 5
                 output:
