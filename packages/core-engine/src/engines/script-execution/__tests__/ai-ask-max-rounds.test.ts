@@ -37,8 +37,8 @@ function createMockLLM(): LLMOrchestrator {
         content: '这是一个测试问题',
         assessment: '## 阻抗分析\n阻抗程度：低',
         progress: '## 进度评估\n- [ ] 信息收集中',
-        EXIT: 'false',
-        BRIEF: '继续收集',
+        exit: 'false',
+        exit_reason: '继续收集',
         crisis_detected: false,
       });
 

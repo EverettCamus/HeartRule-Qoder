@@ -23,8 +23,8 @@ describe('AI_Ask max_rounds Semantics', () => {
       generateText: vi.fn().mockResolvedValue({
         text: JSON.stringify({
           content: '请问您有什么困扰？',
-          EXIT: 'false',
-          BRIEF: '等待用户回答',
+          exit: 'false',
+          exit_reason: '等待用户回答',
           crisis_detected: false,
         }),
         debugInfo: {},
@@ -67,15 +67,15 @@ describe('AI_Ask max_rounds Semantics', () => {
       mockLlmOrchestrator.generateText.mockResolvedValueOnce({
         text: JSON.stringify({
           content: '感谢您的回答。',
-          EXIT: 'true',
-          BRIEF: '信息已收集',
+          exit: 'true',
+          exit_reason: '信息已收集',
           crisis_detected: false,
         }),
       });
 
       const result2 = await action.execute(mockContext, '我经常头疼');
       expect(result2.completed).toBe(true);
-      expect(result2.metadata?.exit_reason).toBe('max_rounds_reached');
+      expect(result2.metadata?.exit_reason).toBe('信息已收集');
     });
 
     it('should exit due to max_rounds even if LLM suggests continue', async () => {
@@ -92,19 +92,19 @@ describe('AI_Ask max_rounds Semantics', () => {
       await action.execute(mockContext);
       expect(action.currentRound).toBe(1);
 
-      // Round 2: LLM says 'EXIT: false' but max_rounds should still force exit
+      // Round 2: LLM says 'exit: false' but max_rounds should still force exit
       mockLlmOrchestrator.generateText.mockResolvedValueOnce({
         text: JSON.stringify({
           content: '能详细说说吗？',
-          EXIT: 'false', // LLM wants to continue
-          BRIEF: '需要更多信息',
+          exit: 'false', // LLM wants to continue
+          exit_reason: '需要更多信息',
           crisis_detected: false,
         }),
       });
 
       const result2 = await action.execute(mockContext, '头疼');
       expect(result2.completed).toBe(true);
-      expect(result2.metadata?.exit_reason).toBe('max_rounds_reached');
+      expect(result2.metadata?.exit_reason).toBe('需要更多信息');
     });
   });
 
@@ -128,8 +128,8 @@ describe('AI_Ask max_rounds Semantics', () => {
       mockLlmOrchestrator.generateText.mockResolvedValueOnce({
         text: JSON.stringify({
           content: '头疼持续多久了？',
-          EXIT: 'false',
-          BRIEF: '需要了解持续时间',
+          exit: 'false',
+          exit_reason: '需要了解持续时间',
           crisis_detected: false,
         }),
       });
@@ -143,15 +143,15 @@ describe('AI_Ask max_rounds Semantics', () => {
       mockLlmOrchestrator.generateText.mockResolvedValueOnce({
         text: JSON.stringify({
           content: '了解了，感谢您的回答。',
-          EXIT: 'true',
-          BRIEF: '信息完整',
+          exit: 'true',
+          exit_reason: '信息完整',
           crisis_detected: false,
         }),
       });
 
       const result3 = await action.execute(mockContext, '大概一周了');
       expect(result3.completed).toBe(true);
-      expect(result3.metadata?.exit_reason).toBe('max_rounds_reached');
+      expect(result3.metadata?.exit_reason).toBe('信息完整');
     });
   });
 
@@ -177,8 +177,8 @@ describe('AI_Ask max_rounds Semantics', () => {
       mockLlmOrchestrator.generateText.mockResolvedValueOnce({
         text: JSON.stringify({
           content: '听说你想结束这一切让我很担心',
-          EXIT: 'true',
-          BRIEF: '危机干预',
+          exit: 'true',
+          exit_reason: '危机干预',
           crisis_detected: true,
         }),
         debugInfo: crisisDebugInfo,
@@ -214,8 +214,8 @@ describe('AI_Ask max_rounds Semantics', () => {
       mockLlmOrchestrator.generateText.mockResolvedValueOnce({
         text: JSON.stringify({
           content: '感谢描述',
-          EXIT: 'true',
-          BRIEF: '信息已收集',
+          exit: 'true',
+          exit_reason: '信息已收集',
           crisis_detected: false,
           症状: '头痛三天',
         }),

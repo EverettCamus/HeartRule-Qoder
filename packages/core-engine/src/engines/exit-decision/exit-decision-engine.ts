@@ -22,8 +22,8 @@ export class ExitDecisionEngine {
   }
 
   evaluate(criteria: ExitCriteria, context: DecisionContext): ExitDecisionResult {
-    const llmExit = context.llmOutput.EXIT === 'true';
-    const llmReason = context.llmOutput.BRIEF || 'LLM建议退出';
+    const llmExit = context.llmOutput.exit === 'true';
+    const llmReason = context.llmOutput.exit_reason || 'LLM建议退出';
 
     const ruleResult = this.ruleEvaluator.evaluate(criteria, {
       currentRound: context.currentRound,

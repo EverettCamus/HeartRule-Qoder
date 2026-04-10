@@ -14,7 +14,6 @@ import {
   Collapse,
   Switch,
   InputNumber,
-  Checkbox,
   Alert,
 } from 'antd';
 import React, { useRef } from 'react';
@@ -63,11 +62,10 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
       } else if (action.type === 'ai_ask') {
         formValues.ai_ask = action.ai_ask;
         formValues.tone = action.tone || '';
-        formValues.exit = action.exit || '';
+        formValues.exit_condition = action.exit_condition || '';
         formValues.tolist = action.tolist || '';
         formValues.question_template = action.question_template || action.ai_ask;
-        formValues.required = action.required ?? false;
-        formValues.max_rounds = action.max_rounds ?? 3;
+        formValues.max_rounds = action.max_rounds ?? 10;
         formValues.output = action.output || [];
       } else if (action.type === 'ai_think') {
         formValues.think = action.think;
@@ -113,10 +111,9 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
         Object.assign(updatedAction, {
           ai_ask: values.ai_ask,
           tone: values.tone || undefined,
-          exit: values.exit || undefined,
+          exit_condition: values.exit_condition || undefined,
           tolist: values.tolist || undefined,
           question_template: values.question_template || values.ai_ask,
-          required: values.required,
           max_rounds: values.max_rounds,
           output: values.output || undefined,
         });
@@ -249,9 +246,9 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                     label="Max Rounds"
                     name="max_rounds"
                     tooltip="Protection mechanism against infinite loops"
-                    rules={[{ type: 'number', min: 1, max: 20 }]}
+                    rules={[{ type: 'number', min: 1 }]}
                   >
-                    <InputNumber min={1} max={20} style={{ width: '100%' }} />
+                    <InputNumber min={1} style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
               </Row>
@@ -316,22 +313,16 @@ export const ActionPropertyPanel: React.FC<ActionPropertyPanelProps> = ({
                 </Col>
                 <Col span={8}>
                   <Form.Item label="Max Rounds" name="max_rounds" tooltip="最大交互轮数">
-                    <InputNumber min={1} max={10} style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item
-                    label="Required"
-                    name="required"
-                    valuePropName="checked"
-                    tooltip="是否必填"
-                  >
-                    <Checkbox />
+                    <InputNumber min={1} style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
               </Row>
 
-              <Form.Item label="Exit Condition" name="exit" tooltip="什么情况下退出该Action">
+              <Form.Item
+                label="Exit Condition"
+                name="exit_condition"
+                tooltip="什么情况下退出该Action"
+              >
                 <TextArea rows={2} placeholder="Describe when to exit this Action..." />
               </Form.Item>
 

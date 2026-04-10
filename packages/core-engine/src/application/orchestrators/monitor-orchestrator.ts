@@ -36,7 +36,7 @@ export class MonitorOrchestrator {
     console.log('[MonitorOrchestrator] 📊 Triggering monitor analysis:', {
       actionType,
       actionId,
-      hasMetrics: !!result.metrics,
+      hasAssessment: !!result.metadata?.assessment,
     });
 
     try {

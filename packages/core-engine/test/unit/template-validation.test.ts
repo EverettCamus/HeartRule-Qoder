@@ -115,7 +115,7 @@ describe('T8: 模板验证机制', () => {
   });
 
   describe('JSON 输出格式检查（新安全机制）', () => {
-    it('应该检查 JSON 模板是否包含 safety_risk 字段', () => {
+    it('应该检查 JSON 模板是否包含 safety_check 字段', () => {
       const templateWithoutSafetyRisk = `# AI Ask 模板
 
 【输出格式】
@@ -130,10 +130,10 @@ describe('T8: 模板验证机制', () => {
 
       const result = templateManager.validateTemplate(templateWithoutSafetyRisk, 'ai_ask_v1.md');
 
-      expect(result.warnings.some((w) => w.includes("missing 'safety_risk' field"))).toBe(true);
+      expect(result.warnings.some((w) => w.includes("missing 'safety_check' field"))).toBe(true);
     });
 
-    it('应该检查 JSON 模板是否包含 crisis_signal 字段', () => {
+    it('应该检查 JSON 模板是否包含 crisis_detected 字段', () => {
       const templateWithoutCrisisSignal = `# AI Ask 模板
 
 【输出格式】
@@ -142,18 +142,16 @@ describe('T8: 模板验证机制', () => {
 \`\`\`json
 {
   "content": "咨询师的回复",
-  "safety_risk": {
-    "detected": false,
-    "risk_type": null,
-    "confidence": "high",
-    "reason": null
+  "safety_check": {
+    "passed": false,
+    "concern": null
   }
 }
 \`\`\``;
 
       const result = templateManager.validateTemplate(templateWithoutCrisisSignal, 'ai_ask_v1.md');
 
-      expect(result.warnings.some((w) => w.includes("missing 'crisis_signal' field"))).toBe(true);
+      expect(result.warnings.some((w) => w.includes("missing 'crisis_detected' field"))).toBe(true);
     });
 
     it('应该通过完整的新安全机制模板', () => {
@@ -172,11 +170,9 @@ describe('T8: 模板验证机制', () => {
 \`\`\`json
 {
   "content": "咨询师的回复",
-  "safety_risk": {
-    "detected": false,
-    "risk_type": null,
-    "confidence": "high",
-    "reason": null
+  "safety_check": {
+    "passed": false,
+    "concern": null
   },
   "metadata": {
     "emotional_tone": "supportive",
@@ -191,7 +187,7 @@ describe('T8: 模板验证机制', () => {
 
       expect(result.valid).toBe(true);
       expect(
-        result.warnings.filter((w) => w.includes('safety_risk') || w.includes('crisis_signal'))
+        result.warnings.filter((w) => w.includes('safety_check') || w.includes('crisis_signal'))
           .length
       ).toBe(0);
     });
@@ -384,22 +380,21 @@ JSON 示例：
 \`\`\`json
 {
   "content": "你的提问内容",
-  "safety_risk": {
-    "detected": false,
-    "risk_type": null,
-    "confidence": "high",
-    "reason": null
+  "safety_check": {
+    "passed": false,
+    "concern": null
   },
   "metadata": {
     "emotional_tone": "supportive",
-    "crisis_signal": false
+    "crisis_detected": false
   },
-  "EXIT": "false",
-  "BRIEF": "简要说明收集到的信息"
+  "exit": "false",
+  "exit_reason": "继续收集",
+  "brief": "简要说明收集到的信息"
 }
 \`\`\`
 
-注意：safety_risk.detected 字段是系统约定的安全检测变量，你必须认真对照【安全边界与伦理规范】进行判断。
+注意：safety_check.passed 字段是系统约定的安全检测变量，你必须认真对照【安全边界与伦理规范】进行判断。
 `;
 
       const result = templateManager.validateTemplate(
@@ -416,9 +411,9 @@ JSON 示例：
       // 不应该有关于安全边界的警告
       expect(result.warnings.filter((w) => w.includes('safety boundary')).length).toBe(0);
 
-      // 不应该有关于 safety_risk 或 crisis_signal 的警告
+      // 不应该有关于 safety_check 或 crisis_detected 的警告
       expect(
-        result.warnings.filter((w) => w.includes('safety_risk') || w.includes('crisis_signal'))
+        result.warnings.filter((w) => w.includes('safety_check') || w.includes('crisis_detected'))
           .length
       ).toBe(0);
 

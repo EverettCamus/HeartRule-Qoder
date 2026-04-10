@@ -111,7 +111,7 @@ class YamlService {
                   content: contentValue, // 新字段
                   ai_say: contentValue, // 旧字段，保持向后兼容
                   tone: action.config?.tone,
-                  exit: action.config?.exit,
+                  exit_condition: action.config?.exit_condition,
                   condition: action.condition,
                   max_rounds: action.config?.max_rounds,
                   action_id: action.action_id,
@@ -128,7 +128,7 @@ class YamlService {
                   type: 'ai_ask',
                   ai_ask: contentValue,
                   tone: action.config?.tone,
-                  exit: action.config?.exit,
+                  exit_condition: action.config?.exit_condition,
                   max_rounds: action.config?.max_rounds,
                   output: action.config?.output || [],
                   condition: action.condition,
@@ -338,7 +338,7 @@ class YamlService {
 
                       // 只包含非空字段
                       if (action.tone) config.tone = action.tone;
-                      if (action.exit) config.exit = action.exit;
+                      if (action.exit_condition) config.exit_condition = action.exit_condition;
                       if (action.max_rounds) config.max_rounds = action.max_rounds;
 
                       const result: any = {
@@ -361,7 +361,7 @@ class YamlService {
 
                       // 只包含非空字段
                       if (action.tone) config.tone = action.tone;
-                      if (action.exit) config.exit = action.exit;
+                      if (action.exit_condition) config.exit_condition = action.exit_condition;
                       if (action.max_rounds) config.max_rounds = action.max_rounds;
 
                       // 只在有输出变量时才包含 output 数组
@@ -640,7 +640,7 @@ class YamlService {
               const configSubFields = [
                 'content',
                 'tone',
-                'exit',
+                'exit_condition',
                 'max_rounds',
                 'output',
                 'skill',
@@ -690,7 +690,7 @@ class YamlService {
         const configSubFields = [
           'content',
           'tone',
-          'exit',
+          'exit_condition',
           'max_rounds',
           'output',
           'skill',

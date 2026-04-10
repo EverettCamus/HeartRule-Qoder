@@ -122,13 +122,8 @@ describe('Phase 1 重构：LLM依赖注入优化', () => {
         generateText: vi.fn().mockResolvedValue({
           text: JSON.stringify({
             content: 'Test response 1',
-            safety_risk: { detected: false, risk_type: null, confidence: 'low', reason: null },
+            safety_check: { passed: true, concern: null },
             metadata: { emotional_tone: 'neutral', complexity_level: 'medium' },
-            metrics: {
-              user_engagement: 'high',
-              emotional_intensity: 'positive',
-              understanding_level: 'good',
-            },
           }),
           debugInfo: {
             prompt: 'test',
@@ -146,13 +141,8 @@ describe('Phase 1 重构：LLM依赖注入优化', () => {
         generateText: vi.fn().mockResolvedValue({
           text: JSON.stringify({
             content: 'Test response 2',
-            safety_risk: { detected: false, risk_type: null, confidence: 'low', reason: null },
+            safety_check: { passed: true, concern: null },
             metadata: { emotional_tone: 'neutral', complexity_level: 'medium' },
-            metrics: {
-              user_engagement: 'high',
-              emotional_intensity: 'positive',
-              understanding_level: 'good',
-            },
           }),
           debugInfo: {
             prompt: 'test',
@@ -215,7 +205,7 @@ describe('Phase 1 重构：LLM依赖注入优化', () => {
         generateText: vi.fn().mockResolvedValue({ text: 'test response', debugInfo: {} }),
         streamText: vi.fn(),
       } as any;
-      
+
       const executor = new ScriptExecutor(mockOrchestrator);
 
       expect(executor).toBeInstanceOf(ScriptExecutor);
@@ -228,7 +218,7 @@ describe('Phase 1 重构：LLM依赖注入优化', () => {
         generateText: vi.fn().mockResolvedValue({ text: 'test response', debugInfo: {} }),
         streamText: vi.fn(),
       } as any;
-      
+
       const executor = new ScriptExecutor(mockOrchestrator);
 
       // 应该使用注入的LLM

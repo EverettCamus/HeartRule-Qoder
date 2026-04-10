@@ -78,7 +78,7 @@ describe('ExitDecisionEngine', () => {
         currentRound: 3,
         collectedVariables: [],
         requiredVariables: [],
-        llmOutput: { EXIT: 'true', BRIEF: '信息已收集完整', crisis_detected: false },
+        llmOutput: { exit: 'true', exit_reason: '信息已完整', crisis_detected: false },
       };
 
       const result = engine.evaluate(criteria, context);
@@ -94,7 +94,7 @@ describe('ExitDecisionEngine', () => {
         currentRound: 5,
         collectedVariables: [],
         requiredVariables: [],
-        llmOutput: { EXIT: 'false', BRIEF: '继续收集', crisis_detected: false },
+        llmOutput: { exit: 'false', exit_reason: '继续收集', crisis_detected: false },
       };
 
       const result = engine.evaluate(criteria, context);
@@ -110,7 +110,7 @@ describe('ExitDecisionEngine', () => {
         currentRound: 5,
         collectedVariables: [],
         requiredVariables: [],
-        llmOutput: { EXIT: 'true', BRIEF: '信息已收集完整', crisis_detected: false },
+        llmOutput: { exit: 'true', exit_reason: '信息已完整', crisis_detected: false },
       };
 
       const result = engine.evaluate(criteria, context);
@@ -127,7 +127,7 @@ describe('ExitDecisionEngine', () => {
         currentRound: 3,
         collectedVariables: [],
         requiredVariables: [],
-        llmOutput: { EXIT: 'false', BRIEF: '继续收集更多信息', crisis_detected: false },
+        llmOutput: { exit: 'false', exit_reason: '继续收集', crisis_detected: false },
       };
 
       const result = engine.evaluate(criteria, context);

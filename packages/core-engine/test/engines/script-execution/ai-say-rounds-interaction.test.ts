@@ -1,6 +1,6 @@
 /**
  * ai_say 轮次语义重构集成测试
- * 
+ *
  * 测试目标：
  * 1. max_rounds=1: AI说一次 → 用户确认（空输入）→ 下一个action
  * 2. max_rounds=2: AI说 → 用户输入 → AI再说 → 用户确认 → 下一个action
@@ -9,9 +9,14 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ScriptExecutor, ExecutionStatus, type ExecutionState } from '../../../src/engines/script-execution/script-executor';
+
 import type { BaseAction } from '../../../src/domain/actions/base-action';
 import { LLMOrchestrator } from '../../../src/engines/llm-orchestration/orchestrator';
+import {
+  ScriptExecutor,
+  ExecutionStatus,
+  type ExecutionState,
+} from '../../../src/engines/script-execution/script-executor';
 
 describe('AiSay 轮次交互集成测试', () => {
   let executor: ScriptExecutor;
@@ -25,7 +30,7 @@ describe('AiSay 轮次交互集成测试', () => {
         return {
           text: JSON.stringify({
             content: '测试AI回复',
-            EXIT: 'NO',
+            exit: 'false',
           }),
           debugInfo: {
             prompt,
@@ -93,19 +98,14 @@ describe('AiSay 轮次交互集成测试', () => {
         lastAiMessage: null,
       };
 
-      const result = await executor.executeSession(
-        scriptContent,
-        'session-1',
-        initialState,
-        null
-      );
+      const result = await executor.executeSession(scriptContent, 'session-1', initialState, null);
 
       expect(result.status).toBe(ExecutionStatus.WAITING_INPUT);
       expect(result.lastAiMessage).toBeTruthy();
       expect(result.lastAiMessage).toContain('测试AI回复');
       expect(result.currentActionIdx).toBe(0); // 仍在 ai_say
       expect(result.currentActionId).toBe('say_welcome');
-      
+
       // conversationHistory 应该有1条 AI 消息
       expect(result.conversationHistory.length).toBe(1);
       expect(result.conversationHistory[0].role).toBe('assistant');
@@ -207,18 +207,13 @@ describe('AiSay 轮次交互集成测试', () => {
         lastAiMessage: null,
       };
 
-      const result = await executor.executeSession(
-        scriptContent,
-        'session-2',
-        initialState,
-        null
-      );
+      const result = await executor.executeSession(scriptContent, 'session-2', initialState, null);
 
       expect(result.status).toBe(ExecutionStatus.WAITING_INPUT);
       expect(result.lastAiMessage).toBeTruthy();
       expect(result.currentActionIdx).toBe(0); // 仍在 ai_say
       expect(result.currentActionId).toBe('say_intro');
-      
+
       // conversationHistory: 1条 AI
       expect(result.conversationHistory.length).toBe(1);
       expect(result.conversationHistory[0].role).toBe('assistant');
@@ -237,9 +232,7 @@ describe('AiSay 轮次交互集成测试', () => {
         currentActionType: 'ai_say',
         currentAction: null as BaseAction | null,
         variables: {},
-        conversationHistory: [
-          { role: 'assistant', content: '第1句AI', actionId: 'say_intro' },
-        ],
+        conversationHistory: [{ role: 'assistant', content: '第1句AI', actionId: 'say_intro' }],
         metadata: {
           actionState: {
             actionId: 'say_intro',
@@ -263,7 +256,7 @@ describe('AiSay 轮次交互集成测试', () => {
       expect(result.lastAiMessage).toBeTruthy(); // AI第2句
       expect(result.currentActionIdx).toBe(1); // 已推进到 ai_ask
       expect(result.currentActionId).toBe('ask_question');
-      
+
       // conversationHistory: 1条AI(say#1) + 1条user + 1条AI(say#2)
       // 注意：SessionManager 会保存 user message，但这里只测试引擎层
       expect(result.conversationHistory.length).toBeGreaterThanOrEqual(2);
@@ -272,7 +265,7 @@ describe('AiSay 轮次交互集成测试', () => {
     it('第3次调用：验证 ai_say 多轮完成后能推进', async () => {
       // 在第2轮完成后，ai_say 应该 completed=true
       // 此时如果还有下一个 action，应该能够推进
-      
+
       // 这个测试已经在第2次调用中验证了（ai_say 第2轮 completed=true 并返回）
       // 所以这里只需要验证 result.completed 是 true
       expect(true).toBe(true);
@@ -318,7 +311,7 @@ describe('AiSay 轮次交互集成测试', () => {
 
       // 第1次：AI 说话
       const result1 = await executor.executeSession(scriptContent, 's1', initialState, null);
-      
+
       expect(result1.conversationHistory.length).toBe(1);
       expect(result1.conversationHistory[0].role).toBe('assistant');
 

@@ -11,29 +11,71 @@
 import { z } from 'zod';
 
 /**
+ * 安全自查结果
+ */
+export interface SafetyCheck {
+  passed: boolean;
+  concern: string | null;
+}
+
+/**
+ * 退出理由枚举
+ */
+export type ExitReason =
+  | '信息已完整'
+  | '信息不足'
+  | '用户阻抗'
+  | '达到最大轮次'
+  | '用户理解困难'
+  | '话题偏离'
+  | '危机信号'
+  | '继续收集';
+
+/**
  * Enhanced AI_Ask LLM输出接口
  *
- * 简化的输出结构，使用markdown格式表达复杂语义：
- * - assessment: 阻抗分析、风险识别、用户理解
- * - progress: 任务进度说明、变量收集状态
+ * 输出结构按因果链排列：assessment → exit → exit_reason → content → brief → progress → safety_check → crisis_detected
+ * - assessment: 语义评估（markdown格式），包含阻抗分析、风险识别、用户理解
+ * - progress: 任务进度说明、变量收集状态（markdown格式）
+ * - safety_check: LLM安全自查结果
  */
 export interface EnhancedAskLLMOutput {
-  content?: string;
   assessment?: string;
+  exit: string;
+  exit_reason?: ExitReason;
+  content?: string;
+  brief?: string;
   progress?: string;
-  EXIT: string;
-  BRIEF?: string;
+  safety_check?: SafetyCheck;
   crisis_detected: boolean;
 }
 
 /**
  * Enhanced AI_Ask LLM输出 Schema
  */
+export const SafetyCheckSchema = z.object({
+  passed: z.boolean(),
+  concern: z.string().nullable(),
+});
+
 export const EnhancedAskLLMOutputSchema = z.object({
-  content: z.string().optional(),
   assessment: z.string().optional(),
+  exit: z.enum(['true', 'false']),
+  exit_reason: z
+    .enum([
+      '信息已完整',
+      '信息不足',
+      '用户阻抗',
+      '达到最大轮次',
+      '用户理解困难',
+      '话题偏离',
+      '危机信号',
+      '继续收集',
+    ])
+    .optional(),
+  content: z.string().optional(),
+  brief: z.string().optional(),
   progress: z.string().optional(),
-  EXIT: z.enum(['true', 'false']),
-  BRIEF: z.string().optional(),
+  safety_check: SafetyCheckSchema.optional(),
   crisis_detected: z.boolean().default(false),
 });

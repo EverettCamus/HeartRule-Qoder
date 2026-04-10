@@ -38,7 +38,7 @@ class MockLLMProvider implements ILLMProvider {
     return {
       text: JSON.stringify({
         content: 'AI生成的回复内容',
-        EXIT: 'false',
+        exit: 'false',
         metadata: {
           assessment: {
             understanding_level: 50,

@@ -918,7 +918,7 @@ const ProjectEditor: React.FC = () => {
   const { handleUndo, handleRedo, pushHistory } = historyOperations;
 
   // ========== Phase/Topic/Action 操作（使用 usePhaseOperations Hook） ==========
-  
+
   /**
    * 初始化 Phase/Topic/Action 操作 Hook
    * 重构说明：从 index.tsx 提取约 800 行代码到独立 Hook
@@ -1086,12 +1086,12 @@ const ProjectEditor: React.FC = () => {
       content: (
         <div>
           <div style={{ marginBottom: '8px' }}>Please enter the session script name:</div>
-          <Input id="session-name-input" placeholder="e.g. first-day" defaultValue="new-session" />
+          <Input id="session-name-input" placeholder="e.g. first_day" defaultValue="new_session" />
         </div>
       ),
       onOk: async () => {
         const input = document.getElementById('session-name-input') as HTMLInputElement;
-        const sessionName = input?.value?.trim() || 'new-session';
+        const sessionName = input?.value?.trim() || 'new_session';
         const fileName = sessionName.endsWith('.yaml') ? sessionName : `${sessionName}.yaml`;
 
         try {
@@ -1115,7 +1115,7 @@ const ProjectEditor: React.FC = () => {
                           action_id: 'action_1',
                           action_type: 'ai_say',
                           config: {
-                            content_template: 'Please edit this content',
+                            content: 'Please edit this content',
                           },
                         },
                       ],

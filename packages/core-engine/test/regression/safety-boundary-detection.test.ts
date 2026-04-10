@@ -62,11 +62,9 @@ describe('T6: 安全边界检测机制', () => {
     it('应该正确解析标准的 JSON 输出', () => {
       const jsonOutput = JSON.stringify({
         content: '这是咨询师的回复内容',
-        safety_risk: {
-          detected: false,
-          risk_type: null,
-          confidence: 'high',
-          reason: null,
+        safety_check: {
+          passed: true,
+          concern: null,
         },
         metadata: {
           emotional_tone: 'supportive',
@@ -77,8 +75,7 @@ describe('T6: 安全边界检测机制', () => {
       const result = testAction.testParseStructuredOutput(jsonOutput);
 
       expect(result.content).toBe('这是咨询师的回复内容');
-      expect(result.safety_risk.detected).toBe(false);
-      expect(result.safety_risk.confidence).toBe('high');
+      expect(result.safety_check.passed).toBe(true);
       expect(result.metadata.emotional_tone).toBe('supportive');
       expect(result.metadata.crisis_signal).toBe(false);
     });
@@ -87,11 +84,9 @@ describe('T6: 安全边界检测机制', () => {
       const markdownJson = `\`\`\`json
 {
   "content": "测试内容",
-  "safety_risk": {
-    "detected": true,
-    "risk_type": "diagnosis",
-    "confidence": "high",
-    "reason": "检测到诊断性表述"
+  "safety_check": {
+    "passed": false,
+    "concern": "检测到诊断性表述"
   },
   "metadata": {
     "crisis_signal": false
@@ -102,25 +97,23 @@ describe('T6: 安全边界检测机制', () => {
       const result = testAction.testParseStructuredOutput(markdownJson);
 
       expect(result.content).toBe('测试内容');
-      expect(result.safety_risk.detected).toBe(true);
-      expect(result.safety_risk.risk_type).toBe('diagnosis');
-      expect(result.safety_risk.reason).toBe('检测到诊断性表述');
+      expect(result.safety_check.passed).toBe(false);
+      expect(result.safety_check.concern).toBe('检测到诊断性表述');
     });
 
     it('应该处理不完整的 JSON（缺少部分字段）', () => {
       const incompleteJson = JSON.stringify({
         content: '内容',
-        safety_risk: {
-          detected: true,
+        safety_check: {
+          passed: false,
         },
       });
 
       const result = testAction.testParseStructuredOutput(incompleteJson);
 
       expect(result.content).toBe('内容');
-      expect(result.safety_risk.detected).toBe(true);
-      expect(result.safety_risk.risk_type).toBe(null);
-      expect(result.safety_risk.confidence).toBe('high'); // 默认值
+      expect(result.safety_check.passed).toBe(false);
+      expect(result.safety_check.concern).toBe(null); // 默认值
       expect(result.metadata.crisis_signal).toBe(false); // 默认值
     });
 
@@ -130,8 +123,8 @@ describe('T6: 安全边界检测机制', () => {
       const result = testAction.testParseStructuredOutput(invalidJson);
 
       expect(result.content).toBe(invalidJson); // 使用原始文本
-      expect(result.safety_risk.detected).toBe(false);
-      expect(result.safety_risk.reason).toContain('JSON parsing failed');
+      expect(result.safety_check.passed).toBe(true); // 兜底默认安全
+      expect(result.safety_check.concern).toBe(null);
       expect(result.metadata.crisis_signal).toBe(false);
     });
 
@@ -141,11 +134,9 @@ describe('T6: 安全边界检测机制', () => {
       for (const riskType of riskTypes) {
         const jsonOutput = JSON.stringify({
           content: '测试内容',
-          safety_risk: {
-            detected: true,
-            risk_type: riskType,
-            confidence: 'high',
-            reason: `检测到${riskType}`,
+          safety_check: {
+            passed: false,
+            concern: `检测到${riskType}`,
           },
           metadata: {
             crisis_signal: false,
@@ -154,19 +145,17 @@ describe('T6: 安全边界检测机制', () => {
 
         const result = testAction.testParseStructuredOutput(jsonOutput);
 
-        expect(result.safety_risk.detected).toBe(true);
-        expect(result.safety_risk.risk_type).toBe(riskType);
+        expect(result.safety_check.passed).toBe(false);
+        expect(result.safety_check.concern).toContain(riskType);
       }
     });
 
     it('应该正确识别危机信号', () => {
       const jsonOutput = JSON.stringify({
         content: '我注意到您提到了自伤想法',
-        safety_risk: {
-          detected: false,
-          risk_type: null,
-          confidence: 'high',
-          reason: null,
+        safety_check: {
+          passed: true,
+          concern: null,
         },
         metadata: {
           emotional_tone: 'concerned',
@@ -319,11 +308,9 @@ describe('T6: 安全边界检测机制', () => {
       // 1. 主 LLM 生成包含风险检测的 JSON
       const llmOutput = JSON.stringify({
         content: '根据您的症状，您可能患有中度抑郁症',
-        safety_risk: {
-          detected: true,
-          risk_type: 'diagnosis',
-          confidence: 'high',
-          reason: '使用了明确的诊断性语言',
+        safety_check: {
+          passed: false,
+          concern: '使用了明确的诊断性语言',
         },
         metadata: {
           crisis_signal: false,
@@ -332,8 +319,7 @@ describe('T6: 安全边界检测机制', () => {
 
       // 2. 解析 JSON
       const parsed = testAction.testParseStructuredOutput(llmOutput);
-      expect(parsed.safety_risk.detected).toBe(true);
-      expect(parsed.safety_risk.confidence).toBe('high');
+      expect(parsed.safety_check.passed).toBe(false);
 
       // 3. 二次确认（模拟 LLM）
       const mockLLMOrchestrator = {
@@ -349,8 +335,8 @@ describe('T6: 安全边界检测机制', () => {
 
       const confirmation = await testAction.testConfirmSafetyViolation(
         parsed.content,
-        parsed.safety_risk.risk_type!,
-        parsed.safety_risk.reason!,
+        parsed.safety_check.concern!,
+        parsed.safety_check.concern!,
         mockLLMOrchestrator
       );
 
@@ -365,11 +351,9 @@ describe('T6: 安全边界检测机制', () => {
     it('应该正确处理安全检测通过的情况', async () => {
       const llmOutput = JSON.stringify({
         content: '抑郁情绪是一种常见的心理体验。我们可以一起探讨应对方法。',
-        safety_risk: {
-          detected: false,
-          risk_type: null,
-          confidence: 'high',
-          reason: null,
+        safety_check: {
+          passed: true,
+          concern: null,
         },
         metadata: {
           emotional_tone: 'supportive',
@@ -379,7 +363,7 @@ describe('T6: 安全边界检测机制', () => {
 
       const parsed = testAction.testParseStructuredOutput(llmOutput);
 
-      expect(parsed.safety_risk.detected).toBe(false);
+      expect(parsed.safety_check.passed).toBe(true);
       expect(parsed.content).toContain('抑郁情绪');
       // 不需要二次确认，直接返回内容
     });
@@ -387,11 +371,9 @@ describe('T6: 安全边界检测机制', () => {
     it('应该正确处理中等置信度的风险检测', () => {
       const llmOutput = JSON.stringify({
         content: '您的情况可能需要进一步评估',
-        safety_risk: {
-          detected: true,
-          risk_type: 'diagnosis',
-          confidence: 'medium', // 中等置信度
-          reason: '可能暗示需要专业诊断',
+        safety_check: {
+          passed: false,
+          concern: '可能暗示需要专业诊断',
         },
         metadata: {
           crisis_signal: false,
@@ -400,8 +382,8 @@ describe('T6: 安全边界检测机制', () => {
 
       const parsed = testAction.testParseStructuredOutput(llmOutput);
 
-      expect(parsed.safety_risk.detected).toBe(true);
-      expect(parsed.safety_risk.confidence).toBe('medium');
+      expect(parsed.safety_check.passed).toBe(false);
+      expect(parsed.safety_check.concern).toContain('可能暗示需要专业诊断');
       // 设计文档说明：medium/low 置信度记录警告但不阻断
     });
   });

@@ -16,16 +16,16 @@ import {
   type MonitorContext,
 } from '../../../src/application/monitors/base-monitor-handler.js';
 import { MonitorTemplateResolver } from '../../../src/application/monitors/monitor-template-resolver.js';
-import type { ActionResult, ActionMetrics } from '../../../src/domain/actions/base-action.js';
+import type { ActionResult } from '../../../src/domain/actions/base-action.js';
 
 // Mock实现用于测试
 class TestMonitorHandler extends BaseMonitorHandler {
-  parseMetrics(result: ActionResult): ActionMetrics {
-    return result.metrics || {};
+  parseMetrics(result: ActionResult): Record<string, any> {
+    return (result as any).metrics || {};
   }
 
   async analyzeWithLLM(
-    _metrics: ActionMetrics,
+    _metrics: Record<string, any>,
     _context: MonitorContext
   ): Promise<MonitorAnalysis> {
     return {
@@ -285,13 +285,6 @@ describe('监控处理器 - 异步执行验证', () => {
       actionResult: {
         success: true,
         completed: false,
-        metrics: {
-          information_completeness: '用户提供了部分信息',
-          user_engagement: '用户回答详细',
-          emotional_intensity: '情绪平静',
-          reply_relevance: '回答相关',
-        },
-        progress_suggestion: 'continue_needed',
       },
     };
 

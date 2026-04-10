@@ -6,7 +6,7 @@
  * 【Phase 3 重构】使用MonitorTemplateService分离模板处理逻辑
  */
 
-import type { ActionMetrics, ActionResult } from '../../domain/actions/base-action.js';
+import type { ActionResult } from '../../domain/actions/base-action.js';
 import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
 
 import {
@@ -62,7 +62,10 @@ export class AiAskMonitorHandler extends BaseMonitorHandler {
    *
    * 【Phase 3 重构】使用MonitorTemplateService简化流程，代码从90行→30行
    */
-  async analyzeWithLLM(metrics: ActionMetrics, context: MonitorContext): Promise<MonitorAnalysis> {
+  async analyzeWithLLM(
+    metrics: Record<string, any>,
+    context: MonitorContext
+  ): Promise<MonitorAnalysis> {
     try {
       // 1. 准备监控变量
       const monitorVariables = this.buildMonitorVariables(metrics, context);

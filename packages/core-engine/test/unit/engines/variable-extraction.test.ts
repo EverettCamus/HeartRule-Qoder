@@ -40,8 +40,8 @@ describe('变量提取与作用域存储', () => {
       const llmOutput: Record<string, any> = {
         用户名: 'LEO',
         咨询师: '继续询问用户的年龄和职业',
-        EXIT: 'false',
-        BRIEF: '用户自称LEO',
+        exit: 'false',
+        exit_reason: '用户自称LEO',
       };
 
       const outputConfig = [{ get: '用户名', define: '用户的姓名或昵称' }];
@@ -72,8 +72,8 @@ describe('变量提取与作用域存储', () => {
         用户年龄: 28,
         用户职业: '程序员',
         咨询师: '继续询问',
-        EXIT: 'false',
-        BRIEF: '收集了用户基本信息',
+        exit: 'false',
+        exit_reason: '收集了用户基本信息',
       };
 
       const outputConfig = [
@@ -111,7 +111,7 @@ describe('变量提取与作用域存储', () => {
         用户职业: null, // null
         // '用户地址' 未定义    // undefined
         咨询师: '继续询问',
-        EXIT: 'false',
+        exit: 'false',
       };
 
       const outputConfig = [
@@ -148,7 +148,7 @@ describe('变量提取与作用域存储', () => {
         抑郁评分: 0,
         是否需要转介: false,
         咨询师: '评分正常',
-        EXIT: 'true',
+        exit: 'true',
       };
 
       const outputConfig = [{ get: '抑郁评分' }, { get: '是否需要转介' }];

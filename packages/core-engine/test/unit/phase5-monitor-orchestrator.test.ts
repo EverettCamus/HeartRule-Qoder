@@ -11,9 +11,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { MonitorOrchestrator } from '../../src/application/orchestrators/monitor-orchestrator.js';
+import type { ILLMProvider } from '../../src/application/ports/outbound/llm-provider.port.js';
 import type { ActionResult } from '../../src/domain/actions/base-action.js';
 import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
-import type { ILLMProvider } from '../../src/application/ports/outbound/llm-provider.port.js';
 import { ScriptExecutor } from '../../src/engines/script-execution/script-executor.js';
 import type { ExecutionState } from '../../src/engines/script-execution/script-executor.js';
 
@@ -39,10 +39,12 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
           timestamp: new Date().toISOString(),
         },
       }),
-      streamText: vi.fn().mockReturnValue((async function* () {
-        yield 'mock';
-        yield ' response';
-      })()),
+      streamText: vi.fn().mockReturnValue(
+        (async function* () {
+          yield 'mock';
+          yield ' response';
+        })()
+      ),
     };
     llmOrchestrator = new LLMOrchestrator(mockProvider);
   });
@@ -60,10 +62,6 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
         completed: false,
         aiMessage: 'Test message',
         extractedVariables: {},
-        metrics: {
-          information_completeness: 'partial',
-          user_engagement: 'active',
-        },
         metadata: {
           currentRound: 1,
           maxRounds: 3,
@@ -106,10 +104,6 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
         completed: true,
         aiMessage: 'Test message',
         extractedVariables: {},
-        metrics: {
-          information_completeness: 'complete',
-          user_engagement: 'active',
-        },
       };
 
       const mockExecutionState: ExecutionState = {
@@ -238,7 +232,9 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
       // 检查日志数量
       const logCalls = consoleLogSpy.mock.calls;
       const hasLLMLog = logCalls.some((call) =>
-        call.some((arg) => typeof arg === 'string' && arg.includes('Using injected LLM Orchestrator'))
+        call.some(
+          (arg) => typeof arg === 'string' && arg.includes('Using injected LLM Orchestrator')
+        )
       );
       const hasActionFactoryLog = logCalls.some((call) =>
         call.some((arg) => typeof arg === 'string' && arg.includes('Created default ActionFactory'))
@@ -265,10 +261,6 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
         completed: false,
         aiMessage: 'Test message',
         extractedVariables: {},
-        metrics: {
-          information_completeness: 'partial',
-          user_engagement: 'active',
-        },
         metadata: {
           currentRound: 1,
           maxRounds: 3,

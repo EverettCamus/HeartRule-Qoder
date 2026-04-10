@@ -33,8 +33,8 @@ function createMockLLM(): LLMOrchestrator {
           content: '感谢你的分享，能多说一些吗？',
           assessment: '## 阻抗分析\n阻抗程度：低\n主要表现：无回避倾向',
           progress: '## 进度评估\n- [x] 用户输入已收集',
-          EXIT: 'false',
-          BRIEF: '继续收集信息',
+          exit: 'false',
+          exit_reason: '继续收集信息',
           用户回复: '我最近感觉有点无力',
           crisis_detected: false,
         });
@@ -43,8 +43,8 @@ function createMockLLM(): LLMOrchestrator {
           content: '你好，欢迎来到心理咨询。今天有什么想聊的吗？',
           assessment: '## 阻抗分析\n阻抗程度：无\n主要表现：初次对话',
           progress: '## 进度评估\n- [ ] 等待用户输入',
-          EXIT: 'false',
-          BRIEF: '开启对话',
+          exit: 'false',
+          exit_reason: '开启对话',
           用户回复: '',
           crisis_detected: false,
         });

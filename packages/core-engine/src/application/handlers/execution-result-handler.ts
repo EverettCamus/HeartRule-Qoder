@@ -229,7 +229,7 @@ export class ExecutionResultHandler {
   }
 
   /**
-   * Store metrics and trigger monitor analysis
+   * Store assessment history and trigger monitor analysis
    */
   private storeMetricsAndTriggerMonitor(
     executionState: ExecutionState,
@@ -238,20 +238,20 @@ export class ExecutionResultHandler {
     phaseId: string,
     topicId: string
   ): void {
-    // Ensure metadata exists
     if (!executionState.metadata) {
       executionState.metadata = {};
     }
 
-    // Store action metrics
-    if (result.metrics) {
+    if (result.metadata?.assessment) {
       if (!executionState.metadata.actionMetricsHistory) {
         executionState.metadata.actionMetricsHistory = [];
       }
       executionState.metadata.actionMetricsHistory.push({
         actionId: executionState.currentAction?.actionId || 'unknown',
         actionType: executionState.currentActionType || 'unknown',
-        metrics: result.metrics,
+        assessment: result.metadata.assessment || '',
+        progress: result.metadata.progress || '',
+        exitReason: result.metadata.exit_reason || '',
         timestamp: new Date().toISOString(),
       });
     }

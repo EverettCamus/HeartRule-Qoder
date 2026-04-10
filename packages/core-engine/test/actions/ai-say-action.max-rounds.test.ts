@@ -30,7 +30,7 @@ class MockLLMProvider implements ILLMProvider {
     return {
       text: JSON.stringify({
         content: 'AI生成的回复内容',
-        EXIT: 'false', // 注意：应该是小写的 "false"
+        exit: 'false', // 注意：应该是小写的 "false"
         metadata: {
           assessment: {
             understanding_level: 50,
@@ -39,12 +39,6 @@ class MockLLMProvider implements ILLMProvider {
             reasoning: '测试评估',
           },
         },
-        metrics: {
-          user_engagement: '高',
-          emotional_intensity: '中',
-          understanding_level: '良好',
-        },
-        progress_suggestion: 'continue_needed',
       }),
       debugInfo: {
         prompt,

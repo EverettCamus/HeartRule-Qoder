@@ -4,7 +4,7 @@
  * 用于Topic层监控分析，识别Action执行障碍，生成策略建议
  */
 
-import type { ActionResult, ActionMetrics, ProgressSuggestion } from '../../domain/actions/base-action.js';
+import type { ActionResult } from '../../domain/actions/base-action.js';
 
 /**
  * 监控分析结果
@@ -43,11 +43,12 @@ export interface MonitorContext {
   // Action执行结果
   actionResult: ActionResult;
 
-  // 历史metrics（可选）
+  // 历史评估记录（可选）
   metricsHistory?: Array<{
     round: number;
-    metrics: ActionMetrics;
-    progress_suggestion?: ProgressSuggestion;
+    assessment: string;
+    progress: string;
+    exitReason?: string;
     timestamp: string;
   }>;
 
@@ -69,22 +70,22 @@ export interface MonitorContext {
  */
 export abstract class BaseMonitorHandler {
   /**
-   * 解析并验证metrics
+   * 解析并验证评估字段
    *
    * @param result ActionResult
-   * @returns 提取的metrics对象
+   * @returns 提取的评估对象
    */
-  abstract parseMetrics(result: ActionResult): ActionMetrics;
+  abstract parseMetrics(result: ActionResult): Record<string, any>;
 
   /**
    * 调用监控LLM进行分析（异步）
    *
-   * @param metrics 系统变量
+   * @param metrics 评估字段（assessment, progress, brief, shouldExit）
    * @param context 监控上下文
    * @returns 监控分析结果
    */
   abstract analyzeWithLLM(
-    metrics: ActionMetrics,
+    metrics: Record<string, any>,
     context: MonitorContext
   ): Promise<MonitorAnalysis>;
 

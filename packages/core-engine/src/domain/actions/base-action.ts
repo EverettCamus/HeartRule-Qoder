@@ -63,40 +63,12 @@ export interface ActionContext {
 }
 
 /**
- * Action执行状态精细化指标（系统变量）
- *
- * 由LLM评估生成，作为字符串描述返回
- * 用于Topic层监控分析和策略决策
+ * 安全自查结果
  */
-export interface ActionMetrics {
-  information_completeness?: string; // 信息完整度描述
-  user_engagement?: string; // 用户投入度描述
-  emotional_intensity?: string; // 情绪强度描述
-  reply_relevance?: string; // 回答相关性描述
-  understanding_level?: string; // 理解度描述（ai_say专用）
+export interface SafetyCheckResult {
+  passed: boolean;
+  concern: string | null;
 }
-
-/**
- * 进度建议枚举
- *
- * LLM提供的进度建议，指导Topic层下一步动作
- */
-export type ProgressSuggestion =
-  | 'continue_needed' // 信息不足，需要继续追问
-  | 'completed' // 信息已充分收集
-  | 'blocked' // 用户遇阻，无法继续
-  | 'off_topic'; // 用户回答偏离主题
-
-/**
- * 退出原因分类
- *
- * 代码层对退出原因进行分类，供Topic层选择不同策略
- */
-export type ExitReason =
-  | 'max_rounds_reached' // 达到最大轮次限制
-  | 'exit_criteria_met' // 满足退出条件
-  | 'user_blocked' // 用户遇阻
-  | 'off_topic'; // 用户偏题
 
 /**
  * Action 执行结果
@@ -116,8 +88,7 @@ export interface ActionResult {
   completed: boolean; // Action是否完成（可能需要多轮）
   aiMessage?: string | null; // AI生成的消息
   extractedVariables?: Record<string, any> | null; // 提取的变量（用户变量）
-  metrics?: ActionMetrics | null; // 精细化状态指标（系统变量）
-  progress_suggestion?: ProgressSuggestion | null; // 进度建议
+  safety_check?: SafetyCheckResult | null; // LLM安全自查结果
   nextAction?: string | null; // 下一个要执行的Action ID
   error?: string | null; // 错误信息
   metadata?: Record<string, any>; // 额外元数据
@@ -128,15 +99,13 @@ export interface ActionResult {
  * 结构化 Action 输出（新安全机制）
  *
  * 所有咨询 Action（ai_ask, ai_say）的统一 JSON 输出格式
- * 包含安全风险检测字段和元数据
+ * 包含安全自查字段
  */
 export interface StructuredActionOutput {
   content: string;
-  safety_risk: {
-    detected: boolean;
-    risk_type: 'diagnosis' | 'prescription' | 'guarantee' | 'inappropriate_advice' | null;
-    confidence: 'high' | 'medium' | 'low';
-    reason: string | null;
+  safety_check: {
+    passed: boolean;
+    concern: string | null;
   };
   metadata: {
     emotional_tone?: string;
@@ -457,11 +426,11 @@ export abstract class BaseAction {
       };
     }
 
-    // 优先级 2: 退出标志检查（EXIT 字段）
+    // 优先级 2: 退出标志检查（exit 字段）
     if (enabledSources.includes('exit_flag') && llmOutput) {
-      const exitFlag = llmOutput.EXIT || llmOutput.exit;
+      const exitFlag = llmOutput.exit;
       if (exitFlag === 'true' || exitFlag === true) {
-        const exitReason = llmOutput.exit_reason || llmOutput.BRIEF || '满足退出标志';
+        const exitReason = llmOutput.exit_reason || '满足退出标志';
         return {
           should_exit: true,
           reason: exitReason,
@@ -472,7 +441,7 @@ export abstract class BaseAction {
 
     // 优先级 3: 退出条件评估（exit_criteria）
     if (enabledSources.includes('exit_criteria') && this.exitCriteria) {
-      const criteriaResult = this.evaluateExitCriteria(context, llmOutput);
+      const criteriaResult = this.evaluateExitCriteria(context);
       // 如果应该退出，直接返回
       if (criteriaResult.should_exit) {
         return criteriaResult;
@@ -511,89 +480,11 @@ export abstract class BaseAction {
    * @param llmOutput - LLM 输出结果（可选）
    * @returns 退出决策结果
    */
-  private evaluateExitCriteria(
-    context: ActionContext,
-    llmOutput?: Record<string, any>
-  ): ExitDecision {
+  private evaluateExitCriteria(_context: ActionContext): ExitDecision {
     if (!this.exitCriteria) {
       return {
         should_exit: false,
         reason: '无退出条件配置',
-        decision_source: 'exit_criteria',
-      };
-    }
-
-    const conditions: string[] = [];
-
-    // 检查理解度阈值
-    if (this.exitCriteria.understanding_threshold !== undefined && llmOutput) {
-      // 支持新格式（metadata.assessment）和旧格式（assessment）
-      const assessment = llmOutput.metadata?.assessment || llmOutput.assessment;
-      const understandingLevel = assessment?.understanding_level || 0;
-
-      if (understandingLevel >= this.exitCriteria.understanding_threshold) {
-        conditions.push(
-          `理解度达标 (${understandingLevel}>=${this.exitCriteria.understanding_threshold})`
-        );
-      } else {
-        return {
-          should_exit: false,
-          reason: `理解度未达标 (${understandingLevel}<${this.exitCriteria.understanding_threshold})`,
-          decision_source: 'exit_criteria',
-        };
-      }
-    }
-
-    // 检查是否允许有疑问时退出
-    if (this.exitCriteria.has_questions !== undefined && llmOutput) {
-      // 支持新格式（metadata.assessment）和旧格式（assessment）
-      const assessment = llmOutput.metadata?.assessment || llmOutput.assessment;
-      const hasQuestions = assessment?.has_questions || false;
-
-      if (!this.exitCriteria.has_questions && hasQuestions) {
-        return {
-          should_exit: false,
-          reason: '用户仍有疑问，不允许退出',
-          decision_source: 'exit_criteria',
-        };
-      }
-
-      if (!hasQuestions) {
-        conditions.push('无疑问');
-      }
-    }
-
-    // 检查自定义条件
-    if (this.exitCriteria.custom_conditions && context.scopeResolver) {
-      for (const condition of this.exitCriteria.custom_conditions) {
-        const position = {
-          phaseId: context.phaseId,
-          topicId: context.topicId,
-          actionId: context.actionId,
-        };
-
-        const variableValue = context.scopeResolver.resolveVariable(condition.variable, position);
-        const actualValue = variableValue?.value;
-
-        const satisfied = this.evaluateCondition(actualValue, condition.operator, condition.value);
-
-        if (!satisfied) {
-          return {
-            should_exit: false,
-            reason: `自定义条件不满足: ${condition.variable} ${condition.operator} ${condition.value}`,
-            decision_source: 'exit_criteria',
-          };
-        }
-
-        conditions.push(`${condition.variable} ${condition.operator} ${condition.value}`);
-      }
-    }
-
-    // 所有条件满足
-    if (conditions.length > 0) {
-      return {
-        should_exit: true,
-        reason: `满足退出条件: ${conditions.join(', ')}`,
         decision_source: 'exit_criteria',
       };
     }
@@ -603,36 +494,6 @@ export abstract class BaseAction {
       reason: '退出条件不完整',
       decision_source: 'exit_criteria',
     };
-  }
-
-  /**
-   * 评估单个条件
-   */
-  private evaluateCondition(actualValue: any, operator: string, expectedValue: any): boolean {
-    switch (operator) {
-      case '==':
-        return actualValue == expectedValue;
-      case '!=':
-        return actualValue != expectedValue;
-      case '>':
-        return Number(actualValue) > Number(expectedValue);
-      case '<':
-        return Number(actualValue) < Number(expectedValue);
-      case '>=':
-        return Number(actualValue) >= Number(expectedValue);
-      case '<=':
-        return Number(actualValue) <= Number(expectedValue);
-      case 'contains':
-        if (typeof actualValue === 'string' && typeof expectedValue === 'string') {
-          return actualValue.includes(expectedValue);
-        }
-        if (Array.isArray(actualValue)) {
-          return actualValue.includes(expectedValue);
-        }
-        return false;
-      default:
-        return false;
-    }
   }
 
   /**
@@ -752,14 +613,11 @@ export abstract class BaseAction {
     try {
       const parsed = JSON.parse(jsonText);
 
-      // 兼容性处理：确保所有必需字段存在
       return {
         content: parsed.content || '',
-        safety_risk: {
-          detected: parsed.safety_risk?.detected ?? false,
-          risk_type: parsed.safety_risk?.risk_type ?? null,
-          confidence: parsed.safety_risk?.confidence ?? 'high',
-          reason: parsed.safety_risk?.reason ?? null,
+        safety_check: {
+          passed: parsed.safety_check?.passed ?? true,
+          concern: parsed.safety_check?.concern ?? null,
         },
         metadata: {
           emotional_tone: parsed.metadata?.emotional_tone,
@@ -770,14 +628,11 @@ export abstract class BaseAction {
       console.error('[BaseAction] ❌ Failed to parse structured output:', error.message);
       console.error('[BaseAction] Raw text:', aiMessage);
 
-      // 兜底：返回安全的默认值
       return {
-        content: aiMessage, // 直接使用原始文本
-        safety_risk: {
-          detected: false,
-          risk_type: null,
-          confidence: 'high',
-          reason: 'JSON parsing failed, using raw text',
+        content: aiMessage,
+        safety_check: {
+          passed: true,
+          concern: null,
         },
         metadata: {
           crisis_signal: false,

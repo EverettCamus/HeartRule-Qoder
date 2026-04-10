@@ -24,16 +24,8 @@ describe('AI_Ask 变量上下文', () => {
         return {
           text: JSON.stringify({
             content: '测试问题',
-            EXIT: 'false',
-            BRIEF: '继续',
-            metrics: {
-              information_completeness: '部分收集',
-              user_engagement: '积极',
-              emotional_intensity: '低',
-              reply_relevance: '高',
-            },
-            progress_suggestion: 'continue_needed',
-            safety_risk: { detected: false, risk_type: null, confidence: 'high', reason: null },
+            exit: 'false',
+            exit_reason: '继续',
             crisis_detected: false,
           }),
           debugInfo: {},

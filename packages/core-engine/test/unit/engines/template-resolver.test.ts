@@ -8,14 +8,17 @@
  */
 
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 import { describe, it, expect, beforeAll } from 'vitest';
 
 import { PromptTemplateManager } from '../../../src/engines/prompt-template/template-manager.js';
 import { TemplateResolver } from '../../../src/engines/prompt-template/template-resolver.js';
 
-// 项目根目录：从 packages/core-engine 向上导航到项目根目录
-const PROJECT_ROOT = path.resolve(process.cwd(), '../..');
+// 项目根目录：从 packages/core-engine/test/unit/engines 向上导航到项目根目录
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, '../../../../..');
 
 describe('TemplateResolver - 模板路径解析', () => {
   let resolver: TemplateResolver;

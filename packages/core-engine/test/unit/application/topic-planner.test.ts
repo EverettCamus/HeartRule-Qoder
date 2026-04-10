@@ -263,8 +263,8 @@ describe('BasicTopicPlanner', () => {
       };
 
       const plan1 = await planner.plan(context);
-      // 等待1ms确保时间戳不同
-      await new Promise((resolve) => setTimeout(resolve, 1));
+      // 等待10ms确保时间戳不同（Date.now()精度限制）
+      await new Promise((resolve) => setTimeout(resolve, 10));
       const plan2 = await planner.plan(context);
 
       expect(plan1.plannedAt).not.toBe(plan2.plannedAt);

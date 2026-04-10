@@ -92,8 +92,9 @@ export interface ExecutionMetadata {
     actionType: string;
     round: number;
     timestamp: string;
-    metrics: Record<string, any>;
-    progress_suggestion?: string;
+    assessment?: string;
+    progress?: string;
+    exitReason?: string;
   }>;
 
   // 最新的监控反馈（用于下一轮Action）

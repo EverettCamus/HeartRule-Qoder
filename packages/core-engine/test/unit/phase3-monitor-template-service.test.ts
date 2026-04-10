@@ -9,11 +9,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import type { ActionResult } from '../../src/domain/actions/base-action.js';
-import type { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
 import { AiSayMonitorHandler } from '../../src/application/monitors/ai-say-monitor-handler.js';
 import type { MonitorContext } from '../../src/application/monitors/base-monitor-handler.js';
 import { DefaultMonitorTemplateService } from '../../src/application/monitors/monitor-template-service.js';
+import type { ActionResult } from '../../src/domain/actions/base-action.js';
+import type { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
 
 describe('Phase 3 重构：MonitorTemplateService', () => {
   let mockLLMOrchestrator: LLMOrchestrator;
@@ -47,12 +47,6 @@ describe('Phase 3 重构：MonitorTemplateService', () => {
           success: true,
           completed: false,
           aiMessage: 'Hello',
-          progress_suggestion: 'continue_needed' as const,
-          metrics: {
-            user_engagement: 'high',
-            emotional_intensity: 'positive',
-            understanding_level: 'good',
-          },
         },
         metadata: {},
       };
@@ -119,19 +113,15 @@ describe('Phase 3 重构：MonitorTemplateService', () => {
         success: true,
         completed: false,
         aiMessage: 'Test',
-        metrics: {
-          user_engagement: 'high',
-          emotional_intensity: 'positive',
-          understanding_level: 'good',
-        },
       };
 
       const metrics = handler.parseMetrics(result);
 
       expect(metrics).toEqual({
-        user_engagement: 'high',
-        emotional_intensity: 'positive',
-        understanding_level: 'good',
+        assessment: '',
+        progress: '',
+        brief: '',
+        shouldExit: false,
       });
     });
 
@@ -146,7 +136,12 @@ describe('Phase 3 重构：MonitorTemplateService', () => {
 
       const metrics = handler.parseMetrics(result);
 
-      expect(metrics).toEqual({});
+      expect(metrics).toEqual({
+        assessment: '',
+        progress: '',
+        brief: '',
+        shouldExit: false,
+      });
     });
   });
 
@@ -175,7 +170,6 @@ describe('Phase 3 重构：MonitorTemplateService', () => {
           success: true,
           completed: false,
           aiMessage: 'Hello',
-          metrics: {},
         },
       };
 
@@ -226,15 +220,10 @@ describe('Phase 3 重构：MonitorTemplateService', () => {
           success: true,
           completed: false,
           aiMessage: 'Hello',
-          metrics: {
-            user_engagement: 'low',
-            emotional_intensity: 'negative',
-            understanding_level: 'poor',
-          },
         },
       };
 
-      const analysis = await handler.analyzeWithLLM(context.actionResult.metrics!, context);
+      const analysis = await handler.analyzeWithLLM({}, context);
 
       expect(analysis.intervention_needed).toBe(true);
       expect(analysis.intervention_reason).toBe('blocked');
@@ -264,7 +253,6 @@ describe('Phase 3 重构：MonitorTemplateService', () => {
           success: true,
           completed: false,
           aiMessage: 'Hello',
-          metrics: {},
         },
       };
 
@@ -323,23 +311,18 @@ describe('Phase 3 重构：MonitorTemplateService', () => {
           success: true,
           completed: false,
           aiMessage: 'Topic content here',
-          progress_suggestion: 'continue_needed' as const,
-          metrics: {
-            user_engagement: 'medium',
-            emotional_intensity: 'neutral',
-            understanding_level: 'fair',
-          },
         },
         metricsHistory: [
           {
             round: 1,
-            metrics: { user_engagement: 'high' },
+            assessment: '',
+            progress: '',
             timestamp: '2024-01-01T00:00:00Z',
           },
         ],
       };
 
-      const analysis = await handler.analyzeWithLLM(context.actionResult.metrics!, context);
+      const analysis = await handler.analyzeWithLLM({}, context);
 
       // 验证流程调用顺序
       expect(mockService.generateMonitorPrompt).toHaveBeenCalledWith(
@@ -347,7 +330,6 @@ describe('Phase 3 重构：MonitorTemplateService', () => {
         expect.objectContaining({
           current_round: '2',
           max_rounds: '5',
-          user_engagement: 'medium',
         }),
         context
       );

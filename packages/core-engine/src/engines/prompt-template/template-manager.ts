@@ -277,7 +277,6 @@ export class PromptTemplateManager {
       'chat_history',
       'tone',
       'topic_content',
-      'understanding_threshold',
       'current_round',
       'max_rounds',
     ];
@@ -394,25 +393,26 @@ export class PromptTemplateManager {
         );
       }
 
-      // T8 新增：检查 JSON 输出格式中是否包含 safety_risk 字段
+      // T8 新增：检查 JSON 输出格式中是否包含 safety_check 字段
       if (templateContent.includes('JSON') || templateContent.includes('输出格式')) {
-        const hasSafetyRiskField =
-          templateContent.includes('safety_risk') || templateContent.includes('"safety_risk"');
+        const hasSafetyCheck =
+          templateContent.includes('safety_check') || templateContent.includes('"safety_check"');
 
-        if (!hasSafetyRiskField) {
+        if (!hasSafetyCheck) {
           warnings.push(
-            `Template ${templatePath} uses JSON output but missing 'safety_risk' field. ` +
+            `Template ${templatePath} uses JSON output but missing 'safety_check' field. ` +
               `This is required for the new safety detection mechanism.`
           );
         }
 
-        // 检查是否包含 crisis_signal 字段
-        const hasCrisisSignal =
-          templateContent.includes('crisis_signal') || templateContent.includes('"crisis_signal"');
+        // 检查是否包含 crisis_detected 字段
+        const hasCrisisDetected =
+          templateContent.includes('crisis_detected') ||
+          templateContent.includes('"crisis_detected"');
 
-        if (!hasCrisisSignal) {
+        if (!hasCrisisDetected) {
           warnings.push(
-            `Template ${templatePath} missing 'crisis_signal' field in metadata. ` +
+            `Template ${templatePath} missing 'crisis_detected' field. ` +
               `This is recommended for crisis detection.`
           );
         }
