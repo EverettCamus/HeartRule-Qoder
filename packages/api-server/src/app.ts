@@ -22,6 +22,15 @@ export async function buildApp() {
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL || 'info',
+      // 减少HTTP请求日志的内容大小
+      serializers: {
+        req(req) {
+          return { method: req.method, url: req.url };
+        },
+        res(res) {
+          return { statusCode: res.statusCode };
+        },
+      },
     },
   });
 
