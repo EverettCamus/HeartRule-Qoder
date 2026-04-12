@@ -10,11 +10,14 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { DefaultActionFactory, type ActionFactory } from '../../src/application/actions/action-factory.js';
-import type { BaseAction } from '../../src/domain/actions/base-action.js';
-import { ScriptExecutor } from '../../src/engines/script-execution/script-executor.js';
-import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
+import {
+  DefaultActionFactory,
+  type ActionFactory,
+} from '../../src/application/actions/action-factory.js';
 import type { ILLMProvider } from '../../src/application/ports/outbound/llm-provider.port.js';
+import type { BaseAction } from '../../src/domain/actions/base-action.js';
+import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
+import { ScriptExecutor } from '../../src/engines/script-execution/script-executor.js';
 
 // 创建 mock LLM provider
 function createMockLLM(): LLMOrchestrator {
@@ -35,10 +38,12 @@ function createMockLLM(): LLMOrchestrator {
         timestamp: new Date().toISOString(),
       },
     }),
-    streamText: vi.fn().mockReturnValue((async function* () {
-      yield '模拟';
-      yield '响应';
-    })()),
+    streamText: vi.fn().mockReturnValue(
+      (async function* () {
+        yield '模拟';
+        yield '响应';
+      })()
+    ),
   };
   return new LLMOrchestrator(mockProvider);
 }
@@ -62,7 +67,7 @@ describe('Phase 2 重构：Action工厂重构', () => {
     });
 
     it('应该在注入ActionFactory时记录日志', () => {
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(console, 'info');
 
       const mockFactory: ActionFactory = {
         create: vi.fn().mockReturnValue({
@@ -105,7 +110,7 @@ describe('Phase 2 重构：Action工厂重构', () => {
 
   describe('2. 向后兼容性测试', () => {
     it('应该在无参数时创建默认ActionFactory', () => {
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(console, 'info');
 
       new ScriptExecutor(createMockLLM());
 
@@ -132,7 +137,7 @@ describe('Phase 2 重构：Action工厂重构', () => {
     });
 
     it('应该保持Phase 1的LLM注入功能', () => {
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(console, 'info');
 
       const mockLLM = {
         generateText: vi.fn().mockResolvedValue({ text: 'test', debugInfo: {} }),
@@ -245,7 +250,7 @@ describe('Phase 2 重构：Action工厂重构', () => {
     });
 
     it('只注入ActionFactory不注入LLM时应该创建默认LLM', () => {
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(console, 'info');
 
       const mockFactory: ActionFactory = {
         create: vi.fn().mockReturnValue({

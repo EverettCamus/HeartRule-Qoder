@@ -9,18 +9,18 @@
  * 5. ExecutionState正确存储TopicPlan
  */
 
+import type { ActionConfig } from '@heartrule/shared-types';
 import { describe, it, expect, vi } from 'vitest';
 
 import type { ITopicPlanner } from '../../src/application/planning/topic-planner.js';
 import { BasicTopicPlanner } from '../../src/application/planning/topic-planner.js';
+import type { ILLMProvider } from '../../src/application/ports/outbound/llm-provider.port.js';
+import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
 import {
   ScriptExecutor,
   type ExecutionState,
   ExecutionStatus,
 } from '../../src/engines/script-execution/script-executor.js';
-import type { ActionConfig } from '@heartrule/shared-types';
-import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
-import type { ILLMProvider } from '../../src/application/ports/outbound/llm-provider.port.js';
 
 // 创建 mock LLM provider
 function createMockLLM(): LLMOrchestrator {
@@ -41,10 +41,12 @@ function createMockLLM(): LLMOrchestrator {
         timestamp: new Date().toISOString(),
       },
     }),
-    streamText: vi.fn().mockReturnValue((async function* () {
-      yield '模拟';
-      yield '响应';
-    })()),
+    streamText: vi.fn().mockReturnValue(
+      (async function* () {
+        yield '模拟';
+        yield '响应';
+      })()
+    ),
   };
   return new LLMOrchestrator(mockProvider);
 }
@@ -73,7 +75,7 @@ describe('Story 2.1集成：Topic Planning Integration', () => {
     });
 
     it('应该在注入TopicPlanner时记录日志', () => {
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(console, 'info');
       const mockPlanner: ITopicPlanner = {
         plan: vi.fn().mockResolvedValue({
           topicId: 'test',
@@ -96,7 +98,7 @@ describe('Story 2.1集成：Topic Planning Integration', () => {
     });
 
     it('应该在无参数时创建默认BasicTopicPlanner', () => {
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(console, 'info');
 
       const executor = new ScriptExecutor(createMockLLM());
 
@@ -320,7 +322,11 @@ describe('Story 2.1集成：Topic Planning Integration', () => {
           topicId: 'test_topic',
           plannedAt: '2024-01-01T00:00:00Z',
           instantiatedActions: [
-            { action_id: 'instantiated_1', action_type: 'ai_say', config: { content: 'From Plan' } },
+            {
+              action_id: 'instantiated_1',
+              action_type: 'ai_say',
+              config: { content: 'From Plan' },
+            },
           ],
         },
       };
@@ -385,9 +391,7 @@ describe('Story 2.1集成：Topic Planning Integration', () => {
         currentTopicPlan: {
           topicId: 'different_topic',
           plannedAt: '2024-01-01T00:00:00Z',
-          instantiatedActions: [
-            { action_id: 'wrong_action', action_type: 'ai_say', config: {} },
-          ],
+          instantiatedActions: [{ action_id: 'wrong_action', action_type: 'ai_say', config: {} }],
         },
       };
 
@@ -437,7 +441,7 @@ describe('Story 2.1集成：Topic Planning Integration', () => {
       expect(plan.instantiatedActions.length).toBe(1);
       const instantiatedConfig = plan.instantiatedActions[0]?.config;
       const originalConfig = originalActions[0]?.config;
-      
+
       if (instantiatedConfig && originalConfig) {
         instantiatedConfig.content = 'Modified';
         expect(originalConfig.content).toBe('Original');
@@ -456,21 +460,21 @@ describe('Story 2.1集成：Topic Planning Integration', () => {
           actions: [],
         },
         variableStore: {
-          global: { 
-            global_var: { value: 'global_value', type: 'string' } 
+          global: {
+            global_var: { value: 'global_value', type: 'string' },
           },
-          session: { 
-            session_var: { value: 'session_value', type: 'string' } 
+          session: {
+            session_var: { value: 'session_value', type: 'string' },
           },
-          phase: { 
-            phase_1: { 
-              phase_var: { value: 'phase_value', type: 'string' } 
-            } 
+          phase: {
+            phase_1: {
+              phase_var: { value: 'phase_value', type: 'string' },
+            },
           },
-          topic: { 
-            topic_1: { 
-              topic_var: { value: 'topic_value', type: 'string' } 
-            } 
+          topic: {
+            topic_1: {
+              topic_var: { value: 'topic_value', type: 'string' },
+            },
           },
         },
         sessionContext: {
@@ -569,9 +573,7 @@ describe('Story 2.1集成：Topic Planning Integration', () => {
       const topicConfig = {
         topic_id: 'test_topic',
         // 无strategy字段
-        actions: [
-          { action_id: 'action_1', action_type: 'ai_say', config: { content: 'Test' } },
-        ],
+        actions: [{ action_id: 'action_1', action_type: 'ai_say', config: { content: 'Test' } }],
       };
 
       await (executor as any).planCurrentTopic(topicConfig, executionState, 'session_1', 'phase_1');

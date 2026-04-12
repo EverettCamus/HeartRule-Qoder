@@ -27,7 +27,7 @@ describe('Phase 1 重构：LLM依赖注入优化', () => {
     });
 
     it('应该在注入LLM时记录日志', () => {
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(console, 'info');
       const mockOrchestrator = {
         generateText: vi.fn(),
       } as any;
@@ -51,7 +51,7 @@ describe('Phase 1 重构：LLM依赖注入优化', () => {
     it.skip('应该在无参数时创建默认LLM Orchestrator', () => {
       // [废弃原因] Phase 4.2 DDD重构后，LLM provider已移至api-server作为adapter
       // ScriptExecutor现在要求通过构造函数注入LLMOrchestrator
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(console, 'info');
 
       // 创建Mock LLM来测试
       const mockOrchestrator = {
@@ -84,7 +84,7 @@ describe('Phase 1 重构：LLM依赖注入优化', () => {
       process.env.VOLCENGINE_API_KEY = 'test-api-key';
       process.env.VOLCENGINE_MODEL = 'test-model';
 
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(console, 'info');
 
       const mockOrchestrator = {
         generateText: vi.fn().mockResolvedValue({ text: 'test response', debugInfo: {} }),

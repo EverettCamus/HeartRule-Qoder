@@ -178,7 +178,7 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
     });
 
     it('应该在注入 MonitorOrchestrator 时记录日志', () => {
-      const consoleLogSpy = vi.spyOn(console, 'log');
+      const consoleLogSpy = vi.spyOn(console, 'info');
       const customOrchestrator = new MonitorOrchestrator(llmOrchestrator);
 
       new ScriptExecutor(llmOrchestrator, undefined, customOrchestrator);
@@ -200,7 +200,7 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
 
   describe('3. 向后兼容性测试', () => {
     it('应该在无参数时创建默认 MonitorOrchestrator', () => {
-      const consoleLogSpy = vi.spyOn(console, 'log');
+      const consoleLogSpy = vi.spyOn(console, 'info');
 
       new ScriptExecutor(llmOrchestrator);
 
@@ -212,7 +212,7 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
     });
 
     it('默认 MonitorOrchestrator 应该使用注入的 LLM', () => {
-      const consoleLogSpy = vi.spyOn(console, 'log');
+      const consoleLogSpy = vi.spyOn(console, 'info');
 
       new ScriptExecutor(llmOrchestrator);
 
@@ -224,7 +224,7 @@ describe('Phase 5 重构：MonitorOrchestrator 分离', () => {
     });
 
     it('应该保持 Phase 1-4 的功能', () => {
-      const consoleLogSpy = vi.spyOn(console, 'log');
+      const consoleLogSpy = vi.spyOn(console, 'info');
 
       new ScriptExecutor(llmOrchestrator);
 

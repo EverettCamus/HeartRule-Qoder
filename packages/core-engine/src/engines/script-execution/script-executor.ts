@@ -25,10 +25,13 @@ import { MonitorOrchestrator } from '../../application/orchestrators/monitor-orc
 import { BasicTopicPlanner, type ITopicPlanner } from '../../application/planning/topic-planner.js';
 import { ActionStateManager } from '../../application/state/action-state-manager.js';
 import type { BaseAction, ActionContext, ActionResult } from '../../domain/actions/base-action.js';
+import { createLogger } from '../../utils/logger.js';
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
 import type { TemplateProvider } from '../prompt-template/template-provider.js';
 import { VariableScopeResolver } from '../variable-scope/variable-scope-resolver.js';
+
+const logger = createLogger('ScriptExecutor');
 
 /**
  * Execution Status
@@ -123,63 +126,52 @@ export class ScriptExecutor {
     // [Phase 1] Dependency injection first, keep default creation logic (backward compatible)
     if (llmOrchestrator) {
       this.llmOrchestrator = llmOrchestrator;
-      console.log('[ScriptExecutor] ✅ Using injected LLM Orchestrator');
+      logger.info('✅ Using injected LLM Orchestrator');
     } else {
-      // Default creation logic (keep existing behavior)
       this.llmOrchestrator = this.createDefaultLLM();
     }
 
-    // [Phase 2] ActionFactory initialization
     if (actionFactory) {
       this.actionFactory = actionFactory;
-      console.log('[ScriptExecutor] ✅ Using injected ActionFactory');
+      logger.info('✅ Using injected ActionFactory');
     } else {
-      // Default factory creation (backward compatible)
       this.actionFactory = new DefaultActionFactory(this.llmOrchestrator);
-      console.log('[ScriptExecutor] ✅ Created default ActionFactory');
+      logger.info('✅ Created default ActionFactory');
     }
 
-    // [Phase 5] MonitorOrchestrator initialization
     if (monitorOrchestrator) {
       this.monitorOrchestrator = monitorOrchestrator;
-      console.log('[ScriptExecutor] ✅ Using injected MonitorOrchestrator');
+      logger.info('✅ Using injected MonitorOrchestrator');
     } else {
-      // Default creation (backward compatible)
       this.monitorOrchestrator = new MonitorOrchestrator(this.llmOrchestrator);
-      console.log('[ScriptExecutor] ✅ Created default MonitorOrchestrator');
+      logger.info('✅ Created default MonitorOrchestrator');
     }
 
-    // [Phase 6] ActionStateManager initialization
     if (actionStateManager) {
       this.actionStateManager = actionStateManager;
-      console.log('[ScriptExecutor] ✅ Using injected ActionStateManager');
+      logger.info('✅ Using injected ActionStateManager');
     } else {
-      // Default creation (backward compatible)
       this.actionStateManager = new ActionStateManager(this.actionFactory);
-      console.log('[ScriptExecutor] ✅ Created default ActionStateManager');
+      logger.info('✅ Created default ActionStateManager');
     }
 
-    // [Phase 8] ExecutionResultHandler initialization
     if (resultHandler) {
       this.resultHandler = resultHandler;
-      console.log('[ScriptExecutor] ✅ Using injected ExecutionResultHandler');
+      logger.info('✅ Using injected ExecutionResultHandler');
     } else {
-      // Default creation (backward compatible)
       this.resultHandler = new ExecutionResultHandler(
         this.monitorOrchestrator,
         this.actionStateManager
       );
-      console.log('[ScriptExecutor] ✅ Created default ExecutionResultHandler');
+      logger.info('✅ Created default ExecutionResultHandler');
     }
 
-    // [Story 2.1] TopicPlanner initialization
     if (topicPlanner) {
       this.topicPlanner = topicPlanner;
-      console.log('[ScriptExecutor] ✅ Using injected TopicPlanner');
+      logger.info('✅ Using injected TopicPlanner');
     } else {
-      // Default creation (backward compatible)
       this.topicPlanner = new BasicTopicPlanner();
-      console.log('[ScriptExecutor] ✅ Created default BasicTopicPlanner');
+      logger.info('✅ Created default BasicTopicPlanner');
     }
   }
 
@@ -217,9 +209,7 @@ export class ScriptExecutor {
     };
 
     if (!executionState.variableStore) {
-      console.warn(
-        `[ScriptExecutor] ⚠️ variableStore is not initialized, cannot write variables to scopes`
-      );
+      logger.warn('⚠️ variableStore is not initialized, cannot write variables to scopes');
       return;
     }
 
@@ -236,11 +226,8 @@ export class ScriptExecutor {
     isFromContinue: boolean
   ): void {
     const logPrefix = isFromContinue ? '(continueAction)' : '';
-    console.log(
-      `[ScriptExecutor] 🔍 Processing extracted variables ${logPrefix}:`,
-      extractedVariables
-    );
-    console.log(`[ScriptExecutor] 🔍 Current position:`, position);
+    logger.debug(`🔍 Processing extracted variables ${logPrefix}`, { extractedVariables });
+    logger.debug('🔍 Current position', { position });
 
     const scopeResolver = new VariableScopeResolver(executionState.variableStore!);
 
@@ -260,13 +247,13 @@ export class ScriptExecutor {
     varValue: any,
     position: { phaseId?: string; topicId?: string; actionId: string }
   ): void {
-    console.log(`[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`, varValue);
+    logger.debug(`🔍 Processing variable "${varName}"`, { varName, varValue });
 
     const targetScope = scopeResolver.determineScope(varName);
-    console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
+    logger.debug(`📋 Target scope for "${varName}"`, { targetScope });
 
     scopeResolver.setVariable(varName, varValue, targetScope, position, position.actionId);
-    console.log(`[ScriptExecutor] ✅ Set variable "${varName}" to ${targetScope} scope`);
+    logger.debug(`✅ Set variable "${varName}" to ${targetScope} scope`);
   }
 
   /**
@@ -277,26 +264,22 @@ export class ScriptExecutor {
     position: { phaseId?: string; topicId?: string; actionId: string },
     logPrefix: string
   ): void {
-    console.log(`[ScriptExecutor] 🔍 Verifying variableStore after writing ${logPrefix}:`);
-    console.log(`[ScriptExecutor] - Global:`, Object.keys(executionState.variableStore!.global));
-    console.log(`[ScriptExecutor] - Session:`, Object.keys(executionState.variableStore!.session));
+    logger.debug(`🔍 Verifying variableStore after writing ${logPrefix}`);
+    logger.debug('- Global', { keys: Object.keys(executionState.variableStore!.global) });
+    logger.debug('- Session', { keys: Object.keys(executionState.variableStore!.session) });
 
     if (position.phaseId) {
-      console.log(
-        `[ScriptExecutor] - Phase[${position.phaseId}]:`,
-        executionState.variableStore!.phase[position.phaseId]
-          ? Object.keys(executionState.variableStore!.phase[position.phaseId])
-          : 'undefined'
-      );
+      const phaseKeys = executionState.variableStore!.phase[position.phaseId]
+        ? Object.keys(executionState.variableStore!.phase[position.phaseId])
+        : undefined;
+      logger.debug(`- Phase[${position.phaseId}]`, { keys: phaseKeys });
     }
 
     if (position.topicId) {
-      console.log(
-        `[ScriptExecutor] - Topic[${position.topicId}]:`,
-        executionState.variableStore!.topic[position.topicId]
-          ? Object.keys(executionState.variableStore!.topic[position.topicId])
-          : 'undefined'
-      );
+      const topicKeys = executionState.variableStore!.topic[position.topicId]
+        ? Object.keys(executionState.variableStore!.topic[position.topicId])
+        : undefined;
+      logger.debug(`- Topic[${position.topicId}]`, { keys: topicKeys });
     }
   }
 
@@ -320,13 +303,10 @@ export class ScriptExecutor {
       );
 
       // Handle resuming current action if exists
-      console.log('[ScriptExecutor] 🔍 Before resumeCurrentActionIfNeeded:', {
+      logger.debug('🔍 Before resumeCurrentActionIfNeeded', {
         hasCurrentAction: !!executionState.currentAction,
         currentActionId: executionState.currentAction?.actionId,
         conversationHistoryLength: executionState.conversationHistory.length,
-        conversationHistoryContent: executionState.conversationHistory.map(
-          (m) => `${m.role}: ${m.content.substring(0, 30)}...`
-        ),
       });
       const shouldContinue = await this.resumeCurrentActionIfNeeded(
         executionState,
@@ -376,7 +356,7 @@ export class ScriptExecutor {
     );
     this.actionStateManager.restoreActionIfNeeded(executionState, phases);
 
-    console.log('[ScriptExecutor] 📊 After restoreActionIfNeeded:', {
+    logger.debug('📊 After restoreActionIfNeeded', {
       hasCurrentAction: !!executionState.currentAction,
       currentAction: executionState.currentAction
         ? {
@@ -406,7 +386,7 @@ export class ScriptExecutor {
 
     this.actionStateManager.restorePositionIds(executionState, phases);
 
-    console.log('[ScriptExecutor] 🔄 Continuing current action:', {
+    logger.debug('🔄 Continuing current action', {
       actionId: executionState.currentAction.actionId,
       actionIdx: executionState.currentActionIdx,
       phaseId: executionState.currentPhaseId,
@@ -436,16 +416,14 @@ export class ScriptExecutor {
     // 先调用 prepareNext 更新索引
     this.resultHandler.prepareNext(executionState, phases);
 
-    // 关键修复：如果 action 完成且有 aiMessage，需要先返回给客户端显示
-    // 但如果脚本已完成（prepareNext 已设置 COMPLETED），不要覆盖状态
     if (result.aiMessage && executionState.status !== ExecutionStatus.COMPLETED) {
-      console.log('[ScriptExecutor] ✅ Action completed with aiMessage, returning to client');
-      executionState.status = ExecutionStatus.WAITING_INPUT; // 等待客户端确认
-      return false; // 返回给客户端
+      logger.info('✅ Action completed with aiMessage, returning to client');
+      executionState.status = ExecutionStatus.WAITING_INPUT;
+      return false;
     }
 
-    console.log('[ScriptExecutor] ✅ Action completed, continuing to execute next actions');
-    return true; // Continue to next actions
+    logger.debug('✅ Action completed, continuing to execute next actions');
+    return true;
   }
 
   /**
@@ -471,14 +449,14 @@ export class ScriptExecutor {
         this.updateVariablesWithScope(state, vars, position, true);
       }
     );
-    console.log('[ScriptExecutor] ⏸️ Action still not completed, waiting for more input');
+    logger.debug('⏸️ Action still not completed, waiting for more input');
   }
 
   /**
    * Handle completed action result
    */
   private handleCompletedAction(executionState: ExecutionState, result: ActionResult): void {
-    console.log('[ScriptExecutor] ✅ Action completed via continue:', {
+    logger.debug('✅ Action completed via continue', {
       actionId: executionState.currentAction!.actionId,
       hasAiMessage: !!result.aiMessage,
     });
@@ -545,8 +523,8 @@ export class ScriptExecutor {
         const firstActionConfig = firstTopic.actions[0];
         executionState.currentActionId = firstActionConfig.action_id;
         executionState.currentActionType = firstActionConfig.action_type;
-        console.log(
-          `[ScriptExecutor] ➡️ Moving to next phase: ${nextPhase.phase_id}, first action: ${firstActionConfig.action_id}`
+        logger.debug(
+          `➡️ Moving to next phase: ${nextPhase.phase_id}, first action: ${firstActionConfig.action_id}`
         );
       } else {
         this.clearActionIds(executionState);
@@ -637,16 +615,9 @@ export class ScriptExecutor {
 
     const topicPlan = await this.topicPlanner.plan(context);
 
-    // 存储规划结果到ExecutionState
     executionState.currentTopicPlan = topicPlan;
 
-    // 重置Action索引,从实例化队列的第一个Action开始执行
-    // 注意：只有在首次规划 topic 时才重置索引
-    // 如果 topic 已经在执行中（currentActionIdx > 0），不应该重置
-    // 这解决了 resumeCurrentActionIfNeeded 后 executeAllPhases 重新执行 topic 的问题
-    // 不重置索引，保持当前的 currentActionIdx
-
-    console.log(`[ScriptExecutor] ✅ Topic planned:`, {
+    logger.debug('✅ Topic planned', {
       topicId: topicPlan.topicId,
       actionCount: topicPlan.instantiatedActions.length,
       plannedAt: topicPlan.plannedAt,
@@ -724,8 +695,8 @@ export class ScriptExecutor {
       const firstActionConfig = nextTopic.actions[0];
       executionState.currentActionId = firstActionConfig.action_id;
       executionState.currentActionType = firstActionConfig.action_type;
-      console.log(
-        `[ScriptExecutor] ➡️ Moving to next topic: ${nextTopic.topic_id}, first action: ${firstActionConfig.action_id}`
+      logger.debug(
+        `➡️ Moving to next topic: ${nextTopic.topic_id}, first action: ${firstActionConfig.action_id}`
       );
     } else {
       this.clearActionIds(executionState);
@@ -748,37 +719,32 @@ export class ScriptExecutor {
     const needsPlanning = this.shouldPlanTopic(executionState, topicId);
 
     if (needsPlanning) {
-      console.log(`[ScriptExecutor] 🧠 Planning topic: ${topicId}`);
+      logger.info(`🧠 Planning topic: ${topicId}`);
 
-      // 保存当前 actionIdx，因为 planCurrentTopic 不再重置它
       const savedActionIdx = executionState.currentActionIdx;
 
       await this.planCurrentTopic(topic, executionState, sessionId, phaseId);
 
-      // 只有在首次进入 topic 时才重置索引
-      // 如果 savedActionIdx > 0，说明 topic 已经在执行中，不应该重置
       if (savedActionIdx === 0) {
         executionState.currentActionIdx = 0;
       } else {
         executionState.currentActionIdx = savedActionIdx;
-        console.log(
-          `[ScriptExecutor] 🔄 Restored actionIdx to ${savedActionIdx} (topic already in progress)`
-        );
+        logger.debug(`🔄 Restored actionIdx to ${savedActionIdx} (topic already in progress)`);
       }
     }
 
-    // [Story 2.1] 从实例化队列读取Actions(优先于脚本模板)
     const actions = this.getTopicActions(topic, executionState);
 
-    console.log(
-      `[ScriptExecutor] 🔵 Executing topic: ${topicId}, actions count: ${actions.length}, currentActionIdx: ${executionState.currentActionIdx}`
-    );
+    logger.info(`🔵 Executing topic: ${topicId}`, {
+      actionsCount: actions.length,
+      currentActionIdx: executionState.currentActionIdx,
+    });
 
     // Execute Actions
     while (executionState.currentActionIdx < actions.length) {
       const actionConfig = actions[executionState.currentActionIdx];
-      console.log(
-        `[ScriptExecutor] 🎯 Executing action [${executionState.currentActionIdx}]: ${actionConfig.action_id} (${actionConfig.action_type})`
+      logger.debug(
+        `🎯 Executing action [${executionState.currentActionIdx}]: ${actionConfig.action_id} (${actionConfig.action_type})`
       );
 
       // Create or get Action instance
@@ -787,7 +753,7 @@ export class ScriptExecutor {
         executionState.currentAction = action;
         executionState.currentActionId = actionConfig.action_id;
         executionState.currentActionType = actionConfig.action_type;
-        console.log(`[ScriptExecutor] ✅ Created action instance: ${action.actionId}`);
+        logger.debug(`✅ Created action instance: ${action.actionId}`);
       }
 
       const action = executionState.currentAction;
@@ -801,12 +767,12 @@ export class ScriptExecutor {
         executionState,
         userInput
       );
-      console.log(`[ScriptExecutor] ✅ Action result:`, {
+      logger.debug('✅ Action result', {
         actionId: action.actionId,
         completed: result.completed,
         success: result.success,
         hasAiMessage: !!result.aiMessage,
-        aiMessage: result.aiMessage?.substring(0, 50),
+        aiMessageLength: result.aiMessage?.length,
       });
 
       // user_input only used once
@@ -832,7 +798,7 @@ export class ScriptExecutor {
     }
 
     // Topic all Actions executed
-    console.log(`[ScriptExecutor] ? Topic completed: ${topicId}`);
+    logger.info(`🏁 Topic completed: ${topicId}`);
     executionState.status = ExecutionStatus.RUNNING;
   }
 
@@ -844,7 +810,7 @@ export class ScriptExecutor {
     result: ActionResult,
     action: BaseAction
   ): void {
-    console.log(`[ScriptExecutor] ⏸️ Action not completed, waiting for input`);
+    logger.debug('⏸️ Action not completed, waiting for input');
 
     if (result.aiMessage) {
       executionState.lastAiMessage = result.aiMessage;
@@ -858,7 +824,7 @@ export class ScriptExecutor {
 
     if (result.debugInfo) {
       executionState.lastLLMDebugInfo = result.debugInfo;
-      console.log('[ScriptExecutor] 💾 Saved LLM debug info (action not completed):', {
+      logger.debug('💾 Saved LLM debug info (action not completed)', {
         hasPrompt: !!result.debugInfo.prompt,
         hasResponse: !!result.debugInfo.response,
       });
@@ -866,12 +832,12 @@ export class ScriptExecutor {
 
     executionState.status = ExecutionStatus.WAITING_INPUT;
     executionState.metadata.actionState = this.actionStateManager.serialize(action);
-    console.log(`[ScriptExecutor] 💾 Serialized action state:`, {
+    logger.debug('💾 Serialized action state', {
       actionId: executionState.metadata.actionState.actionId,
       currentRound: executionState.metadata.actionState.currentRound,
       maxRounds: executionState.metadata.actionState.maxRounds,
     });
-    console.log(`[ScriptExecutor] 🔴 Returning to wait for user input`);
+    logger.info('🔴 Returning to wait for user input');
   }
 
   /**
@@ -884,7 +850,7 @@ export class ScriptExecutor {
     topicId: string,
     action: BaseAction
   ): void {
-    console.log(`[ScriptExecutor] ? Action completed successfully`);
+    logger.debug('✅ Action completed successfully');
 
     // 处理提取的变量
     if (result.extractedVariables) {
@@ -918,7 +884,7 @@ export class ScriptExecutor {
     // 保存 LLM debug info
     if (result.debugInfo) {
       executionState.lastLLMDebugInfo = result.debugInfo;
-      console.log('[ScriptExecutor] 💾 Saved LLM debug info:', {
+      logger.debug('💾 Saved LLM debug info', {
         hasPrompt: !!result.debugInfo.prompt,
         hasResponse: !!result.debugInfo.response,
         model: result.debugInfo.model,
@@ -931,10 +897,7 @@ export class ScriptExecutor {
         currentRound: result.metadata.currentRound,
         maxRounds: result.metadata.maxRounds,
       };
-      console.log(
-        '[ScriptExecutor] 🔄 Saved action round info:',
-        executionState.metadata.lastActionRoundInfo
-      );
+      logger.debug('🔄 Saved action round info', executionState.metadata.lastActionRoundInfo);
     }
   }
 
@@ -949,14 +912,12 @@ export class ScriptExecutor {
     action: BaseAction
   ): void {
     if (!executionState.variableStore) {
-      console.warn(
-        `[ScriptExecutor] ⚠️ variableStore is not initialized, cannot write variables to scopes`
-      );
+      logger.warn('⚠️ variableStore is not initialized, cannot write variables to scopes');
       return;
     }
 
-    console.log(`[ScriptExecutor] 🔍 Processing extracted variables:`, extractedVariables);
-    console.log(`[ScriptExecutor] 🔍 Current position:`, {
+    logger.debug('🔍 Processing extracted variables', { extractedVariables });
+    logger.debug('🔍 Current position', {
       phaseId,
       topicId,
       actionId: action.actionId,
@@ -966,30 +927,28 @@ export class ScriptExecutor {
     const position = { phaseId, topicId, actionId: action.actionId };
 
     for (const [varName, varValue] of Object.entries(extractedVariables)) {
-      console.log(`[ScriptExecutor] 🔍 Processing variable "${varName}" with value:`, varValue);
+      logger.debug(`🔍 Processing variable "${varName}"`, { varName, varValue });
 
       const targetScope = scopeResolver.determineScope(varName);
-      console.log(`[ScriptExecutor] 📋 Target scope for "${varName}":`, targetScope);
+      logger.debug(`📋 Target scope for "${varName}"`, { targetScope });
 
       scopeResolver.setVariable(varName, varValue, targetScope, position, action.actionId);
-      console.log(`[ScriptExecutor] ? Set variable "${varName}" to ${targetScope} scope`);
+      logger.debug(`✅ Set variable "${varName}" to ${targetScope} scope`);
     }
 
-    console.log(`[ScriptExecutor] 🔍 Verifying variableStore after writing:`);
-    console.log(`[ScriptExecutor] - Global:`, Object.keys(executionState.variableStore.global));
-    console.log(`[ScriptExecutor] - Session:`, Object.keys(executionState.variableStore.session));
-    console.log(
-      `[ScriptExecutor] - Phase[${phaseId}]:`,
-      executionState.variableStore.phase[phaseId]
+    logger.debug('🔍 Verifying variableStore after writing');
+    logger.debug('- Global', { keys: Object.keys(executionState.variableStore.global) });
+    logger.debug('- Session', { keys: Object.keys(executionState.variableStore.session) });
+    logger.debug(`- Phase[${phaseId}]`, {
+      keys: executionState.variableStore.phase[phaseId]
         ? Object.keys(executionState.variableStore.phase[phaseId])
-        : 'undefined'
-    );
-    console.log(
-      `[ScriptExecutor] - Topic[${topicId}]:`,
-      executionState.variableStore.topic[topicId]
+        : undefined,
+    });
+    logger.debug(`- Topic[${topicId}]`, {
+      keys: executionState.variableStore.topic[topicId]
         ? Object.keys(executionState.variableStore.topic[topicId])
-        : 'undefined'
-    );
+        : undefined,
+    });
   }
 
   /**
@@ -1004,13 +963,13 @@ export class ScriptExecutor {
       const nextActionConfig = actions[executionState.currentActionIdx];
       executionState.currentActionId = nextActionConfig.action_id;
       executionState.currentActionType = nextActionConfig.action_type;
-      console.log(
-        `[ScriptExecutor] ➡️ Moving to next action: ${nextActionConfig.action_id} (${nextActionConfig.action_type})`
+      logger.debug(
+        `➡️ Moving to next action: ${nextActionConfig.action_id} (${nextActionConfig.action_type})`
       );
     } else {
       executionState.currentActionId = undefined;
       executionState.currentActionType = undefined;
-      console.log(`[ScriptExecutor] ➡️ No more actions in this topic`);
+      logger.debug('➡️ No more actions in this topic');
     }
   }
 
@@ -1104,10 +1063,9 @@ export class ScriptExecutor {
       : restConfig; // Otherwise use all other fields
 
     // Create Action instance
-    console.log(`[ScriptExecutor] 🛴? Creating action:`, {
+    logger.debug('Creating action', {
       actionType,
       actionId,
-      config,
       hasConfig: !!actionConfig.config,
       configKeys: Object.keys(config),
     });
