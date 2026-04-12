@@ -4,7 +4,12 @@
  * 集成脚本执行引擎，提供基于 YAML 脚本的会话管理
  */
 
-import { ScriptExecutor, type TemplateProvider, type ExecutionState } from '@heartrule/core-engine';
+import {
+  ScriptExecutor,
+  type TemplateProvider,
+  type ExecutionState,
+  createLogger,
+} from '@heartrule/core-engine';
 import type { DetailedApiError } from '@heartrule/shared-types';
 import { VariableScope, ExecutionStatus } from '@heartrule/shared-types';
 import { eq } from 'drizzle-orm';
@@ -24,6 +29,8 @@ import { container } from '../ioc/container.js';
 import { buildDetailedError } from '../utils/error-handler.js';
 
 import { DatabaseTemplateProvider } from './database-template-provider.js';
+
+const logger = createLogger('SessionManager');
 
 // 类型定义
 interface SessionData {
@@ -178,11 +185,11 @@ export class SessionManager {
     });
 
     if (!session) {
-      console.error('[SessionManager] ❌ Session not found:', sessionId);
+      logger.error('❌ Session not found:', { sessionId });
       throw new Error('Session not found');
     }
 
-    console.log('[SessionManager] ✅ Session found:', {
+    logger.info('✅ Session found', {
       id: session.id,
       scriptId: session.scriptId,
       status: session.status,
@@ -201,16 +208,15 @@ export class SessionManager {
     });
 
     if (!script) {
-      console.error('[SessionManager] ❌ Script not found:', scriptId);
+      logger.error('❌ Script not found:', { scriptId });
       throw new Error('Script not found');
     }
 
-    // 从 tags 中提取 projectId
     const tags = (script.tags as string[]) || [];
     const projectTag = tags.find((tag) => tag.startsWith('project:'));
     const projectId = projectTag ? projectTag.replace('project:', '') : undefined;
 
-    console.log('[SessionManager] ✅ Script found:', {
+    logger.info('✅ Script found', {
       id: script.id,
       scriptName: script.scriptName,
       contentLength: script.scriptContent.length,
@@ -235,7 +241,7 @@ export class SessionManager {
       orderBy: (fields, { asc }) => [asc(fields.timestamp)],
     });
 
-    console.log(`[SessionManager] 📋 Loaded ${history.length} messages from database:`, {
+    logger.debug(`📋 Loaded ${history.length} messages from database:`, {
       aiMessages: history.filter((m) => m.role === 'assistant').length,
       userMessages: history.filter((m) => m.role === 'user').length,
     });
@@ -277,7 +283,7 @@ export class SessionManager {
       }
     }
 
-    console.log('[SessionManager] 📋 Initial execution state:', {
+    logger.debug('📋 Initial execution state:', {
       status: executionState.status,
       phaseIdx: executionState.currentPhaseIdx,
       topicIdx: executionState.currentTopicIdx,
@@ -327,19 +333,16 @@ export class SessionManager {
             lastUpdated: new Date().toISOString(),
             scope: VariableScope.GLOBAL, // 🔧 明确标记为global作用域
           };
-          console.log(
-            `[SessionManager] 🔄 Synced global variable "${key}" to variableStore.global:`,
-            value
-          );
+          logger.debug(`🔄 Synced global variable "${key}" to variableStore.global:`, value);
         }
       }
-      console.log(
-        '[SessionManager] ✅ Global variables synchronized:',
+      logger.debug(
+        '✅ Global variables synchronized:',
         Object.keys(executionState.variableStore.global)
       );
     }
 
-    console.log('[SessionManager] 📋 Restored execution state:', {
+    logger.debug('📋 Restored execution state:', {
       status: executionState.status,
       phaseIdx: executionState.currentPhaseIdx,
       topicIdx: executionState.currentTopicIdx,
@@ -368,7 +371,7 @@ export class SessionManager {
     const scriptContent = yaml.parse(script.scriptContent) || {};
     const scriptJson = JSON.stringify(scriptContent);
 
-    console.log('[SessionManager] 📄 Parsed YAML script:', {
+    logger.debug('📄 Parsed YAML script:', {
       sessionId: scriptContent.session?.session_id,
       sessionName: scriptContent.session?.session_name,
       phasesCount: scriptContent.session?.phases?.length || 0,
@@ -378,7 +381,7 @@ export class SessionManager {
     });
 
     const logPrefix = userInput === null ? 'initialization' : 'with user input';
-    console.log(`[SessionManager] ⏳ Executing script (${logPrefix})...`);
+    logger.debug(`⏳ Executing script (${logPrefix})...`);
 
     // 🎯 WI-2: 传递 projectId 和 templateProvider 到 ScriptExecutor
     const updatedState = await this.scriptExecutor.executeSession(
@@ -390,7 +393,7 @@ export class SessionManager {
       this.templateProvider // 传递 templateProvider
     );
 
-    console.log('[SessionManager] ✅ Script execution completed:', {
+    logger.debug('✅ Script execution completed:', {
       status: updatedState.status,
       phaseIdx: updatedState.currentPhaseIdx,
       topicIdx: updatedState.currentTopicIdx,
@@ -414,7 +417,7 @@ export class SessionManager {
     const aiMessages = newMessages.filter((msg) => msg.role === 'assistant');
 
     if (aiMessages.length > 0) {
-      console.log(`[SessionManager] 💾 Saving ${aiMessages.length} AI message(s):`, {
+      logger.debug(`💾 Saving ${aiMessages.length} AI message(s):`, {
         messages: aiMessages.map((m) => ({
           actionId: m.actionId,
           content: m.content.substring(0, 50),
@@ -434,7 +437,7 @@ export class SessionManager {
         });
       }
     } else {
-      console.log('[SessionManager] ⚠️ No AI messages to save');
+      logger.warn('⚠️ No AI messages to save');
     }
   }
 
@@ -443,7 +446,7 @@ export class SessionManager {
    */
   private async saveUserMessage(sessionId: string, userInput: string): Promise<void> {
     const userMessageId = uuidv4();
-    console.log('[SessionManager] 💾 Saving user message:', {
+    logger.debug('💾 Saving user message:', {
       messageId: userMessageId,
       content: userInput,
     });
@@ -468,7 +471,7 @@ export class SessionManager {
   ): Promise<void> {
     const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
     if (snapshots.length > 0) {
-      console.log('[SessionManager] 💾 Saving variable snapshots:', snapshots.length);
+      logger.debug('💾 Saving variable snapshots:', snapshots.length);
       await db.insert(variables).values(snapshots);
     }
   }
@@ -481,7 +484,7 @@ export class SessionManager {
     executionState: ExecutionState,
     globalVariables: Record<string, any>
   ): Promise<void> {
-    console.log('[SessionManager] 💾 Updating session state in DB');
+    logger.debug('💾 Updating session state in DB');
 
     await db
       .update(sessions)
@@ -557,7 +560,7 @@ export class SessionManager {
               }
             }
           } catch (e) {
-            console.error('[SessionManager] ❌ Error parsing script:', e);
+            logger.error('❌ Error parsing script:', e);
           }
           return undefined;
         })(),
@@ -676,14 +679,11 @@ export class SessionManager {
         }
       }
 
-      console.log(
-        '[SessionManager] 📋 Loaded global variables from global.yaml:',
-        Object.keys(globalVariables)
-      );
+      logger.debug('📋 Loaded global variables from global.yaml:', Object.keys(globalVariables));
 
       return globalVariables;
     } catch (error) {
-      console.error('[SessionManager] ❌ Error loading global variables:', error);
+      logger.error('❌ Error loading global variables:', error);
       return {};
     }
   }
@@ -693,7 +693,7 @@ export class SessionManager {
    */
 
   async initializeSession(sessionId: string): Promise<SessionResponse> {
-    console.log('[SessionManager] 🔵 initializeSession called', { sessionId });
+    logger.info('🔵 initializeSession called', { sessionId });
 
     // 1. 加载会话和脚本数据
     const session = await this.loadSessionById(sessionId);
@@ -732,10 +732,7 @@ export class SessionManager {
           .set({ metadata: updatedMetadata })
           .where(eq(sessions.id, sessionId));
 
-        console.log(
-          '[SessionManager] 💾 Saved sessionConfig to database:',
-          executionState.metadata.sessionConfig
-        );
+        logger.debug('💾 Saved sessionConfig to database:', executionState.metadata.sessionConfig);
       }
 
       // 6. 保存执行结果
@@ -751,10 +748,10 @@ export class SessionManager {
         globalVariables,
         false
       );
-      console.log('[SessionManager] 🏁 initializeSession completed:', result);
+      logger.info('🏁 initializeSession completed');
       return result;
     } catch (error) {
-      console.error('[SessionManager] ❌ Error during initialization:', error);
+      logger.error('❌ Error during initialization:', error);
       return this.buildErrorResponse(error, session, script, sessionId);
     }
   }
@@ -763,7 +760,7 @@ export class SessionManager {
    * 处理用户输入
    */
   async processUserInput(sessionId: string, userInput: string): Promise<SessionResponse> {
-    console.log('[SessionManager] 🔵 processUserInput called', { sessionId, userInput });
+    logger.info('🔵 processUserInput called', { sessionId, userInput });
 
     // 1. 加载会话和脚本数据
     const session = await this.loadSessionById(sessionId);
@@ -803,12 +800,16 @@ export class SessionManager {
         globalVariables,
         true
       );
-      console.log('[SessionManager] 🏁 processUserInput completed:', {
-        aiMessage: result.aiMessage,
+      logger.debug('🏁 processUserInput completed:', {
         aiMessageLength: result.aiMessage?.length || 0,
         hasDebugInfo: !!result.debugInfo,
-        debugInfoPrompt: result.debugInfo?.prompt?.substring(0, 50),
-        debugInfoResponse: result.debugInfo?.response?.text?.substring(0, 50),
+        debugInfo: result.debugInfo
+          ? {
+              tokensUsed: result.debugInfo.tokensUsed,
+              model: result.debugInfo.model,
+              finishReason: result.debugInfo.response?.finishReason,
+            }
+          : undefined,
         executionStatus: result.executionStatus,
         position: result.position,
         hasGlobalVariables: !!result.globalVariables,
@@ -816,11 +817,9 @@ export class SessionManager {
         hasVariableStore: !!result.variableStore,
         variableStoreKeys: result.variableStore ? Object.keys(result.variableStore) : [],
       });
-      console.log('[DebugConfig] 🔍 Result object keys:', Object.keys(result));
-      console.log('[DebugConfig] 🔍 variableStore value:', result.variableStore);
       return result;
     } catch (error) {
-      console.error('[SessionManager] ❌ Error during user input processing:', error);
+      logger.error('❌ Error during user input processing:', error);
       return this.buildErrorResponse(error, session, script, sessionId);
     }
   }
