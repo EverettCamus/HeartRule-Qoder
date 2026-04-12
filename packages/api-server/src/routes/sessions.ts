@@ -132,14 +132,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           variables: initResult.variables,
           globalVariables: initResult.globalVariables,
           position: initResult.position,
-          // debugInfo 仅在开发环境返回完整信息
-          debugInfo: initResult.debugInfo
-            ? {
-                tokensUsed: initResult.debugInfo.tokensUsed,
-                model: initResult.debugInfo.model,
-                finishReason: initResult.debugInfo.response?.finishReason,
-              }
-            : undefined,
+          // debugInfo 完整返回给前端（前端需要 prompt 和 response）
+          debugInfo: initResult.debugInfo,
         };
 
         if (initResult.error) {
@@ -517,14 +511,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           globalVariables: result.globalVariables,
           variableStore: result.variableStore,
           position: result.position,
-          // debugInfo 仅返回摘要信息
-          debugInfo: result.debugInfo
-            ? {
-                tokensUsed: result.debugInfo.tokensUsed,
-                model: result.debugInfo.model,
-                finishReason: result.debugInfo.response?.finishReason,
-              }
-            : undefined,
+          // debugInfo 完整返回给前端
+          debugInfo: result.debugInfo,
         };
 
         // 记录完整响应（特别是position字段）
