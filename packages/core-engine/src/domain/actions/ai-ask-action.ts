@@ -913,7 +913,7 @@ ${historyText}
       prompt = prompt + monitorFeedback;
     }
     const model = this.getConfig('model', 'unknown');
-    logger.debug('📝 Prompt prepared', { chars: prompt.length, model });
+    logger.info('📝 Prompt prepared', { chars: prompt.length, model });
     return prompt;
   }
   /**
@@ -949,6 +949,15 @@ ${historyText}
 
       // 提取 content 字段
       const aiMessage = llmOutput.content || llmResult.text.trim();
+
+      // 记录 LLM 响应关键信息
+      const debugInfo = llmResult.debugInfo;
+      logger.info('📝 LLM Response (simple mode)', {
+        finishReason: debugInfo?.response?.finishReason,
+        tokensUsed: debugInfo?.tokensUsed,
+        model: debugInfo?.model,
+        content: aiMessage?.substring(0, 100) + (aiMessage?.length > 100 ? '...' : ''),
+      });
 
       return {
         success: true,
@@ -986,6 +995,17 @@ ${historyText}
         // TODO: 同步启动危机处理LLM，评估是否修订回复
         logger.warn('⚠️ 危机信号检测到，启动危机处理流程');
       }
+
+      // 记录 LLM 响应关键信息
+      const debugInfo = llmResult.debugInfo;
+      logger.info('📝 LLM Response', {
+        finishReason: debugInfo?.response?.finishReason,
+        tokensUsed: debugInfo?.tokensUsed,
+        model: debugInfo?.model,
+        content: aiMessage?.substring(0, 100) + (aiMessage?.length > 100 ? '...' : ''),
+        exit: shouldExit,
+        exitReason: llmOutput.exit_reason,
+      });
 
       return {
         success: true,
