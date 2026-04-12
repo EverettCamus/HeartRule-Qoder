@@ -148,7 +148,12 @@ export * from './application/handlers/execution-result-handler.js';
 export * from './engines/llm-orchestration/index.js';
 
 // 导出 LLM Provider 端口接口与基础类（Phase 4: 六边形架构）
-export type { ILLMProvider, LLMConfig, LLMDebugInfo, LLMGenerateResult } from './application/ports/outbound/llm-provider.port.js';
+export type {
+  ILLMProvider,
+  LLMConfig,
+  LLMDebugInfo,
+  LLMGenerateResult,
+} from './application/ports/outbound/llm-provider.port.js';
 export { BaseLLMProvider } from './engines/llm-orchestration/orchestrator.js';
 
 // VariableExtractor: 变量提取引擎，从对话与 LLM 输出中抽取变量
@@ -194,3 +199,10 @@ export * from './adapters/inbound/script-schema/index.js';
 // - actions/base.ts (已删除，使用 base-action.ts)
 // - actions/registry.ts (已删除，使用 action-registry.ts)
 // - engines/script-execution/executor.ts (已删除，使用 script-executor.ts)
+
+// =============================================================================
+// Utilities (工具层)
+// =============================================================================
+// 通用工具函数与辅助类
+
+export * from './utils/logger.js';
