@@ -1,4 +1,8 @@
+import { createLogger } from '../../utils/logger.js';
+
 import type { TemplateProvider } from './template-provider.js';
+
+const logger = createLogger('TemplateManager');
 
 /**
  * 提示词模板定义
@@ -82,16 +86,10 @@ export class PromptTemplateManager {
       if (process.env.NODE_ENV === 'development') {
         const validation = this.validateTemplate(content, templatePath);
         if (!validation.valid) {
-          console.error(
-            `[TemplateManager] ❌ Template validation failed for ${templatePath}:`,
-            validation.errors
-          );
+          logger.error(`❌ Template validation failed for ${templatePath}:`, validation.errors);
         }
         if (validation.warnings.length > 0) {
-          console.warn(
-            `[TemplateManager] ⚠️ Template validation warnings for ${templatePath}:`,
-            validation.warnings
-          );
+          logger.warn(`⚠️ Template validation warnings for ${templatePath}:`, validation.warnings);
         }
       }
 
@@ -135,16 +133,10 @@ export class PromptTemplateManager {
       if (process.env.NODE_ENV === 'development') {
         const validation = this.validateTemplate(content, templatePath);
         if (!validation.valid) {
-          console.error(
-            `[TemplateManager] ❌ Template validation failed for ${templatePath}:`,
-            validation.errors
-          );
+          logger.error(`❌ Template validation failed for ${templatePath}:`, validation.errors);
         }
         if (validation.warnings.length > 0) {
-          console.warn(
-            `[TemplateManager] ⚠️ Template validation warnings for ${templatePath}:`,
-            validation.warnings
-          );
+          logger.warn(`⚠️ Template validation warnings for ${templatePath}:`, validation.warnings);
         }
       }
 

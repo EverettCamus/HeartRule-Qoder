@@ -1,4 +1,8 @@
+import { createLogger } from '../../utils/logger.js';
+
 import type { TemplateProvider } from './template-provider.js';
+
+const logger = createLogger('TemplateResolver');
 
 /**
  * 模板路径解析结果
@@ -79,7 +83,7 @@ export class TemplateResolver {
       throw new Error('[TemplateResolver] Template provider or project ID not configured');
     }
 
-    console.log(`[TemplateResolver] 🔍 Resolving template from database:`, {
+    logger.debug('🔍 Resolving template from database:', {
       projectId: this.projectId,
       templateFileName,
       template_scheme: sessionConfig?.template_scheme,
@@ -89,13 +93,13 @@ export class TemplateResolver {
     if (sessionConfig?.template_scheme) {
       const customPath = `_system/config/custom/${sessionConfig.template_scheme}/${templateFileName}`;
 
-      console.log(`[TemplateResolver] 🔍 Checking custom layer: ${customPath}`);
-      console.log(`[TemplateResolver] 🎯 Using projectId: ${this.projectId}`);
+      logger.debug(`🔍 Checking custom layer: ${customPath}`);
+      logger.debug(`🎯 Using projectId: ${this.projectId}`);
       const exists = await this.templateProvider.hasTemplate(this.projectId, customPath);
-      console.log(`[TemplateResolver] 📋 Custom layer exists: ${exists}`);
+      logger.debug(`📋 Custom layer exists: ${exists}`);
 
       if (exists) {
-        console.log(`[TemplateResolver] ✅ Using custom layer template: ${customPath}`);
+        logger.debug(`✅ Using custom layer template: ${customPath}`);
         return {
           path: customPath,
           layer: 'custom',
@@ -105,12 +109,11 @@ export class TemplateResolver {
       }
 
       // Custom 层模板不存在，记录警告并回退到 default 层
-      console.warn(
-        `[TemplateResolver] Custom template not found: ${customPath}. ` +
-          `Falling back to default template.`
+      logger.warn(
+        `Custom template not found: ${customPath}. ` + `Falling back to default template.`
       );
     } else {
-      console.log(`[TemplateResolver] ℹ️ No template_scheme configured, using default layer`);
+      logger.debug('ℹ️ No template_scheme configured, using default layer');
     }
 
     // 第2层：Default 层（倕底）
