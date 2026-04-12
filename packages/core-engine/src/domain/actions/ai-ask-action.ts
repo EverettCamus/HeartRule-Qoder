@@ -23,6 +23,7 @@ import path from 'path';
 
 import {
   VariableScope,
+  EnhancedAskLLMOutputSchema,
   type EnhancedAskLLMOutput,
   type ExitCriteria,
 } from '@heartrule/shared-types';
@@ -30,9 +31,12 @@ import {
 import { ExitDecisionEngine } from '../../engines/exit-decision/index.js';
 import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager, TemplateResolver } from '../../engines/prompt-template/index.js';
+import { createLogger } from '../../utils/logger.js';
 
 import { BaseAction } from './base-action.js';
 import type { ActionContext, ActionResult } from './base-action.js';
+
+const logger = createLogger('AiAskAction');
 
 /**
  * 模板类型枚举
@@ -58,7 +62,7 @@ export class AiAskAction extends BaseAction {
 
     // 计算模板路径
     const templateBasePath = this.resolveTemplatePath();
-    console.log(`[AiAskAction] 📁 Template path: ${templateBasePath}`);
+    logger.info('📁 Template path:', { path: templateBasePath });
     this.templateManager = new PromptTemplateManager(templateBasePath);
     // TemplateResolver 需要项目根目录，但此时还没有context，暂不初始化
     this.templateResolver = null as any; // 延迟初始化
@@ -75,7 +79,8 @@ export class AiAskAction extends BaseAction {
       enabledSources: ['max_rounds', 'exit_flag', 'llm_suggestion'],
     };
 
-    console.log(`[AiAskAction] 🔧 Constructor: templateType=${this.templateType}, config:`, {
+    logger.debug('🔧 Constructor', {
+      templateType: this.templateType,
       hasOutput: !!this.getConfig('output')?.length,
       hasExitCondition: !!this.getConfig('exit_condition'),
       maxRounds: this.maxRounds,
@@ -121,7 +126,7 @@ export class AiAskAction extends BaseAction {
     context: ActionContext,
     userInput?: string | null
   ): Promise<ActionResult> {
-    console.log(`[AiAskAction] 📝 Using template mode (round: ${this.currentRound})`);
+    logger.debug('📝 Using template mode', { currentRound: this.currentRound });
 
     // 第一轮：生成初始问题
     if (this.currentRound === 0) {
@@ -158,8 +163,10 @@ export class AiAskAction extends BaseAction {
     const llmResult = await this.generateQuestionFromTemplate(context, AskTemplateType.MULTI_ROUND);
 
     // 提取 LLM 输出的原始数据
-    const llmOutput = llmResult.metadata?.llmRawOutput
-      ? JSON.parse(this.cleanJsonOutput(llmResult.metadata.llmRawOutput))
+    const llmOutput: Partial<EnhancedAskLLMOutput> = llmResult.metadata?.llmRawOutput
+      ? EnhancedAskLLMOutputSchema.parse(
+          JSON.parse(this.cleanJsonOutput(llmResult.metadata.llmRawOutput))
+        )
       : {};
 
     // 使用ExitDecisionEngine进行综合决策
@@ -188,10 +195,10 @@ export class AiAskAction extends BaseAction {
       exitReason = 'LLM建议退出';
     }
 
-    console.log(`[AiAskAction] 🎯 Exit decision:`, exitDecision, `exit_reason:`, exitReason);
+    logger.debug('🎯 Exit decision', { exitDecision, exit_reason: exitReason });
 
     if (exitDecision.shouldExit) {
-      console.log(`[AiAskAction] ✅ Decided to exit: ${exitDecision.reason}`);
+      logger.info('✅ Decided to exit', { reason: exitDecision.reason });
       const finalResult = await this.finishAction(context, userInput);
       return {
         ...finalResult,
@@ -228,7 +235,7 @@ export class AiAskAction extends BaseAction {
     context: ActionContext,
     userInput?: string | null
   ): Promise<ActionResult> {
-    console.log(`[AiAskAction] 📝 Using simple mode (round: ${this.currentRound})`);
+    logger.debug('📝 Using simple mode', { currentRound: this.currentRound });
 
     // 变量提取目标
     const extractTo =
@@ -334,13 +341,35 @@ export class AiAskAction extends BaseAction {
         if (!varName) continue;
 
         const value = llmOutputRecord[varName];
-        if (value !== undefined && value !== null && value !== '') {
+        if (this.isValidVariableValue(value)) {
           extractedVariables[varName] = value;
-          console.log(`[AiAskAction] ✅ Extracted variable from JSON: ${varName}`);
+          logger.info('✅ Extracted variable from JSON', { name: varName });
         }
       }
     }
     return extractedVariables;
+  }
+
+  /**
+   * 检查变量值是否有效（非空、非占位符）
+   */
+  private isValidVariableValue(value: unknown): boolean {
+    if (value === undefined || value === null || value === '') {
+      return false;
+    }
+    if (typeof value !== 'string') {
+      return true;
+    }
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      return false;
+    }
+    const placeholderPatterns = [
+      /^\(?(未收集|未提供|暂无|无|N\/A|n\/a|null)\)?$/i,
+      /^\(未收集\)$/,
+      /^\(未提供\)$/,
+    ];
+    return !placeholderPatterns.some((pattern) => pattern.test(trimmed));
   }
 
   /**
@@ -369,7 +398,7 @@ export class AiAskAction extends BaseAction {
       // 策略3: 兜底最后一次输入
       if (value === undefined && userInput) {
         value = userInput.trim();
-        console.log(`[AiAskAction] ⚠️ Fallback to user input for ${varName}`);
+        logger.warn('⚠️ Fallback to user input', { varName });
       }
 
       if (value !== undefined) {
@@ -437,7 +466,7 @@ export class AiAskAction extends BaseAction {
       });
       return result.text.trim();
     } catch (error: any) {
-      console.error(`[AiAskAction] ❌ LLM extraction failed for ${varName}:`, error);
+      logger.error('❌ LLM extraction failed', { varName, error: error.message });
       return undefined;
     }
   }
@@ -489,9 +518,10 @@ export class AiAskAction extends BaseAction {
       .map((msg) => `${msg.role === 'user' ? user : who}: ${msg.content}`)
       .join('\n');
 
-    console.log(
-      `[AiAskAction] 📊 buildSystemVariables: conversationHistory.length=${context.conversationHistory.length}, chat.length=${chat.length}`
-    );
+    logger.debug('📊 buildSystemVariables', {
+      conversationHistoryLength: context.conversationHistory.length,
+      chatLength: chat.length,
+    });
 
     // 构建 output_list（多变量输出格式）
     const outputList = this.buildOutputList();
@@ -499,9 +529,10 @@ export class AiAskAction extends BaseAction {
     // 构建已收集变量列表
     const collectedVariables = this.buildCollectedVariables(context);
 
-    console.log(
-      `[AiAskAction] 📊 buildSystemVariables: currentRound=${this.currentRound}, maxRounds=${this.maxRounds}`
-    );
+    logger.debug('📊 buildSystemVariables', {
+      currentRound: this.currentRound,
+      maxRounds: this.maxRounds,
+    });
 
     return {
       time,
@@ -634,13 +665,22 @@ ${historyText}
 
       try {
         cleanedResponse = this.applyParseStrategy(rawResponse, strategy);
-        const output = JSON.parse(cleanedResponse) as EnhancedAskLLMOutput;
+        const parsedJson = JSON.parse(cleanedResponse);
+
+        // 使用 safeParse 进行类型转换和验证
+        const schemaResult = EnhancedAskLLMOutputSchema.safeParse(parsedJson);
+
+        if (!schemaResult.success) {
+          // Schema验证失败，记录错误但继续处理
+          logger.warn('Schema验证失败', { errors: schemaResult.error.errors });
+          throw new Error(`Schema validation failed: ${schemaResult.error.message}`);
+        }
+
+        const output = schemaResult.data;
 
         // 解析成功，记录日志
         if (parseAttempt > 1) {
-          console.warn(
-            `[AiAskAction] JSON解析在第${parseAttempt}次尝试成功，使用策略: ${strategy}`
-          );
+          logger.warn('JSON解析重试成功', { attempt: parseAttempt, strategy });
         }
 
         return {
@@ -657,15 +697,13 @@ ${historyText}
         };
       } catch (e: any) {
         lastError = e;
-        console.warn(
-          `[AiAskAction] JSON解析第${parseAttempt}次失败，策略: ${strategy}，错误: ${e.message}`
-        );
+        logger.warn('JSON解析失败', { attempt: parseAttempt, strategy, error: e.message });
 
         if (parseAttempt >= MAX_PARSE_RETRY) {
           // 重试耗尽，使用降级策略
-          console.error('[AiAskAction] JSON解析重试耗尽，使用降级默认值');
-          console.error('[AiAskAction] 最后错误:', lastError);
-          console.error('[AiAskAction] 原始响应:', rawResponse);
+          logger.error('JSON解析重试耗尽，使用降级默认值');
+          logger.error('最后错误:', { error: lastError?.message });
+          logger.error('原始响应', { chars: rawResponse.length });
 
           // 构造降级结果
           return {
@@ -737,7 +775,7 @@ ${historyText}
    * 注册 output 变量到 scopeResolver
    */
   private registerOutputVariables(context: ActionContext): void {
-    console.log(`[AiAskAction] 🔧 Registering output variables to scopeResolver`);
+    logger.info('🔧 Registering output variables to scopeResolver');
     const outputConfig = this.config.output || [];
 
     for (const varConfig of outputConfig) {
@@ -754,11 +792,12 @@ ${historyText}
           scope: VariableScope.TOPIC,
           define: varConfig.define || `Auto-registered from ai_ask output: ${varName}`,
         });
-        console.log(`[AiAskAction] ✅ Auto-registered variable "${varName}" in topic scope`);
+        logger.info('✅ Auto-registered variable in topic scope', { varName });
       } else {
-        console.log(
-          `[AiAskAction] ℹ️ Variable "${varName}" already defined in ${existingDef.scope} scope`
-        );
+        logger.info('ℹ️ Variable already defined', {
+          varName,
+          scope: existingDef.scope,
+        });
       }
     }
   }
@@ -772,7 +811,7 @@ ${historyText}
       template_scheme: context.metadata?.sessionConfig?.template_scheme,
     };
 
-    console.log('[AiAskAction] 📄 Loading template with config:', {
+    logger.debug('📄 Loading template with config', {
       template_scheme: sessionConfig.template_scheme,
       projectId: context.metadata?.projectId,
       hasTemplateProvider: !!context.metadata?.templateProvider,
@@ -786,22 +825,20 @@ ${historyText}
     if (!this.templateResolver) {
       // 💉 使用 projectId 初始化，如果有 templateProvider 则注入
       const projectRoot = this.resolveProjectRoot(context);
-      console.log('[AiAskAction] 📂 Using project root:', projectRoot);
+      logger.debug('📂 Using project root', { projectRoot });
 
       if (projectId && templateProvider) {
-        console.log('[AiAskAction] 💉 Initializing TemplateResolver with projectId and provider');
+        logger.debug('💉 Initializing TemplateResolver with projectId and provider');
         this.templateResolver = new TemplateResolver(projectId, templateProvider);
       } else {
-        console.log(
-          '[AiAskAction] 📂 Initializing TemplateResolver with project path (fallback mode)'
-        );
+        logger.debug('📂 Initializing TemplateResolver with project path (fallback mode)');
         this.templateResolver = new TemplateResolver(projectRoot);
       }
     }
 
     // 💉 如果 TemplateManager 未初始化 provider，重新初始化
     if (projectId && templateProvider && !this.templateManager['templateProvider']) {
-      console.log('[AiAskAction] 💉 Re-initializing TemplateManager with projectId and provider');
+      logger.debug('💉 Re-initializing TemplateManager with projectId and provider');
       // 🚨 关键修复：清除旧缓存，避免 custom/default 模板缓存冲突
       this.templateManager.clearCache();
       this.templateManager = new PromptTemplateManager(projectId, templateProvider);
@@ -813,7 +850,7 @@ ${historyText}
       sessionConfig
     );
 
-    console.log(`[AiAskAction] 📝 Template resolved:`, {
+    logger.debug('📝 Template resolved', {
       path: resolution.path,
       layer: resolution.layer,
       scheme: resolution.scheme,
@@ -826,13 +863,13 @@ ${historyText}
     let template;
     if (projectId && templateProvider) {
       // 数据库模式：TemplateManager 会使用 templateProvider.getTemplate()
-      console.log(`[AiAskAction] 📂 Loading template from database:`, resolution.path);
+      logger.debug('📂 Loading template from database', { path: resolution.path });
       template = await this.templateManager.loadTemplate(resolution.path);
     } else {
       // 文件系统模式：需要拼接项目根目录
       const projectRoot = this.resolveProjectRoot(context);
       const fullPath = path.join(projectRoot, resolution.path);
-      console.log(`[AiAskAction] 📂 Loading template from filesystem:`, fullPath);
+      logger.debug('📂 Loading template from filesystem', { fullPath });
       template = await this.templateManager.loadTemplate(fullPath);
     }
 
@@ -846,10 +883,10 @@ ${historyText}
     let monitorFeedback = '';
     if (context.metadata?.latestMonitorFeedback) {
       monitorFeedback = `\n\n${context.metadata.latestMonitorFeedback}`;
-      console.log(
-        '[AiAskAction] 📝 检测到监控反馈,已拼接到提示词:',
-        monitorFeedback.substring(0, 100) + '...'
-      );
+      logger.debug('📝 检测到监控反馈', {
+        chars: monitorFeedback.length,
+        preview: monitorFeedback.substring(0, 100),
+      });
     }
     return monitorFeedback;
   }
@@ -875,7 +912,8 @@ ${historyText}
     if (monitorFeedback) {
       prompt = prompt + monitorFeedback;
     }
-    console.log(`[AiAskAction] 📝 Prompt prepared (${prompt.length} chars)`);
+    const model = this.getConfig('model', 'unknown');
+    logger.debug('📝 Prompt prepared', { chars: prompt.length, model });
     return prompt;
   }
   /**
@@ -905,7 +943,7 @@ ${historyText}
         llmOutput = JSON.parse(jsonText);
       } catch (error) {
         // 如果解析失败，直接使用原始文本
-        console.warn(`[AiAskAction] ⚠️  Failed to parse simple-mode JSON, using raw text`);
+        logger.warn('⚠️ Failed to parse simple-mode JSON, using raw text');
         llmOutput = { content: llmResult.text.trim() };
       }
 
@@ -946,7 +984,7 @@ ${historyText}
       // 如果检测到明显危机，启动危机处理流程
       if (crisisDetected) {
         // TODO: 同步启动危机处理LLM，评估是否修订回复
-        console.warn('[AiAskAction] ⚠️ 危机信号检测到，启动危机处理流程');
+        logger.warn('⚠️ 危机信号检测到，启动危机处理流程');
       }
 
       return {
@@ -1012,7 +1050,7 @@ ${historyText}
         const position = { phaseId: '', topicId: '', actionId: this.actionId };
         const value =
           context.scopeResolver?.resolveVariable(name, position)?.value || context.variables[name];
-        return value !== undefined && value !== null && value !== '';
+        return this.isValidVariableValue(value);
       });
   }
 }
