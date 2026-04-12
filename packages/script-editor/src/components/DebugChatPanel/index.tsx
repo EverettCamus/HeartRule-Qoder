@@ -696,6 +696,20 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             allVariables: categorizedVars,
             relevantVariables,
             summary: '变量更新', // 简单摘要
+            actionStatus: (response as any).actionStatus,
+            currentRound: (response as any).currentRound,
+            maxRounds: (response as any).maxRounds,
+            collectionHistory:
+              (response as any).collectionHistory || (response as any).roundChanges
+                ? [(response as any).roundChanges]
+                : undefined,
+            scopePath: {
+              phaseId: response.position?.phaseId || '',
+              phaseName: '',
+              topicId: response.position?.topicId || '',
+              topicName: '',
+            },
+            exitReason: (response as any).exitReason,
           } as VariableBubbleContent,
         };
         addDebugBubble(variableBubble);
