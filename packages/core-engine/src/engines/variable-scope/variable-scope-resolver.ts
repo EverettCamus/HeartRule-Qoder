@@ -27,6 +27,10 @@ import type {
 } from '@heartrule/shared-types';
 import { VariableScope } from '@heartrule/shared-types';
 
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('VariableScopeResolver');
+
 /**
  * 变量作用域解析器（领域服务）
  *
@@ -70,7 +74,7 @@ export class VariableScopeResolver {
     for (const { scope, key } of searchOrder) {
       const value = this.lookupVariable(scope, key, varName);
       if (value !== null) {
-        console.log(`[VariableScopeResolver] ✅ Found variable "${varName}" in ${scope} scope`, {
+        logger.debug(`✅ Found variable "${varName}" in ${scope} scope`, {
           value: value.value,
           source: value.source,
         });
@@ -78,7 +82,7 @@ export class VariableScopeResolver {
       }
     }
 
-    console.log(`[VariableScopeResolver] ❌ Variable "${varName}" not found in any scope`);
+    logger.debug(`❌ Variable "${varName}" not found in any scope`);
     return null;
   }
 
@@ -93,17 +97,12 @@ export class VariableScopeResolver {
     const definition = this.variableDefinitions.get(varName);
 
     if (definition) {
-      console.log(
-        `[VariableScopeResolver] 📋 Variable "${varName}" has defined scope:`,
-        definition.scope
-      );
+      logger.debug(`📋 Variable "${varName}" has defined scope:`, definition.scope);
       return definition.scope;
     }
 
     // 默认策略：未定义变量写入 topic 作用域（最小生命周期）
-    console.log(
-      `[VariableScopeResolver] ⚠️ Variable "${varName}" not defined, defaulting to topic scope`
-    );
+    logger.debug(`⚠️ Variable "${varName}" not defined, defaulting to topic scope`);
     return VariableScope.TOPIC;
   }
 
@@ -144,12 +143,9 @@ export class VariableScopeResolver {
 
     const valid = errors.length === 0;
     if (valid) {
-      console.log('[VariableScopeResolver] ✅ VariableStore structure is valid');
+      logger.debug('✅ VariableStore structure is valid');
     } else {
-      console.error(
-        '[VariableScopeResolver] ❌ VariableStore structure validation failed:',
-        errors
-      );
+      logger.debug('❌ VariableStore structure validation failed:', errors);
     }
 
     return { valid, errors };
@@ -188,7 +184,7 @@ export class VariableScopeResolver {
    */
   public setVariableDefinition(definition: VariableDefinition): void {
     this.variableDefinitions.set(definition.name, definition);
-    console.log(`[VariableScopeResolver] 📝 Registered variable definition:`, {
+    logger.debug(`📝 Registered variable definition:`, {
       name: definition.name,
       scope: definition.scope,
     });
@@ -280,16 +276,14 @@ export class VariableScopeResolver {
     switch (scope) {
       case 'topic':
         if (!position.topicId) {
-          console.error(
-            `[VariableScopeResolver] ❌ Cannot write to topic scope: topicId is missing`
-          );
+          logger.debug(`❌ Cannot write to topic scope: topicId is missing`);
           return;
         }
         if (!this.variableStore.topic[position.topicId]) {
           this.variableStore.topic[position.topicId] = {};
         }
         this.variableStore.topic[position.topicId][varName] = variableValue;
-        console.log(`[VariableScopeResolver] ✅ Set variable "${varName}" in topic scope`, {
+        logger.debug(`✅ Set variable "${varName}" in topic scope`, {
           topicId: position.topicId,
           value,
         });
@@ -297,16 +291,14 @@ export class VariableScopeResolver {
 
       case 'phase':
         if (!position.phaseId) {
-          console.error(
-            `[VariableScopeResolver] ❌ Cannot write to phase scope: phaseId is missing`
-          );
+          logger.debug(`❌ Cannot write to phase scope: phaseId is missing`);
           return;
         }
         if (!this.variableStore.phase[position.phaseId]) {
           this.variableStore.phase[position.phaseId] = {};
         }
         this.variableStore.phase[position.phaseId][varName] = variableValue;
-        console.log(`[VariableScopeResolver] ✅ Set variable "${varName}" in phase scope`, {
+        logger.debug(`✅ Set variable "${varName}" in phase scope`, {
           phaseId: position.phaseId,
           value,
         });
@@ -314,20 +306,20 @@ export class VariableScopeResolver {
 
       case 'session':
         this.variableStore.session[varName] = variableValue;
-        console.log(`[VariableScopeResolver] ✅ Set variable "${varName}" in session scope`, {
+        logger.debug(`✅ Set variable "${varName}" in session scope`, {
           value,
         });
         break;
 
       case 'global':
         this.variableStore.global[varName] = variableValue;
-        console.log(`[VariableScopeResolver] ✅ Set variable "${varName}" in global scope`, {
+        logger.debug(`✅ Set variable "${varName}" in global scope`, {
           value,
         });
         break;
 
       default:
-        console.error(`[VariableScopeResolver] ❌ Unknown scope:`, scope);
+        logger.debug(`❌ Unknown scope:`, scope);
     }
   }
 
@@ -348,7 +340,7 @@ export class VariableScopeResolver {
    * @returns 分层的 VariableStore
    */
   static migrateToVariableStore(variables: Record<string, any>): VariableStore {
-    console.log('[VariableScopeResolver] 🔄 Migrating variables to variableStore');
+    logger.debug('🔄 Migrating variables to variableStore');
 
     const variableStore: VariableStore = {
       global: {},
@@ -367,11 +359,7 @@ export class VariableScopeResolver {
       };
     }
 
-    console.log(
-      '[VariableScopeResolver] ✅ Migrated',
-      Object.keys(variables).length,
-      'variables to session scope'
-    );
+    logger.debug(`✅ Migrated ${Object.keys(variables).length} variables to session scope`);
 
     return variableStore;
   }
