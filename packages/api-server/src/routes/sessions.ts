@@ -87,9 +87,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
 
         // 从 script.tags 中提取 projectId
         const tags = (script.tags as string[]) || [];
-        const projectTag = tags.find(tag => tag.startsWith('project:'));
+        const projectTag = tags.find((tag) => tag.startsWith('project:'));
         const projectId = projectTag ? projectTag.replace('project:', '') : undefined;
-        
+
         app.log.info({ scriptId, projectId, tags }, 'Creating session with projectId');
 
         // 创建会话
@@ -116,10 +116,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         // 调试日志
         app.log.info(
           {
-            aiMessage: initResult.aiMessage,
+            aiMessage: initResult.aiMessage?.substring(0, 100),
             executionStatus: initResult.executionStatus,
             hasError: !!initResult.error,
-            fullResult: initResult,
           },
           'Session initialized'
         );
@@ -130,18 +129,31 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           createdAt: now.toISOString(),
           aiMessage: initResult.aiMessage,
           executionStatus: initResult.executionStatus,
-          variables: initResult.variables, // 返回变量
-          globalVariables: initResult.globalVariables, // 返回全局变量
+          variables: initResult.variables,
+          globalVariables: initResult.globalVariables,
           position: initResult.position,
-          debugInfo: initResult.debugInfo, // 添加 LLM 调试信息
+          // debugInfo 仅在开发环境返回完整信息
+          debugInfo: initResult.debugInfo
+            ? {
+                tokensUsed: initResult.debugInfo.tokensUsed,
+                model: initResult.debugInfo.model,
+                finishReason: initResult.debugInfo.response?.finishReason,
+              }
+            : undefined,
         };
 
-        // 如果有错误信息，添加到响应中
         if (initResult.error) {
           responseData.error = initResult.error;
         }
 
-        app.log.info({ responseData }, 'Returning response');
+        app.log.info(
+          {
+            sessionId,
+            status: responseData.status,
+            executionStatus: responseData.executionStatus,
+          },
+          'Returning response'
+        );
 
         return responseData;
       } catch (error) {
@@ -502,10 +514,17 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           sessionStatus: result.sessionStatus,
           executionStatus: result.executionStatus,
           variables: result.variables,
-          globalVariables: result.globalVariables, // 返回全局变量
-          variableStore: result.variableStore, // 🔧 添加分层变量存储（包含提取的变量）
+          globalVariables: result.globalVariables,
+          variableStore: result.variableStore,
           position: result.position,
-          debugInfo: result.debugInfo, // 添加 LLM 调试信息
+          // debugInfo 仅返回摘要信息
+          debugInfo: result.debugInfo
+            ? {
+                tokensUsed: result.debugInfo.tokensUsed,
+                model: result.debugInfo.model,
+                finishReason: result.debugInfo.response?.finishReason,
+              }
+            : undefined,
         };
 
         // 记录完整响应（特别是position字段）
