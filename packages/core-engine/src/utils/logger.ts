@@ -9,9 +9,12 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 const DEFAULT_LOG_LEVEL: LogLevel = 'info';
 const LOG_LEVEL: LogLevel = (() => {
-  const envLevel = process.env.LOG_LEVEL;
-  if (envLevel && LOG_LEVELS[envLevel as LogLevel] !== undefined) {
-    return envLevel as LogLevel;
+  // Check if we're in a Node.js environment (process exists)
+  if (typeof process !== 'undefined' && process.env) {
+    const envLevel = process.env.LOG_LEVEL;
+    if (envLevel && LOG_LEVELS[envLevel as LogLevel] !== undefined) {
+      return envLevel as LogLevel;
+    }
   }
   return DEFAULT_LOG_LEVEL;
 })();
