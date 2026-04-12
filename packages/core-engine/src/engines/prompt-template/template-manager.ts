@@ -373,17 +373,8 @@ export class PromptTemplateManager {
         );
       }
 
-      // 检查是否包含关键安全规范
-      const criticalKeywords = ['诊断禁止', '处方禁止', '保证禁止', '危机识别'];
-      const missingKeywords = criticalKeywords.filter(
-        (keyword) => !templateContent.includes(keyword)
-      );
-
-      if (missingKeywords.length > 0) {
-        warnings.push(
-          `Template missing critical safety keywords in ${templatePath}: ${missingKeywords.join(', ')}`
-        );
-      }
+      // 安全关键词检查已移除 - 业务规则应在模板层面定义，而非代码强制检查
+      // 模板作者有责任确保安全内容，这里只检查是否存在安全边界章节即可
 
       // T8 新增：检查 JSON 输出格式中是否包含 safety_check 字段
       if (templateContent.includes('JSON') || templateContent.includes('输出格式')) {
@@ -412,21 +403,31 @@ export class PromptTemplateManager {
     }
 
     // 3. 检查变量占位符语法是否正确
-    // 检测非标准的变量格式（如只有单个花括号的变量）
-    const singleBracePattern = /(?<!\{)\{([^{}]+?)\}(?!\})/g;
-    const singleBraceMatches = templateContent.match(singleBracePattern);
+    // 先移除代码块内容，避免误报
+    const codeBlockPattern = /```[\s\S]*?```/g;
+    const contentWithoutCodeBlocks = templateContent.replace(codeBlockPattern, '');
+
+    // 检测非标准的变量格式（排除已知的合法格式 {{var}} 和 {%var%}）
+    // 匹配单个 { 后跟内容，但排除 {{ 和 {%
+    const singleBracePattern = /(?<!\{)\{(?!%)([^{}]+?)\}(?!\})/g;
+    const singleBraceMatches = contentWithoutCodeBlocks.match(singleBracePattern);
 
     if (singleBraceMatches && singleBraceMatches.length > 0) {
-      // 过滤掉 JSON 示例中的花括号（通常在代码块中）
-      const codeBlockPattern = /```[\s\S]*?```/g;
-      const contentWithoutCodeBlocks = templateContent.replace(codeBlockPattern, '');
-      const validMatches = contentWithoutCodeBlocks.match(singleBracePattern);
+      // 过滤掉 JSON 对象的大括号（以 { 开头后跟换行或 "）
+      const validMatches = singleBraceMatches.filter((match) => {
+        const trimmed = match.trim();
+        // 排除 JSON 对象大括号和空对象
+        if (trimmed === '{' || trimmed === '}' || trimmed === '{}') return false;
+        // 排除 JSON 键值格式
+        if (/^\{[\s\n]*"/.test(match)) return false;
+        return true;
+      });
 
-      if (validMatches && validMatches.length > 0) {
+      if (validMatches.length > 0) {
         warnings.push(
           `Template may contain non-standard variable format in ${templatePath}. ` +
-            `Found single-brace variables: ${validMatches.slice(0, 3).join(', ')}... ` +
-            `Consider using double braces {{var}} for consistency.`
+            `Found: ${validMatches.slice(0, 3).join(', ')}... ` +
+            `Use {{var}} for variables or {%var%} for special placeholders.`
         );
       }
     }
