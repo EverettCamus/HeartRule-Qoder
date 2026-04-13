@@ -6,6 +6,7 @@
 
 import {
   ScriptExecutor,
+  PromptTemplateManager,
   type TemplateProvider,
   type ExecutionState,
   createLogger,
@@ -884,6 +885,15 @@ export class SessionManager {
         }
       );
 
+      // Create shared TemplateManager for this session
+      if (script.projectId && this.templateProvider) {
+        executionState.templateManager = new PromptTemplateManager(
+          script.projectId,
+          this.templateProvider
+        );
+        executionState.templateProvider = this.templateProvider;
+      }
+
       // 5. 执行脚本
       const prevHistoryLength = executionState.conversationHistory.length;
       executionState = await this.executeScript(script, sessionId, executionState, null);
@@ -951,6 +961,16 @@ export class SessionManager {
         globalVariables,
         conversationHistory
       );
+
+      // Restore or create TemplateManager
+      const projectId = script.projectId || (session.metadata as Record<string, any>)?.projectId;
+      if (!executionState.templateManager && projectId && this.templateProvider) {
+        executionState.templateManager = new PromptTemplateManager(
+          projectId,
+          this.templateProvider
+        );
+        executionState.templateProvider = this.templateProvider;
+      }
 
       // 6. 执行脚本（传递 userInput 以便 continueAction 正确处理）
       const prevHistoryLength = executionState.conversationHistory.length;
