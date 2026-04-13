@@ -29,6 +29,8 @@ import type {
 } from '@heartrule/shared-types';
 
 import type { LLMDebugInfo } from '../../engines/llm-orchestration/orchestrator.js';
+import type { PromptTemplateManager } from '../../engines/prompt-template/template-manager.js';
+import type { TemplateProvider } from '../../engines/prompt-template/template-provider.js';
 import { VariableScopeResolver } from '../../engines/variable-scope/variable-scope-resolver.js';
 
 /**
@@ -60,6 +62,10 @@ export interface ActionContext {
     metadata?: Record<string, any>;
   }>;
   metadata: Record<string, any>;
+  // NEW: Shared template manager for session-scoped caching
+  templateManager?: PromptTemplateManager;
+  // NEW: Template provider for DB access
+  templateProvider?: TemplateProvider;
 }
 
 /**
