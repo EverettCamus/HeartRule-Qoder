@@ -60,12 +60,10 @@ export class AiAskAction extends BaseAction {
     this.llmOrchestrator = llmOrchestrator;
     this.exitDecisionEngine = new ExitDecisionEngine();
 
-    // 计算模板路径
-    const templateBasePath = this.resolveTemplatePath();
-    logger.info('📁 Template path:', { path: templateBasePath });
-    this.templateManager = new PromptTemplateManager(templateBasePath);
-    // TemplateResolver 需要项目根目录，但此时还没有context，暂不初始化
-    this.templateResolver = null as any; // 延迟初始化
+    // Initialize templateManager as null - will be set from context
+    this.templateManager = null as any;
+    // TemplateResolver needs project context, defer initialization
+    this.templateResolver = null as any;
 
     // 选择模板类型：有 exit_condition 或 output 使用多轮追问模板，否则使用简单问答模板
     this.templateType =
@@ -817,13 +815,25 @@ ${historyText}
       hasTemplateProvider: !!context.metadata?.templateProvider,
     });
 
-    // 2. 🎯 WI-3: 从 context 中提取 projectId 和 templateProvider
+    // 2. 🎯 WI-3: From context - projectId and templateProvider
     const projectId = context.metadata?.projectId;
-    const templateProvider = context.metadata?.templateProvider;
+    const templateProvider = context.metadata?.templateProvider ?? context.templateProvider;
 
-    // 3. 初始化 TemplateResolver（延迟初始化）
+    // 3. Use shared TemplateManager from context if available
+    if (context.templateManager) {
+      this.templateManager = context.templateManager;
+      logger.debug('✅ Using shared TemplateManager from context');
+    } else {
+      // Fallback: create new instance for backward compatibility
+      if (!this.templateManager) {
+        const projectRoot = this.resolveProjectRoot(context);
+        this.templateManager = new PromptTemplateManager(projectRoot);
+        logger.debug('📂 Created fallback TemplateManager for project', { projectRoot });
+      }
+    }
+
+    // 4. Initialize TemplateResolver (deferred initialization)
     if (!this.templateResolver) {
-      // 💉 使用 projectId 初始化，如果有 templateProvider 则注入
       const projectRoot = this.resolveProjectRoot(context);
       logger.debug('📂 Using project root', { projectRoot });
 
@@ -836,15 +846,7 @@ ${historyText}
       }
     }
 
-    // 💉 如果 TemplateManager 未初始化 provider，重新初始化
-    if (projectId && templateProvider && !this.templateManager['templateProvider']) {
-      logger.debug('💉 Re-initializing TemplateManager with projectId and provider');
-      // 🚨 关键修复：清除旧缓存，避免 custom/default 模板缓存冲突
-      this.templateManager.clearCache();
-      this.templateManager = new PromptTemplateManager(projectId, templateProvider);
-    }
-
-    // 4. 解析模板路径（使用两层解析）
+    // 5. 解析模板路径（使用两层解析）
     const resolution = await this.templateResolver.resolveTemplatePath(
       AiAskAction.actionType, // 使用静态 actionType
       sessionConfig
