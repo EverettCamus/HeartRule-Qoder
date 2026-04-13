@@ -80,12 +80,10 @@ export class AiSayAction extends BaseAction {
     });
     this.llmOrchestrator = llmOrchestrator;
 
-    const templateBasePath = this.resolveTemplatePath();
-    console.log(`[AiSayAction] 📁 Template path: ${templateBasePath}`);
-
-    this.templateManager = new PromptTemplateManager(templateBasePath);
-    // TemplateResolver 需要项目根目录，但此时还没有context，暂不初始化
-    this.templateResolver = null as any; // 延迟初始化
+    // Initialize templateManager as null - will be set from context
+    this.templateManager = null as any;
+    // TemplateResolver needs project context, defer initialization
+    this.templateResolver = null as any;
 
     // maxRounds 和 exitCriteria 已在 BaseAction 中设置
     // 判断是否使用模板模式：有 max_rounds 或 exit_criteria 配置
@@ -329,6 +327,17 @@ export class AiSayAction extends BaseAction {
   ): Promise<ActionResult> {
     console.log(`[AiSayAction] 🔷 Entering Legacy Mode, currentRound: ${this.currentRound}`);
 
+    // Initialize TemplateManager from context if available (same as template mode)
+    if (context.templateManager) {
+      this.templateManager = context.templateManager;
+      console.log('[AiSayAction] ✅ Using shared TemplateManager from context');
+    } else if (!this.templateManager) {
+      // Fallback: create new instance for backward compatibility
+      const projectRoot = this.resolveProjectRoot(context);
+      this.templateManager = new PromptTemplateManager(projectRoot);
+      console.log('[AiSayAction] 📂 Created fallback TemplateManager for project', { projectRoot });
+    }
+
     // 1. 选择原始模板（优先级：content > content_template > prompt_template）
     const rawContent = this.getConfig('content') || this.getConfig('content_template') || '';
     console.log(`[AiSayAction] 📄 Raw content:`, rawContent.substring(0, 50) + '...');
@@ -448,13 +457,27 @@ export class AiSayAction extends BaseAction {
       hasTemplateProvider: !!context.metadata?.templateProvider,
     });
 
-    // 2. 🎯 WI-3: 从 context 中提取 projectId 和 templateProvider
+    // 2. 🎯 WI-3: From context - projectId and templateProvider
     const projectId = context.metadata?.projectId;
-    const templateProvider = context.metadata?.templateProvider;
+    const templateProvider = context.metadata?.templateProvider ?? context.templateProvider;
 
-    // 3. 初始化 TemplateResolver（延迟初始化）
+    // 3. Use shared TemplateManager from context if available
+    if (context.templateManager) {
+      this.templateManager = context.templateManager;
+      console.log('[AiSayAction] ✅ Using shared TemplateManager from context');
+    } else {
+      // Fallback: create new instance for backward compatibility
+      if (!this.templateManager) {
+        const projectRoot = this.resolveProjectRoot(context);
+        this.templateManager = new PromptTemplateManager(projectRoot);
+        console.log('[AiSayAction] 📂 Created fallback TemplateManager for project', {
+          projectRoot,
+        });
+      }
+    }
+
+    // 4. Initialize TemplateResolver (deferred initialization)
     if (!this.templateResolver) {
-      // 💉 使用 projectId 初始化，如果有 templateProvider 则注入
       const projectRoot = this.resolveProjectRoot(context);
       console.log('[AiSayAction] 📂 Using project root:', projectRoot);
 
@@ -469,15 +492,7 @@ export class AiSayAction extends BaseAction {
       }
     }
 
-    // 💉 如果 TemplateManager 未初始化 provider，重新初始化
-    if (projectId && templateProvider && !this.templateManager['templateProvider']) {
-      console.log('[AiSayAction] 💉 Re-initializing TemplateManager with projectId and provider');
-      // 🚨 关键修复：清除旧缓存，避免 custom/default 模板缓存冲突
-      this.templateManager.clearCache();
-      this.templateManager = new PromptTemplateManager(projectId, templateProvider);
-    }
-
-    // 4. 解析模板路径（使用两层解析）
+    // 5. 解析模板路径（使用两层解析）
     const resolution = await this.templateResolver.resolveTemplatePath(
       'ai_say', // 注意：模板文件名为 ai_say_v1.md
       sessionConfig
@@ -490,7 +505,7 @@ export class AiSayAction extends BaseAction {
       exists: resolution.exists,
     });
 
-    // 5. 加载模板
+    // 6. 加载模板
     //    - 数据库模式：直接使用相对路径（resolution.path）
     //    - 文件系统模式：拼接完整路径
     let template;
