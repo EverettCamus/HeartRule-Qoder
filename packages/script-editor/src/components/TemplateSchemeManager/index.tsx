@@ -1,5 +1,3 @@
-import React, { useState, useEffect } from 'react';
-import { Modal, Button, List, Input, Space, Typography, Popconfirm, message, Spin } from 'antd';
 import {
   PlusOutlined,
   DeleteOutlined,
@@ -8,7 +6,11 @@ import {
   LockOutlined,
   UnlockOutlined,
 } from '@ant-design/icons';
+import { Modal, Button, List, Input, Space, Typography, Popconfirm, message, Spin } from 'antd';
+import React, { useState, useEffect } from 'react';
+
 import { projectsApi } from '../../api/projects';
+
 import CreateSchemeModal from './CreateSchemeModal';
 import EditSchemeModal from './EditSchemeModal';
 import './style.css';
@@ -53,7 +55,7 @@ const TemplateSchemeManager: React.FC<TemplateSchemeManagerProps> = ({
       const data = await projectsApi.getTemplateSchemes(projectId);
       setSchemes(data);
       setFilteredSchemes(data);
-      
+
       // 如果当前选中的方案不存在了，重置选择
       if (selectedScheme && !data.find((s) => s.name === selectedScheme.name)) {
         setSelectedScheme(null);
@@ -99,10 +101,10 @@ const TemplateSchemeManager: React.FC<TemplateSchemeManagerProps> = ({
     try {
       await projectsApi.deleteTemplateScheme(projectId, scheme.name);
       message.success(`方案 "${scheme.name}" 已删除`);
-      
+
       // 重新加载列表
       await loadSchemes();
-      
+
       // 如果删除的是当前选中的方案，清空选择
       if (selectedScheme?.name === scheme.name) {
         setSelectedScheme(null);
@@ -249,42 +251,42 @@ const TemplateSchemeManager: React.FC<TemplateSchemeManagerProps> = ({
 
             {selectedScheme && (
               <div className="scheme-detail">
-                  <Title level={5}>方案详情</Title>
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <div>
-                      <Text strong>名称：</Text>
-                      <Text>{selectedScheme.name}</Text>
-                    </div>
-                    <div>
-                      <Text strong>描述：</Text>
-                      <Text>{selectedScheme.description}</Text>
-                    </div>
-                    <div>
-                      <Text strong>类型：</Text>
-                      <Text>{selectedScheme.isDefault ? '系统默认（只读）' : '自定义（可编辑）'}</Text>
-                    </div>
+                <Title level={5}>方案详情</Title>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <div>
+                    <Text strong>名称：</Text>
+                    <Text>{selectedScheme.name}</Text>
+                  </div>
+                  <div>
+                    <Text strong>描述：</Text>
+                    <Text>{selectedScheme.description}</Text>
+                  </div>
+                  <div>
+                    <Text strong>类型：</Text>
+                    <Text>
+                      {selectedScheme.isDefault ? '系统默认（只读）' : '自定义（可编辑）'}
+                    </Text>
+                  </div>
 
-                    {selectedScheme.isDefault && (
-                      <div className="readonly-tip">
-                        <Text type="warning">
-                          ⚠️ 系统默认方案为只读，不可修改或删除。如需自定义，请基于此方案创建新的自定义方案。
-                        </Text>
-                      </div>
-                    )}
+                  {selectedScheme.isDefault && (
+                    <div className="readonly-tip">
+                      <Text type="warning">
+                        ⚠️
+                        系统默认方案为只读，不可修改或删除。如需自定义，请基于此方案创建新的自定义方案。
+                      </Text>
+                    </div>
+                  )}
 
-                    {!selectedScheme.isDefault && (
-                      <Space>
-                        <Button
-                          icon={<EditOutlined />}
-                          onClick={() => setEditModalVisible(true)}
-                        >
-                          编辑描述
-                        </Button>
-                      </Space>
-                    )}
-                  </Space>
-                </div>
-              )}
+                  {!selectedScheme.isDefault && (
+                    <Space>
+                      <Button icon={<EditOutlined />} onClick={() => setEditModalVisible(true)}>
+                        编辑描述
+                      </Button>
+                    </Space>
+                  )}
+                </Space>
+              </div>
+            )}
           </div>
         </div>
       </Modal>

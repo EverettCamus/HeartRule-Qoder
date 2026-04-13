@@ -1,7 +1,7 @@
-import React from 'react';
+import { PlusOutlined } from '@ant-design/icons';
 import { Button, Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import React from 'react';
 
 interface VariableInserterProps {
   systemVars?: string[];

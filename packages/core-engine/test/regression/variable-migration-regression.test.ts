@@ -4,10 +4,13 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-import { ScriptExecutor, ExecutionStatus } from '../../src/engines/script-execution/script-executor.js';
-import type { ExecutionState } from '../../src/engines/script-execution/script-executor.js';
-import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
 import type { ILLMProvider } from '../../src/application/ports/outbound/llm-provider.port.js';
+import { LLMOrchestrator } from '../../src/engines/llm-orchestration/orchestrator.js';
+import {
+  ScriptExecutor,
+  ExecutionStatus,
+} from '../../src/engines/script-execution/script-executor.js';
+import type { ExecutionState } from '../../src/engines/script-execution/script-executor.js';
 
 // 创建 mock LLM provider
 function createMockLLM(): LLMOrchestrator {
@@ -28,10 +31,12 @@ function createMockLLM(): LLMOrchestrator {
         timestamp: new Date().toISOString(),
       },
     }),
-    streamText: vi.fn().mockReturnValue((async function* () {
-      yield '模拟';
-      yield '响应';
-    })()),
+    streamText: vi.fn().mockReturnValue(
+      (async function* () {
+        yield '模拟';
+        yield '响应';
+      })()
+    ),
   };
   return new LLMOrchestrator(mockProvider);
 }
@@ -39,7 +44,7 @@ function createMockLLM(): LLMOrchestrator {
 describe('P0-1: ExecutionState 扩展与迁移逻辑', () => {
   it('应该将旧的 variables 迁移到 variableStore.session', async () => {
     const executor = new ScriptExecutor(createMockLLM());
-    
+
     // 创建一个带有旧 variables 的 ExecutionState
     const executionState: ExecutionState = {
       status: ExecutionStatus.RUNNING,
@@ -48,9 +53,9 @@ describe('P0-1: ExecutionState 扩展与迁移逻辑', () => {
       currentActionIdx: 0,
       currentAction: null,
       variables: {
-        '用户姓名': '李永',
-        '用户年龄': 28,
-        '是否已婚': true,
+        用户姓名: '李永',
+        用户年龄: 28,
+        是否已婚: true,
       },
       conversationHistory: [],
       metadata: {},
@@ -76,16 +81,12 @@ describe('P0-1: ExecutionState 扩展与迁移逻辑', () => {
     });
 
     // 执行会话（会触发迁移逻辑）
-    const result = await executor.executeSession(
-      scriptContent,
-      'test_session',
-      executionState
-    );
+    const result = await executor.executeSession(scriptContent, 'test_session', executionState);
 
     // 验证迁移结果
     expect(result.variableStore).toBeDefined();
     expect(result.variableStore?.session).toBeDefined();
-    
+
     // 验证数据已迁移
     expect(result.variableStore?.session['用户姓名']?.value).toBe('李永');
     expect(result.variableStore?.session['用户年龄']?.value).toBe(28);
@@ -106,7 +107,7 @@ describe('P0-1: ExecutionState 扩展与迁移逻辑', () => {
 
   it('应该保持 variableStore 如果已经存在', async () => {
     const executor = new ScriptExecutor(createMockLLM());
-    
+
     // 创建一个已有 variableStore 的 ExecutionState
     const executionState: ExecutionState = {
       status: ExecutionStatus.RUNNING,
@@ -115,12 +116,12 @@ describe('P0-1: ExecutionState 扩展与迁移逻辑', () => {
       currentActionIdx: 0,
       currentAction: null,
       variables: {
-        '旧变量': '不应该被使用',
+        旧变量: '不应该被使用',
       },
       variableStore: {
         global: {},
         session: {
-          '现有变量': {
+          现有变量: {
             value: '已存在的值',
             type: 'string',
             source: 'initial',
@@ -151,11 +152,7 @@ describe('P0-1: ExecutionState 扩展与迁移逻辑', () => {
       },
     });
 
-    const result = await executor.executeSession(
-      scriptContent,
-      'test_session',
-      executionState
-    );
+    const result = await executor.executeSession(scriptContent, 'test_session', executionState);
 
     // 验证不会重新迁移
     expect(result.variableStore?.session['现有变量']?.value).toBe('已存在的值');
@@ -164,7 +161,7 @@ describe('P0-1: ExecutionState 扩展与迁移逻辑', () => {
 
   it('应该正确推断类型', async () => {
     const executor = new ScriptExecutor(createMockLLM());
-    
+
     const executionState: ExecutionState = {
       status: ExecutionStatus.RUNNING,
       currentPhaseIdx: 0,
@@ -202,11 +199,7 @@ describe('P0-1: ExecutionState 扩展与迁移逻辑', () => {
       },
     });
 
-    const result = await executor.executeSession(
-      scriptContent,
-      'test_session',
-      executionState
-    );
+    const result = await executor.executeSession(scriptContent, 'test_session', executionState);
 
     // 验证类型推断
     expect(result.variableStore?.session['stringVal']?.type).toBe('string');

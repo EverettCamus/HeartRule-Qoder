@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { SessionPropertyPanel } from './index';
 import type { SessionData, TemplateScheme } from './index';
 
@@ -162,10 +163,10 @@ describe('SessionPropertyPanel 组件', () => {
       );
 
       const nameInput = screen.getByTestId('input-name') as HTMLInputElement;
-      
+
       // 清空名称
       fireEvent.change(nameInput, { target: { value: '' } });
-      
+
       // 点击保存
       const saveButton = screen.getByTestId('btn-save');
       fireEvent.click(saveButton);
@@ -189,10 +190,10 @@ describe('SessionPropertyPanel 组件', () => {
       );
 
       const versionInput = screen.getByTestId('input-version') as HTMLInputElement;
-      
+
       // 输入错误格式
       fireEvent.change(versionInput, { target: { value: 'v1.0' } });
-      
+
       // 点击保存
       const saveButton = screen.getByTestId('btn-save');
       fireEvent.click(saveButton);
@@ -215,7 +216,7 @@ describe('SessionPropertyPanel 组件', () => {
       );
 
       const descTextarea = screen.getByTestId('textarea-description') as HTMLTextAreaElement;
-      
+
       // TextArea的maxLength属性应该被设置
       expect(descTextarea.maxLength).toBe(500);
     });
@@ -232,7 +233,7 @@ describe('SessionPropertyPanel 组件', () => {
       );
 
       const saveButton = screen.getByTestId('btn-save') as HTMLButtonElement;
-      
+
       // 初始状态保存按钮应该禁用
       expect(saveButton.disabled).toBe(true);
 
@@ -284,7 +285,7 @@ describe('SessionPropertyPanel 组件', () => {
       );
 
       const nameInput = screen.getByTestId('input-name') as HTMLInputElement;
-      
+
       // 修改名称
       fireEvent.change(nameInput, { target: { value: '临时修改' } });
       expect(nameInput.value).toBe('临时修改');

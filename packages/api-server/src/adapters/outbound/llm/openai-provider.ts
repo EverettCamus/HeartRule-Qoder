@@ -1,7 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import type { LanguageModel } from 'ai';
-
 import { BaseLLMProvider, type LLMConfig } from '@heartrule/core-engine';
+import type { LanguageModel } from 'ai';
 
 /**
  * OpenAI提供者

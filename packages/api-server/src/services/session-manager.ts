@@ -315,7 +315,12 @@ export class SessionManager {
         ...globalVariables,
         ...((session.variables as Record<string, unknown>) || {}),
       },
-      variableStore: metadata.variableStore,
+      variableStore: metadata.variableStore || {
+        global: {},
+        session: {},
+        phase: {},
+        topic: {},
+      },
       conversationHistory: conversationHistory,
       metadata: metadata,
       lastAiMessage: null,

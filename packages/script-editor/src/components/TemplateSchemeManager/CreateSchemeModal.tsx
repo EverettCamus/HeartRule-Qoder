@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
 import { Modal, Form, Input, Select, message } from 'antd';
+import React, { useState } from 'react';
+
 import { projectsApi } from '../../api/projects';
 
 const { TextArea } = Input;
@@ -110,10 +111,7 @@ const CreateSchemeModal: React.FC<CreateSchemeModalProps> = ({
           label="方案描述"
           rules={[{ required: true, message: '请输入方案描述' }]}
         >
-          <TextArea
-            rows={3}
-            placeholder="简要描述这个模板方案的用途和特点"
-          />
+          <TextArea rows={3} placeholder="简要描述这个模板方案的用途和特点" />
         </Form.Item>
 
         <Form.Item

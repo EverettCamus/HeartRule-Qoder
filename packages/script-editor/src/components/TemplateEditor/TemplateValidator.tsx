@@ -1,6 +1,6 @@
-import React from 'react';
-import { Alert, Space, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, WarningOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { Alert, Space, Tag, Typography } from 'antd';
+import React from 'react';
 
 const { Text } = Typography;
 

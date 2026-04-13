@@ -10,9 +10,9 @@
 
 import { describe, test, expect, vi } from 'vitest';
 
-import { ScriptExecutor, ExecutionStatus } from '../script-executor.js';
-import { LLMOrchestrator } from '../../llm-orchestration/orchestrator.js';
 import type { ILLMProvider } from '../../../application/ports/outbound/llm-provider.port.js';
+import { LLMOrchestrator } from '../../llm-orchestration/orchestrator.js';
+import { ScriptExecutor, ExecutionStatus } from '../script-executor.js';
 
 // 创建 mock LLM provider
 function createMockLLM(): LLMOrchestrator {
@@ -26,7 +26,7 @@ function createMockLLM(): LLMOrchestrator {
     generateText: vi.fn().mockImplementation(async (prompt: string) => {
       // 根据prompt内容返回更智能的响应
       let text = '模拟的AI响应';
-      
+
       // 优先检测变量替换后的内容（更具体）
       if (prompt.includes('小明') && prompt.includes('Dr. Smith')) {
         text = '你好小明，我是Dr. Smith。';
@@ -39,7 +39,7 @@ function createMockLLM(): LLMOrchestrator {
       } else if (prompt.includes('ABC模型')) {
         text = '今天我们来学习ABC模型。';
       }
-      
+
       return {
         text,
         debugInfo: {
@@ -51,10 +51,12 @@ function createMockLLM(): LLMOrchestrator {
         },
       };
     }),
-    streamText: vi.fn().mockReturnValue((async function* () {
-      yield '模拟';
-      yield '响应';
-    })()),
+    streamText: vi.fn().mockReturnValue(
+      (async function* () {
+        yield '模拟';
+        yield '响应';
+      })()
+    ),
   };
   return new LLMOrchestrator(mockProvider);
 }

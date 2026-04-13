@@ -1,5 +1,6 @@
 import { generateText, streamText } from 'ai';
 import type { LanguageModel } from 'ai';
+
 import type {
   ILLMProvider,
   LLMConfig,
@@ -9,7 +10,7 @@ import type {
 
 /**
  * 重新导出端口定义以保持向后兼容
- * 
+ *
  * @deprecated 请直接从 application/ports/outbound/llm-provider.port.ts 导入
  */
 export type { ILLMProvider as LLMProvider, LLMConfig, LLMDebugInfo, LLMGenerateResult };

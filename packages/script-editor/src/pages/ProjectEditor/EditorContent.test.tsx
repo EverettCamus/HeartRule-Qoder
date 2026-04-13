@@ -1,10 +1,12 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BrowserRouter } from 'react-router-dom';
 import React from 'react';
-import EditorContent from './EditorContent';
+import { BrowserRouter } from 'react-router-dom';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { projectsApi } from '../../api/projects';
 import type { ScriptFile } from '../../api/projects';
+
+import EditorContent from './EditorContent';
 
 // Mock dependencies
 vi.mock('../../api/projects', () => ({
@@ -145,9 +147,7 @@ describe('EditorContent - Template Scheme Integration', () => {
   });
 
   it('T22-3: projectId变化时应重新加载方案列表', async () => {
-    const mockSchemes = [
-      { name: 'default', description: '系统默认模板', isDefault: true },
-    ];
+    const mockSchemes = [{ name: 'default', description: '系统默认模板', isDefault: true }];
 
     vi.mocked(projectsApi.getTemplateSchemes).mockResolvedValue(mockSchemes);
 

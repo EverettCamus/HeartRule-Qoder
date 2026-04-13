@@ -51,16 +51,67 @@ export interface EnhancedAskLLMOutput {
 }
 
 /**
- * Enhanced AI_Ask LLM输出 Schema
+ * Convert boolean to string 'true'/'false' for exit field
+ * LLM may output boolean instead of string
+ */
+const ExitFieldSchema = z.preprocess(
+  (val) => {
+    if (typeof val === 'boolean') {
+      return val ? 'true' : 'false';
+    }
+    return val;
+  },
+  z.enum(['true', 'false'])
+);
+
+/**
+ * Convert string 'true'/'false' to boolean for passed field
+ * LLM may output string instead of boolean
+ */
+const BooleanLikeFieldSchema = z.preprocess((val) => {
+  if (typeof val === 'boolean') {
+    return val;
+  }
+  if (val === 'true') {
+    return true;
+  }
+  if (val === 'false') {
+    return false;
+  }
+  return val;
+}, z.boolean());
+
+/**
+ * Convert string 'null' to actual null for concern field
+ * LLM may output string 'null' instead of actual null
+ */
+const NullableStringSchema = z.preprocess((val) => {
+  if (val === 'null') {
+    return null;
+  }
+  return val;
+}, z.string().nullable());
+
+/**
+ * Safety Check Schema with type coercion
  */
 export const SafetyCheckSchema = z.object({
-  passed: z.boolean(),
-  concern: z.string().nullable(),
+  passed: BooleanLikeFieldSchema,
+  concern: NullableStringSchema,
 });
 
+/**
+ * Enhanced AI_Ask LLM输出 Schema
+ *
+ * Uses preprocess to handle inconsistent LLM output types:
+ * - exit: accepts both boolean and string 'true'/'false'
+ * - safety_check.passed: accepts both string and boolean
+ * - safety_check.concern: converts string 'null' to actual null
+ * - crisis_detected: accepts both string and boolean
+ */
 export const EnhancedAskLLMOutputSchema = z.object({
   assessment: z.string().optional(),
-  exit: z.enum(['true', 'false']),
+  exit: ExitFieldSchema,
   exit_reason: z
     .enum([
       '信息已完整',
@@ -77,5 +128,5 @@ export const EnhancedAskLLMOutputSchema = z.object({
   brief: z.string().optional(),
   progress: z.string().optional(),
   safety_check: SafetyCheckSchema.optional(),
-  crisis_detected: z.boolean().default(false),
+  crisis_detected: BooleanLikeFieldSchema.default(false),
 });

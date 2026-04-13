@@ -1,10 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Modal, Button, Space, message, Switch, Typography, Modal as ConfirmModal } from 'antd';
-import { SaveOutlined, CloseOutlined, EyeOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import {
+  SaveOutlined,
+  CloseOutlined,
+  EyeOutlined,
+  ExclamationCircleOutlined,
+} from '@ant-design/icons';
 import MDEditor from '@uiw/react-md-editor';
+import { Modal, Button, Space, message, Switch, Typography, Modal as ConfirmModal } from 'antd';
+import React, { useState, useEffect, useRef } from 'react';
+
 import { projectsApi } from '../../api/projects';
-import VariableInserter from './VariableInserter';
+
 import TemplateValidator from './TemplateValidator';
+import VariableInserter from './VariableInserter';
 import './style.css';
 
 const { Text } = Typography;

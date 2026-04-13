@@ -4,12 +4,12 @@
  * 将Action创建逻辑从ScriptExecutor中解耦，提高可测试性和可扩展性
  */
 
-import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
-
-import { createAction } from './action-registry.js';
 import { AiAskAction } from '../../domain/actions/ai-ask-action.js';
 import { AiSayAction } from '../../domain/actions/ai-say-action.js';
 import type { BaseAction } from '../../domain/actions/base-action.js';
+import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
+
+import { createAction } from './action-registry.js';
 
 /**
  * Action工厂接口

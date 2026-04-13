@@ -24,7 +24,7 @@ describe('AI_Ask max_rounds Semantics', () => {
         text: JSON.stringify({
           content: '请问您有什么困扰？',
           exit: 'false',
-          exit_reason: '等待用户回答',
+          exit_reason: '继续收集',
           crisis_detected: false,
         }),
         debugInfo: {},
@@ -68,14 +68,14 @@ describe('AI_Ask max_rounds Semantics', () => {
         text: JSON.stringify({
           content: '感谢您的回答。',
           exit: 'true',
-          exit_reason: '信息已收集',
+          exit_reason: '信息已完整',
           crisis_detected: false,
         }),
       });
 
       const result2 = await action.execute(mockContext, '我经常头疼');
       expect(result2.completed).toBe(true);
-      expect(result2.metadata?.exit_reason).toBe('信息已收集');
+      expect(result2.metadata?.exit_reason).toBe('信息已完整');
     });
 
     it('should exit due to max_rounds even if LLM suggests continue', async () => {
@@ -97,14 +97,14 @@ describe('AI_Ask max_rounds Semantics', () => {
         text: JSON.stringify({
           content: '能详细说说吗？',
           exit: 'false', // LLM wants to continue
-          exit_reason: '需要更多信息',
+          exit_reason: '信息不足',
           crisis_detected: false,
         }),
       });
 
       const result2 = await action.execute(mockContext, '头疼');
       expect(result2.completed).toBe(true);
-      expect(result2.metadata?.exit_reason).toBe('需要更多信息');
+      expect(result2.metadata?.exit_reason).toBe('信息不足');
     });
   });
 
@@ -129,7 +129,7 @@ describe('AI_Ask max_rounds Semantics', () => {
         text: JSON.stringify({
           content: '头疼持续多久了？',
           exit: 'false',
-          exit_reason: '需要了解持续时间',
+          exit_reason: '继续收集',
           crisis_detected: false,
         }),
       });
@@ -144,14 +144,14 @@ describe('AI_Ask max_rounds Semantics', () => {
         text: JSON.stringify({
           content: '了解了，感谢您的回答。',
           exit: 'true',
-          exit_reason: '信息完整',
+          exit_reason: '信息已完整',
           crisis_detected: false,
         }),
       });
 
       const result3 = await action.execute(mockContext, '大概一周了');
       expect(result3.completed).toBe(true);
-      expect(result3.metadata?.exit_reason).toBe('信息完整');
+      expect(result3.metadata?.exit_reason).toBe('信息已完整');
     });
   });
 
@@ -178,7 +178,7 @@ describe('AI_Ask max_rounds Semantics', () => {
         text: JSON.stringify({
           content: '听说你想结束这一切让我很担心',
           exit: 'true',
-          exit_reason: '危机干预',
+          exit_reason: '危机信号',
           crisis_detected: true,
         }),
         debugInfo: crisisDebugInfo,
@@ -215,7 +215,7 @@ describe('AI_Ask max_rounds Semantics', () => {
         text: JSON.stringify({
           content: '感谢描述',
           exit: 'true',
-          exit_reason: '信息已收集',
+          exit_reason: '信息已完整',
           crisis_detected: false,
           症状: '头痛三天',
         }),

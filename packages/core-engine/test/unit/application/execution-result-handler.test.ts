@@ -11,13 +11,13 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { DefaultActionFactory } from '../../../src/application/actions/action-factory.js';
 import { ExecutionResultHandler } from '../../../src/application/handlers/execution-result-handler.js';
 import { MonitorOrchestrator } from '../../../src/application/orchestrators/monitor-orchestrator.js';
+import type { ILLMProvider } from '../../../src/application/ports/outbound/llm-provider.port.js';
 import { ActionStateManager } from '../../../src/application/state/action-state-manager.js';
-import { DefaultActionFactory } from '../../../src/application/actions/action-factory.js';
 import type { ActionResult } from '../../../src/domain/actions/base-action.js';
 import { LLMOrchestrator } from '../../../src/engines/llm-orchestration/orchestrator.js';
-import type { ILLMProvider } from '../../../src/application/ports/outbound/llm-provider.port.js';
 
 describe('Phase 8 重构：ExecutionResultHandler 执行结果处理器分离', () => {
   let handler: ExecutionResultHandler;
@@ -44,10 +44,12 @@ describe('Phase 8 重构：ExecutionResultHandler 执行结果处理器分离', 
           timestamp: new Date().toISOString(),
         },
       }),
-      streamText: vi.fn().mockReturnValue((async function* () {
-        yield 'mock';
-        yield ' response';
-      })()),
+      streamText: vi.fn().mockReturnValue(
+        (async function* () {
+          yield 'mock';
+          yield ' response';
+        })()
+      ),
     };
 
     mockLLM = new LLMOrchestrator(mockProvider);

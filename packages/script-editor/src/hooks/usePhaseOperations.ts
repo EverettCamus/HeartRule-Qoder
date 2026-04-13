@@ -1,19 +1,20 @@
 /**
  * Phase/Topic/Action 编辑操作 Hook
- * 
+ *
  * 功能：
  * - 提供 Phase/Topic/Action 的增删改查操作
  * - 管理操作历史记录（支持 Undo/Redo）
  * - 自动同步到 YAML
  * - 处理选中状态和焦点导航
- * 
+ *
  * 重构说明：
  * 从 ProjectEditor/index.tsx 提取，减少主组件复杂度
  * 原文件约 800 行代码，现在独立为可测试的 Hook
  */
 
-import { useCallback } from 'react';
 import { message } from 'antd';
+import { useCallback } from 'react';
+
 import type { PhaseWithTopics } from '../services/YamlService';
 // import type { TopicWithActions } from '../services/YamlService';
 import type { Action } from '../types/action';
@@ -22,9 +23,11 @@ import type { FocusPath } from '../utils/history-manager';
 export interface PhaseOperationsConfig {
   // 状态
   currentPhases: PhaseWithTopics[];
-  setCurrentPhases: (phases: PhaseWithTopics[] | ((prev: PhaseWithTopics[]) => PhaseWithTopics[])) => void;
+  setCurrentPhases: (
+    phases: PhaseWithTopics[] | ((prev: PhaseWithTopics[]) => PhaseWithTopics[])
+  ) => void;
   setHasUnsavedChanges: (changed: boolean) => void;
-  
+
   // 选中路径
   selectedActionPath: { phaseIndex: number; topicIndex: number; actionIndex: number } | null;
   setSelectedActionPath: (path: any) => void;
@@ -33,7 +36,7 @@ export interface PhaseOperationsConfig {
   selectedTopicPath: { phaseIndex: number; topicIndex: number } | null;
   setSelectedTopicPath: (path: any) => void;
   setEditingType: (type: 'phase' | 'topic' | 'action' | null) => void;
-  
+
   // 依赖函数
   syncPhasesToYaml: (phases: PhaseWithTopics[], targetFileId?: string) => void;
   pushHistory: (
@@ -52,7 +55,7 @@ export interface PhaseOperations {
   handlePhaseSave: (updatedPhaseData: any) => void;
   handleMovePhase: (fromIndex: number, toIndex: number) => void;
   handleSelectPhase: (path: { phaseIndex: number }) => void;
-  
+
   // Topic 操作
   handleAddTopic: (phaseIndex: number) => void;
   handleDeleteTopic: (phaseIndex: number, topicIndex: number) => void;
@@ -64,7 +67,7 @@ export interface PhaseOperations {
     toTopicIndex: number
   ) => void;
   handleSelectTopic: (path: { phaseIndex: number; topicIndex: number }) => void;
-  
+
   // Action 操作
   handleAddAction: (phaseIndex: number, topicIndex: number, actionType: string) => void;
   handleDeleteAction: (phaseIndex: number, topicIndex: number, actionIndex: number) => void;
@@ -77,15 +80,19 @@ export interface PhaseOperations {
     toTopicIndex: number,
     toActionIndex: number
   ) => void;
-  handleSelectAction: (path: { phaseIndex: number; topicIndex: number; actionIndex: number }) => void;
-  
+  handleSelectAction: (path: {
+    phaseIndex: number;
+    topicIndex: number;
+    actionIndex: number;
+  }) => void;
+
   // 辅助函数
   createActionByType: (actionType: string, actionIndex: number) => Action;
 }
 
 /**
  * usePhaseOperations Hook
- * 
+ *
  * 提供 Phase/Topic/Action 的所有编辑操作
  */
 export function usePhaseOperations(config: PhaseOperationsConfig): PhaseOperations {
@@ -184,7 +191,14 @@ export function usePhaseOperations(config: PhaseOperationsConfig): PhaseOperatio
         return newPhases;
       });
     },
-    [selectedActionPath, syncPhasesToYaml, pushHistory, setCurrentPhases, setSelectedActionPath, setHasUnsavedChanges]
+    [
+      selectedActionPath,
+      syncPhasesToYaml,
+      pushHistory,
+      setCurrentPhases,
+      setSelectedActionPath,
+      setHasUnsavedChanges,
+    ]
   );
 
   /**
@@ -214,7 +228,14 @@ export function usePhaseOperations(config: PhaseOperationsConfig): PhaseOperatio
       setHasUnsavedChanges(true);
       message.success('Phase updated');
     },
-    [selectedPhasePath, currentPhases, syncPhasesToYaml, pushHistory, setCurrentPhases, setHasUnsavedChanges]
+    [
+      selectedPhasePath,
+      currentPhases,
+      syncPhasesToYaml,
+      pushHistory,
+      setCurrentPhases,
+      setHasUnsavedChanges,
+    ]
   );
 
   /**
@@ -331,7 +352,14 @@ export function usePhaseOperations(config: PhaseOperationsConfig): PhaseOperatio
         return newPhases;
       });
     },
-    [selectedActionPath, syncPhasesToYaml, pushHistory, setCurrentPhases, setSelectedActionPath, setHasUnsavedChanges]
+    [
+      selectedActionPath,
+      syncPhasesToYaml,
+      pushHistory,
+      setCurrentPhases,
+      setSelectedActionPath,
+      setHasUnsavedChanges,
+    ]
   );
 
   /**
@@ -365,7 +393,14 @@ export function usePhaseOperations(config: PhaseOperationsConfig): PhaseOperatio
       setHasUnsavedChanges(true);
       message.success('Topic updated');
     },
-    [selectedTopicPath, currentPhases, syncPhasesToYaml, pushHistory, setCurrentPhases, setHasUnsavedChanges]
+    [
+      selectedTopicPath,
+      currentPhases,
+      syncPhasesToYaml,
+      pushHistory,
+      setCurrentPhases,
+      setHasUnsavedChanges,
+    ]
   );
 
   /**
@@ -547,7 +582,14 @@ export function usePhaseOperations(config: PhaseOperationsConfig): PhaseOperatio
       setHasUnsavedChanges(true);
       message.success(`New ${actionType} Action added`);
     },
-    [currentPhases, syncPhasesToYaml, createActionByType, pushHistory, setCurrentPhases, setHasUnsavedChanges]
+    [
+      currentPhases,
+      syncPhasesToYaml,
+      createActionByType,
+      pushHistory,
+      setCurrentPhases,
+      setHasUnsavedChanges,
+    ]
   );
 
   /**
@@ -594,7 +636,14 @@ export function usePhaseOperations(config: PhaseOperationsConfig): PhaseOperatio
         return newPhases;
       });
     },
-    [selectedActionPath, syncPhasesToYaml, pushHistory, setCurrentPhases, setSelectedActionPath, setHasUnsavedChanges]
+    [
+      selectedActionPath,
+      syncPhasesToYaml,
+      pushHistory,
+      setCurrentPhases,
+      setSelectedActionPath,
+      setHasUnsavedChanges,
+    ]
   );
 
   /**
@@ -630,7 +679,14 @@ export function usePhaseOperations(config: PhaseOperationsConfig): PhaseOperatio
       setHasUnsavedChanges(true);
       message.success('Action updated');
     },
-    [selectedActionPath, currentPhases, syncPhasesToYaml, pushHistory, setCurrentPhases, setHasUnsavedChanges]
+    [
+      selectedActionPath,
+      currentPhases,
+      syncPhasesToYaml,
+      pushHistory,
+      setCurrentPhases,
+      setHasUnsavedChanges,
+    ]
   );
 
   /**
@@ -688,21 +744,21 @@ export function usePhaseOperations(config: PhaseOperationsConfig): PhaseOperatio
     handlePhaseSave,
     handleMovePhase,
     handleSelectPhase,
-    
+
     // Topic 操作
     handleAddTopic,
     handleDeleteTopic,
     handleTopicSave,
     handleMoveTopic,
     handleSelectTopic,
-    
+
     // Action 操作
     handleAddAction,
     handleDeleteAction,
     handleActionSave,
     handleMoveAction,
     handleSelectAction,
-    
+
     // 辅助函数
     createActionByType,
   };

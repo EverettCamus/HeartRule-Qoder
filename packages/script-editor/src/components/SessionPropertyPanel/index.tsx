@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Form, Input, Select, Button, Space, Typography, Divider, message } from 'antd';
 import { SettingOutlined, EyeOutlined } from '@ant-design/icons';
+import { Form, Input, Select, Button, Space, Typography, Divider, message } from 'antd';
+import React, { useState, useEffect } from 'react';
 import './style.css';
 
 const { TextArea } = Input;
@@ -32,29 +32,29 @@ export interface TemplateScheme {
 export interface SessionPropertyPanelProps {
   /** Session数据 */
   sessionData: SessionData;
-  
+
   /** 可用的模板方案列表 */
   availableSchemes: TemplateScheme[];
-  
+
   /** 保存回调 */
   onSave: (data: SessionData) => void;
-  
+
   /** 管理模板方案的回调（可选） */
   onManageSchemes?: () => void;
-  
+
   /** 查看方案详情的回调（可选） */
   onViewSchemeDetails?: (schemeName: string) => void;
 }
 
 /**
  * Session属性面板组件
- * 
+ *
  * 用于编辑Session级别的配置，包括：
  * - 会谈名称
  * - 描述
  * - 版本号
  * - 模板方案配置（template_scheme）
- * 
+ *
  * @example
  * ```tsx
  * <SessionPropertyPanel
@@ -113,7 +113,7 @@ export const SessionPropertyPanel: React.FC<SessionPropertyPanelProps> = ({
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      
+
       // 构建Session数据
       const updatedData: SessionData = {
         name: values.name,
@@ -146,7 +146,7 @@ export const SessionPropertyPanel: React.FC<SessionPropertyPanelProps> = ({
   // 获取当前选中方案的描述
   const getSchemeDescription = (schemeName: string | undefined): string => {
     if (!schemeName) return '使用系统默认模板（包含通用安全边界和标准流程）';
-    
+
     const scheme = availableSchemes.find((s) => s.name === schemeName);
     return scheme?.description || '自定义模板方案';
   };
@@ -176,10 +176,7 @@ export const SessionPropertyPanel: React.FC<SessionPropertyPanelProps> = ({
           ]}
           data-testid="form-item-name"
         >
-          <Input
-            placeholder="例如：CBT抑郁症评估会谈"
-            data-testid="input-name"
-          />
+          <Input placeholder="例如：CBT抑郁症评估会谈" data-testid="input-name" />
         </Form.Item>
 
         <Form.Item
@@ -193,17 +190,10 @@ export const SessionPropertyPanel: React.FC<SessionPropertyPanelProps> = ({
           ]}
           data-testid="form-item-version"
         >
-          <Input
-            placeholder="1.0.0"
-            data-testid="input-version"
-          />
+          <Input placeholder="1.0.0" data-testid="input-version" />
         </Form.Item>
 
-        <Form.Item
-          label="描述"
-          name="description"
-          data-testid="form-item-description"
-        >
+        <Form.Item label="描述" name="description" data-testid="form-item-description">
           <TextArea
             rows={3}
             placeholder="简要描述这个会谈脚本的目标和适用场景"
@@ -265,7 +255,7 @@ export const SessionPropertyPanel: React.FC<SessionPropertyPanelProps> = ({
                 查看方案详情
               </Button>
             )}
-            
+
             {onManageSchemes && (
               <Button
                 type="link"

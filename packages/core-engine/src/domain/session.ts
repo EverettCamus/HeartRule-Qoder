@@ -1,8 +1,14 @@
-import { SessionStatus, ExecutionStatus, type ExecutionPosition, type VariableStore } from '@heartrule/shared-types';
+import {
+  SessionStatus,
+  ExecutionStatus,
+  type ExecutionPosition,
+  type VariableStore,
+} from '@heartrule/shared-types';
 import { v4 as uuidv4 } from 'uuid';
 
-import type { BaseAction } from './actions/base-action.js';
 import type { LLMDebugInfo } from '../engines/llm-orchestration/orchestrator.js';
+
+import type { BaseAction } from './actions/base-action.js';
 
 /**
  * 对话历史条目
@@ -16,7 +22,7 @@ export interface ConversationEntry {
 
 /**
  * 会话领域模型
- * 
+ *
  * 【DDD视角】核心聚合根，负责维护会话执行的完整状态
  * - 执行位置与进度控制
  * - 变量状态管理（兼容旧版 variables 和新版 variableStore）
@@ -30,17 +36,17 @@ export class Session {
   public status: SessionStatus;
   public executionStatus: ExecutionStatus;
   public position: ExecutionPosition;
-  
+
   // 变量管理（双轨制）
-  public variables: Map<string, unknown>;  // 旧版：扁平变量存储
-  public variableStore?: VariableStore;    // 新版：分层变量存储
-  
+  public variables: Map<string, unknown>; // 旧版：扁平变量存储
+  public variableStore?: VariableStore; // 新版：分层变量存储
+
   // 执行状态扩展
-  public currentAction: BaseAction | null;  // 当前正在执行的 Action 实例
-  public conversationHistory: ConversationEntry[];  // 对话历史
-  public lastAiMessage: string | null;      // 最近的 AI 消息
-  public lastLLMDebugInfo?: LLMDebugInfo;   // LLM 调试信息
-  
+  public currentAction: BaseAction | null; // 当前正在执行的 Action 实例
+  public conversationHistory: ConversationEntry[]; // 对话历史
+  public lastAiMessage: string | null; // 最近的 AI 消息
+  public lastLLMDebugInfo?: LLMDebugInfo; // LLM 调试信息
+
   public metadata: Map<string, unknown>;
   public createdAt: Date;
   public updatedAt: Date;
@@ -204,10 +210,12 @@ export class Session {
       position: this.position,
       variables: Object.fromEntries(this.variables),
       variableStore: this.variableStore,
-      currentAction: this.currentAction ? {
-        actionId: this.currentAction.actionId,
-        actionType: (this.currentAction.constructor as any).actionType,
-      } : null,
+      currentAction: this.currentAction
+        ? {
+            actionId: this.currentAction.actionId,
+            actionType: (this.currentAction.constructor as any).actionType,
+          }
+        : null,
       conversationHistory: this.conversationHistory,
       lastAiMessage: this.lastAiMessage,
       lastLLMDebugInfo: this.lastLLMDebugInfo,
