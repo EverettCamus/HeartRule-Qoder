@@ -28,6 +28,7 @@ import type { BaseAction, ActionContext, ActionResult } from '../../domain/actio
 import { createLogger } from '../../utils/logger.js';
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
 import { LLMOrchestrator } from '../llm-orchestration/orchestrator.js';
+import { PromptTemplateManager } from '../prompt-template/template-manager.js';
 import type { TemplateProvider } from '../prompt-template/template-provider.js';
 import { VariableScopeResolver } from '../variable-scope/variable-scope-resolver.js';
 
@@ -95,6 +96,10 @@ export interface ExecutionState {
    * - undefined表示使用脚本原始actions(向后兼容)
    */
   currentTopicPlan?: TopicPlan;
+  // NEW: Shared template manager for session-scoped caching
+  templateManager?: PromptTemplateManager;
+  // NEW: Template provider for DB access
+  templateProvider?: TemplateProvider;
 }
 
 /**
@@ -997,11 +1002,13 @@ export class ScriptExecutor {
       topicId,
       actionId: action.actionId,
       variables: { ...executionState.variables },
-      // 暂不在全局上下文层注入 systemVariables，交由各具体 Action 构建
+      // 暂不在全局上下文层注入 systemVariables ，交由各具体 Action 构建
       variableStore: executionState.variableStore,
       scopeResolver,
       conversationHistory: [...executionState.conversationHistory],
       metadata: { ...executionState.metadata },
+      templateManager: executionState.templateManager,
+      templateProvider: executionState.templateProvider,
     };
 
     // Execute Action
@@ -1039,6 +1046,8 @@ export class ScriptExecutor {
       scopeResolver,
       conversationHistory: [...executionState.conversationHistory],
       metadata: { ...executionState.metadata },
+      templateManager: executionState.templateManager,
+      templateProvider: executionState.templateProvider,
     };
 
     // Continue execution
@@ -1095,6 +1104,8 @@ export class ScriptExecutor {
       conversationHistory: [],
       metadata: {},
       lastAiMessage: null,
+      templateManager: undefined,
+      templateProvider: undefined,
     };
   }
 }
