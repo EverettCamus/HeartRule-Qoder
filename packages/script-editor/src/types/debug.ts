@@ -119,6 +119,33 @@ export interface VariableBubbleContent {
     outputVariables: string[]; // action 输出的变量
   };
   summary: string; // 摘要文本
+  // === 新增字段 ===
+  /** 动作状态：running=进行中, completed=已完成, error=出错 */
+  actionStatus?: 'running' | 'completed' | 'error';
+  /** 当前轮次（仅 actionStatus=running 时有效） */
+  currentRound?: number;
+  /** 最大轮次 */
+  maxRounds?: number;
+  /** 变量收集历史（仅 actionStatus=completed 时有效） */
+  collectionHistory?: Array<{
+    round: number;
+    timestamp: string;
+    changes: Array<{
+      name: string;
+      fromValue?: unknown;
+      toValue: unknown;
+      scope?: 'global' | 'session' | 'phase' | 'topic';
+    }>;
+  }>;
+  /** 层级路径信息 */
+  scopePath?: {
+    phaseId: string;
+    phaseName: string;
+    topicId: string;
+    topicName: string;
+  };
+  /** 动作退出原因（仅 actionStatus=completed 时有效） */
+  exitReason?: 'collected' | 'resistance' | 'crisis' | 'max_rounds' | 'user_interrupt';
 }
 
 /**

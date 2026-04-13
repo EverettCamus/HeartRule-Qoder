@@ -84,6 +84,15 @@ interface SessionResponse {
 export class SessionManager {
   private scriptExecutor: ScriptExecutor;
   private templateProvider: TemplateProvider;
+  private prevVariableSnapshots: Map<
+    string,
+    {
+      global: Record<string, any>;
+      session: Record<string, any>;
+      phase: Record<string, any>;
+      topic: Record<string, any>;
+    }
+  > = new Map();
 
   constructor() {
     // Phase 4: 使用依赖注入容器获取 ScriptExecutor
@@ -132,6 +141,109 @@ export class SessionManager {
           ? variableStore.topic[position.topicId]
           : {},
     };
+  }
+
+  private calculateRoundChanges(
+    prevState: {
+      global: Record<string, any>;
+      session: Record<string, any>;
+      phase: Record<string, any>;
+      topic: Record<string, any>;
+    } | null,
+    currentState: {
+      global: Record<string, any>;
+      session: Record<string, any>;
+      phase: Record<string, any>;
+      topic: Record<string, any>;
+    },
+    outputVariables: string[],
+    round: number
+  ): {
+    round: number;
+    timestamp: string;
+    changes: Array<{
+      name: string;
+      fromValue?: any;
+      toValue: any;
+      scope: string;
+    }>;
+  } | null {
+    if (!outputVariables || outputVariables.length === 0) {
+      return null;
+    }
+
+    const changes: Array<{
+      name: string;
+      fromValue?: any;
+      toValue: any;
+      scope: string;
+    }> = [];
+
+    for (const varName of outputVariables) {
+      let found = false;
+      for (const scope of ['topic', 'phase', 'session', 'global'] as const) {
+        const currentScopedVars = currentState[scope];
+        if (currentScopedVars && varName in currentScopedVars) {
+          const currentValue = currentScopedVars[varName];
+          const prevValue = prevState?.[scope]?.[varName];
+
+          if (JSON.stringify(prevValue) !== JSON.stringify(currentValue)) {
+            changes.push({
+              name: varName,
+              fromValue: prevValue,
+              toValue: currentValue,
+              scope,
+            });
+          }
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        for (const scope of ['topic', 'phase', 'session', 'global'] as const) {
+          const currentScopedVars = currentState[scope];
+          if (currentScopedVars && varName in currentScopedVars) {
+            changes.push({
+              name: varName,
+              toValue: currentScopedVars[varName],
+              scope,
+            });
+            break;
+          }
+        }
+      }
+    }
+
+    if (changes.length === 0) {
+      return null;
+    }
+
+    return {
+      round,
+      timestamp: new Date().toISOString(),
+      changes,
+    };
+  }
+
+  private extractExitReason(
+    executionState: ExecutionState
+  ): 'collected' | 'resistance' | 'crisis' | 'max_rounds' | 'user_interrupt' | undefined {
+    const exitDecisions = executionState.metadata?.exitDecisions;
+    if (exitDecisions && exitDecisions.length > 0) {
+      const lastDecision = exitDecisions[exitDecisions.length - 1];
+      const reason = lastDecision?.decision?.reason;
+      if (
+        reason === 'collected' ||
+        reason === 'resistance' ||
+        reason === 'crisis' ||
+        reason === 'max_rounds' ||
+        reason === 'user_interrupt'
+      ) {
+        return reason;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -578,6 +690,31 @@ export class SessionManager {
       } as any,
     };
 
+    // === 新增：计算动作状态和轮次变化 ===
+    const currentAction = executionState.currentAction;
+    const outputVariables: string[] = currentAction?.config?.output?.map((v: any) => v.get) || [];
+
+    // 计算动作状态
+    const actionStatus: 'running' | 'completed' | 'error' =
+      executionState.status === 'error'
+        ? 'error'
+        : executionState.status === 'completed'
+          ? 'completed'
+          : 'running';
+
+    // 获取当前轮次
+    const currentRound =
+      executionState.metadata?.actionRoundInfo?.[currentAction?.actionId || '']?.currentRound ||
+      executionState.metadata?.actionState?.currentRound;
+    const maxRounds =
+      currentAction?.config?.max_rounds || executionState.metadata?.actionState?.maxRounds;
+
+    // 添加新字段到 result
+    (result as any).actionStatus = actionStatus;
+    (result as any).currentRound = currentRound;
+    (result as any).maxRounds = maxRounds;
+    (result as any).outputVariables = outputVariables;
+
     // 仅在 processUserInput 中包含扁平化的 variableStore
     if (includeVariableStore) {
       result.variableStore = this.flattenVariableStore(executionState.variableStore, {
@@ -587,6 +724,33 @@ export class SessionManager {
     } else {
       // initializeSession 返回原始的 variableStore
       result.variableStore = executionState.variableStore as any;
+    }
+
+    // 计算轮次变化（必须在 variableStore 赋值之后）
+    const prevSnapshot = this.prevVariableSnapshots.get(session.id);
+    const roundChanges =
+      includeVariableStore && outputVariables.length > 0 && currentRound
+        ? this.calculateRoundChanges(
+            prevSnapshot || null,
+            result.variableStore as any,
+            outputVariables,
+            currentRound
+          )
+        : null;
+
+    // 清理快照（session 完成时释放内存）
+    if (actionStatus === 'completed') {
+      this.prevVariableSnapshots.delete(session.id);
+    } else if (includeVariableStore) {
+      // 更新快照（用于下一次比较）
+      this.prevVariableSnapshots.set(session.id, result.variableStore as any);
+    }
+
+    if (roundChanges) {
+      (result as any).roundChanges = roundChanges;
+    }
+    if (actionStatus === 'completed') {
+      (result as any).exitReason = this.extractExitReason(executionState);
     }
 
     return result;

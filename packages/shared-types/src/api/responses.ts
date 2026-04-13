@@ -163,3 +163,55 @@ export interface ScriptListResponse {
   scripts: Script[];
   total: number;
 }
+
+/**
+ * 单轮变量变化记录
+ */
+export interface RoundVariableChange {
+  round: number;
+  timestamp: string;
+  changes: Array<{
+    name: string;
+    fromValue?: unknown;
+    toValue: unknown;
+    scope: 'global' | 'session' | 'phase' | 'topic';
+  }>;
+}
+
+export const RoundVariableChangeSchema = z.object({
+  round: z.number(),
+  timestamp: z.string(),
+  changes: z.array(
+    z.object({
+      name: z.string(),
+      fromValue: z.unknown().optional(),
+      toValue: z.unknown(),
+      scope: z.enum(['global', 'session', 'phase', 'topic']),
+    })
+  ),
+});
+
+/**
+ * 动作状态
+ */
+export type ActionStatus = 'running' | 'completed' | 'error';
+
+export const ActionStatusSchema = z.enum(['running', 'completed', 'error']);
+
+/**
+ * 动作退出原因
+ */
+export type ActionExitReason =
+  | 'collected'
+  | 'resistance'
+  | 'crisis'
+  | 'max_rounds'
+  | 'user_interrupt';
+
+export const ActionExitReasonSchema = z.enum([
+  'collected',
+  'resistance',
+  'crisis',
+  'max_rounds',
+  'user_interrupt',
+]);
