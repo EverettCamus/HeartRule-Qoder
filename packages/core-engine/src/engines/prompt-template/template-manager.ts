@@ -46,19 +46,22 @@ export class PromptTemplateManager {
    */
   async loadTemplate(templatePath: string): Promise<PromptTemplate> {
     const templateId = templatePath.replace(/\//g, '_').replace('.md', '');
+    const startTime = Date.now();
 
     // 检查缓存
     if (this.templates.has(templateId)) {
+      const duration = Date.now() - startTime;
+      logger.debug(`[TemplateManager] Cache HIT for: ${templateId} (${duration}ms)`);
       return this.templates.get(templateId)!;
     }
 
     // 如果有 TemplateProvider，使用数据库模式
     if (this.templateProvider && this.projectId) {
-      return await this.loadTemplateFromDatabase(templatePath, templateId);
+      return await this.loadTemplateFromDatabase(templatePath, templateId, startTime);
     }
 
     // 否则使用文件系统模式（兼容旧版本）
-    return await this.loadTemplateFromFilesystem(templatePath, templateId);
+    return await this.loadTemplateFromFilesystem(templatePath, templateId, startTime);
   }
 
   /**
@@ -66,7 +69,8 @@ export class PromptTemplateManager {
    */
   private async loadTemplateFromDatabase(
     templatePath: string,
-    templateId: string
+    templateId: string,
+    startTime: number
   ): Promise<PromptTemplate> {
     if (!this.templateProvider || !this.projectId) {
       throw new Error('[TemplateManager] Template provider or project ID not configured');
@@ -101,6 +105,8 @@ export class PromptTemplateManager {
 
       // 缓存模板
       this.templates.set(templateId, template);
+      const duration = Date.now() - startTime;
+      logger.debug(`[TemplateManager] Cache MISS, loaded from DB: ${templateId} (${duration}ms)`);
       return template;
     } catch (error: any) {
       throw new Error(`Failed to load template from database ${templatePath}: ${error.message}`);
@@ -112,7 +118,8 @@ export class PromptTemplateManager {
    */
   private async loadTemplateFromFilesystem(
     templatePath: string,
-    templateId: string
+    templateId: string,
+    startTime: number
   ): Promise<PromptTemplate> {
     const fs = await import('fs/promises');
     const path = await import('path');
@@ -148,6 +155,8 @@ export class PromptTemplateManager {
 
       // 缓存模板
       this.templates.set(templateId, template);
+      const duration = Date.now() - startTime;
+      logger.debug(`[TemplateManager] Cache MISS, loaded from FS: ${templateId} (${duration}ms)`);
       return template;
     } catch (error: any) {
       throw new Error(`Failed to load template from ${fullPath}: ${error.message}`);
