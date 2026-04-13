@@ -42,10 +42,13 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
   };
 
   const formatScopeValue = (value: unknown): string => {
-    if (value === null) return 'null';
-    if (value === undefined) return 'undefined';
+    if (value === null || value === undefined) return '(未收集)';
     if (typeof value === 'string') return `"${value}"`;
-    if (typeof value === 'object') {
+    if (typeof value === 'object' && value !== null) {
+      // 处理 VariableValue 格式 {value, type, scope, lastUpdated, source}
+      if ('value' in value) {
+        return formatScopeValue((value as any).value);
+      }
       const json = JSON.stringify(value);
       if (json.length > 50) {
         return json.substring(0, 50) + '...';
@@ -53,22 +56,6 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
       return json;
     }
     return String(value);
-  };
-
-  const filterVariables = (
-    variables: Record<string, unknown>,
-    relevantVars: string[] | undefined
-  ): Record<string, unknown> => {
-    if (!relevantVars || relevantVars.length === 0) {
-      return variables;
-    }
-    const filtered: Record<string, unknown> = {};
-    for (const key of relevantVars) {
-      if (key in variables) {
-        filtered[key] = variables[key];
-      }
-    }
-    return filtered;
   };
 
   const toggleScope = (scope: string) => {
@@ -83,14 +70,7 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
     });
   };
 
-  const allRelevantVarNames = content.relevantVariables
-    ? [...content.relevantVariables.inputVariables, ...content.relevantVariables.outputVariables]
-    : undefined;
-
-  const filteredGlobal = filterVariables(content.allVariables.global, allRelevantVarNames);
-  const filteredSession = filterVariables(content.allVariables.session, allRelevantVarNames);
-  const filteredPhase = filterVariables(content.allVariables.phase, allRelevantVarNames);
-  const filteredTopic = filterVariables(content.allVariables.topic, allRelevantVarNames);
+  // 显示所有变量，不再过滤
 
   const handleExportJSON = () => {
     const data = {
@@ -183,25 +163,19 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
         >
           <span style={{ marginRight: '4px' }}>{isExpandedScope ? '▼' : '▶'}</span>
           {scopeLabel} ({varCount} 个变量)
-          {content.relevantVariables && (
+          {!isExpandedScope && varCount > 0 && (
             <span
-              style={{
-                fontSize: '11px',
-                color: '#999',
-                fontWeight: 'normal',
-                marginLeft: '8px',
-              }}
+              style={{ fontSize: '11px', color: '#999', fontWeight: 'normal', marginLeft: '8px' }}
             >
-              （仅显示相关）
+              {Object.keys(variables).slice(0, 2).join(', ')}
+              {varCount > 2 && '...'}
             </span>
           )}
         </div>
         {isExpandedScope && (
           <div style={{ fontSize: '12px', marginLeft: '16px' }}>
             {varCount === 0 ? (
-              <div style={{ color: '#999' }}>
-                {content.relevantVariables ? '（无相关变量）' : '（无）'}
-              </div>
+              <div style={{ color: '#999' }}>（无变量）</div>
             ) : (
               Object.entries(variables).map(([key, value]) => {
                 const isInput = content.relevantVariables?.inputVariables.includes(key);
@@ -243,10 +217,10 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
   };
 
   const totalVarCount =
-    Object.keys(filteredGlobal).length +
-    Object.keys(filteredSession).length +
-    Object.keys(filteredPhase).length +
-    Object.keys(filteredTopic).length;
+    Object.keys(content.allVariables.global).length +
+    Object.keys(content.allVariables.session).length +
+    Object.keys(content.allVariables.phase).length +
+    Object.keys(content.allVariables.topic).length;
 
   const showCollectionHistory = content.actionStatus === 'completed';
 
@@ -390,10 +364,10 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
           {showCollectionHistory && renderCollectionHistory()}
 
           {/* Scope Variables with Collapsible Sections */}
-          {renderScopeVariables('global', 'Global 级变量', filteredGlobal)}
-          {renderScopeVariables('session', 'Session 级变量', filteredSession)}
-          {renderScopeVariables('phase', 'Phase 级变量', filteredPhase)}
-          {renderScopeVariables('topic', 'Topic 级变量', filteredTopic)}
+          {renderScopeVariables('global', 'Global 级变量', content.allVariables.global)}
+          {renderScopeVariables('session', 'Session 级变量', content.allVariables.session)}
+          {renderScopeVariables('phase', 'Phase 级变量', content.allVariables.phase)}
+          {renderScopeVariables('topic', 'Topic 级变量', content.allVariables.topic)}
         </div>
       )}
 

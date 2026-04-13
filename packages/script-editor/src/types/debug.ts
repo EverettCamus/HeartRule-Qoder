@@ -134,6 +134,7 @@ export interface VariableBubbleContent {
       name: string;
       fromValue?: unknown;
       toValue: unknown;
+      scope?: 'global' | 'session' | 'phase' | 'topic';
     }>;
   }>;
   /** 层级路径信息 */

@@ -701,7 +701,24 @@ export class SessionManager {
     const maxRounds =
       currentAction?.config?.max_rounds || executionState.metadata?.actionState?.maxRounds;
 
-    // 计算轮次变化
+    // 添加新字段到 result
+    (result as any).actionStatus = actionStatus;
+    (result as any).currentRound = currentRound;
+    (result as any).maxRounds = maxRounds;
+    (result as any).outputVariables = outputVariables;
+
+    // 仅在 processUserInput 中包含扁平化的 variableStore
+    if (includeVariableStore) {
+      result.variableStore = this.flattenVariableStore(executionState.variableStore, {
+        phaseId: executionState.currentPhaseId,
+        topicId: executionState.currentTopicId,
+      });
+    } else {
+      // initializeSession 返回原始的 variableStore
+      result.variableStore = executionState.variableStore as any;
+    }
+
+    // 计算轮次变化（必须在 variableStore 赋值之后）
     const prevSnapshot = this.prevVariableSnapshots.get(session.id);
     const roundChanges =
       includeVariableStore && outputVariables.length > 0 && currentRound
@@ -713,32 +730,19 @@ export class SessionManager {
           )
         : null;
 
-    // 更新快照（用于下一次比较）
-    if (includeVariableStore && actionStatus === 'completed') {
+    // 清理快照（session 完成时释放内存）
+    if (actionStatus === 'completed') {
+      this.prevVariableSnapshots.delete(session.id);
+    } else if (includeVariableStore) {
+      // 更新快照（用于下一次比较）
       this.prevVariableSnapshots.set(session.id, result.variableStore as any);
     }
 
-    // 添加新字段到 result
-    (result as any).actionStatus = actionStatus;
-    (result as any).currentRound = currentRound;
-    (result as any).maxRounds = maxRounds;
-    (result as any).outputVariables = outputVariables;
     if (roundChanges) {
       (result as any).roundChanges = roundChanges;
     }
     if (actionStatus === 'completed') {
       (result as any).exitReason = this.extractExitReason(executionState);
-    }
-
-    // 仅在 processUserInput 中包含扁平化的 variableStore
-    if (includeVariableStore) {
-      result.variableStore = this.flattenVariableStore(executionState.variableStore, {
-        phaseId: executionState.currentPhaseId,
-        topicId: executionState.currentTopicId,
-      });
-    } else {
-      // initializeSession 返回原始的 variableStore
-      result.variableStore = executionState.variableStore as any;
     }
 
     return result;
