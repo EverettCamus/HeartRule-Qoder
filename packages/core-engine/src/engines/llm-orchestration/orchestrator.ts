@@ -7,6 +7,11 @@ import type {
   LLMDebugInfo,
   LLMGenerateResult,
 } from '../../application/ports/outbound/llm-provider.port.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('LLMProvider');
+
+const orchestratorLogger = createLogger('LLMOrchestrator');
 
 /**
  * 重新导出端口定义以保持向后兼容
@@ -55,8 +60,11 @@ export class LLMOrchestrator {
     config?: Partial<LLMConfig>,
     providerName?: string
   ): Promise<LLMGenerateResult> {
+    const startTime = Date.now();
     const provider = this.getProvider(providerName);
-    return provider.generateText(prompt, config);
+    const result = await provider.generateText(prompt, config);
+    orchestratorLogger.info(`⏱️ [LLMOrchestrator] generateText took ${Date.now() - startTime}ms`);
+    return result;
   }
 
   /**
@@ -156,6 +164,9 @@ export abstract class BaseLLMProvider implements ILLMProvider {
     const model = this.getModel();
     const mergedConfig = { ...this.config, ...config };
     const timestamp = new Date().toISOString();
+    const llmStartTime = Date.now();
+
+    logger.info(`⏱️ [LLM] generateText started (model: ${mergedConfig.model || 'default'})`);
 
     // 创建超时控制器 (25秒超时，小于前端的30秒)
     const abortController = new AbortController();
@@ -174,6 +185,12 @@ export abstract class BaseLLMProvider implements ILLMProvider {
       });
 
       clearTimeout(timeoutId);
+
+      const llmDuration = Date.now() - llmStartTime;
+      const tokenCount = result.usage?.totalTokens || 0;
+      logger.info(
+        `⏱️ [LLM] generateText completed in ${llmDuration}ms (tokens: ${tokenCount}, model: ${mergedConfig.model || 'default'})`
+      );
 
       // 提取实际发送给 LLM 的 prompt
       // Vercel AI SDK 会将 prompt 字符串包装成 messages 数组
@@ -225,6 +242,11 @@ export abstract class BaseLLMProvider implements ILLMProvider {
       };
     } catch (error: any) {
       clearTimeout(timeoutId);
+
+      const llmDuration = Date.now() - llmStartTime;
+      logger.info(
+        `⏱️ [LLM] generateText FAILED after ${llmDuration}ms (model: ${mergedConfig.model || 'default'}, error: ${error.message})`
+      );
 
       // 增强错误信息
       if (error.name === 'AbortError') {
