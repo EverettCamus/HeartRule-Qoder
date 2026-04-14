@@ -51,7 +51,7 @@ export class PromptTemplateManager {
     // 检查缓存
     if (this.templates.has(templateId)) {
       const duration = Date.now() - startTime;
-      logger.debug(`[TemplateManager] Cache HIT for: ${templateId} (${duration}ms)`);
+      logger.info(`[TemplateManager] Cache HIT for: ${templateId} (${duration}ms)`);
       return this.templates.get(templateId)!;
     }
 
@@ -106,7 +106,7 @@ export class PromptTemplateManager {
       // 缓存模板
       this.templates.set(templateId, template);
       const duration = Date.now() - startTime;
-      logger.debug(`[TemplateManager] Cache MISS, loaded from DB: ${templateId} (${duration}ms)`);
+      logger.info(`[TemplateManager] Cache MISS, loaded from DB: ${templateId} (${duration}ms)`);
       return template;
     } catch (error: any) {
       throw new Error(`Failed to load template from database ${templatePath}: ${error.message}`);
@@ -156,7 +156,7 @@ export class PromptTemplateManager {
       // 缓存模板
       this.templates.set(templateId, template);
       const duration = Date.now() - startTime;
-      logger.debug(`[TemplateManager] Cache MISS, loaded from FS: ${templateId} (${duration}ms)`);
+      logger.info(`[TemplateManager] Cache MISS, loaded from FS: ${templateId} (${duration}ms)`);
       return template;
     } catch (error: any) {
       throw new Error(`Failed to load template from ${fullPath}: ${error.message}`);

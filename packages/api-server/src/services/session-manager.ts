@@ -866,8 +866,12 @@ export class SessionManager {
     logger.info('🔵 initializeSession called', { sessionId });
 
     // 1. 加载会话和脚本数据
+    const t0 = Date.now();
     const session = await this.loadSessionById(sessionId);
+    logger.info(`⏱️ [SessionManager] loadSessionById took ${Date.now() - t0}ms`);
+    const t1 = Date.now();
     const script = await this.loadScriptById(session.scriptId);
+    logger.info(`⏱️ [SessionManager] loadScriptById took ${Date.now() - t1}ms`);
 
     try {
       // 2. 加载全局变量和对话历史
@@ -896,7 +900,11 @@ export class SessionManager {
 
       // 5. 执行脚本
       const prevHistoryLength = executionState.conversationHistory.length;
+      const tExec = Date.now();
       executionState = await this.executeScript(script, sessionId, executionState, null);
+      logger.info(
+        `⏱️ [SessionManager] scriptExecutor.executeSession (init) took ${Date.now() - tExec}ms`
+      );
 
       // 5.1 如果 ScriptExecutor 提取了 sessionConfig，保存到 session.metadata
       if (executionState.metadata.sessionConfig) {
@@ -942,8 +950,12 @@ export class SessionManager {
     logger.info('🔵 processUserInput called', { sessionId, userInput });
 
     // 1. 加载会话和脚本数据
+    const t0 = Date.now();
     const session = await this.loadSessionById(sessionId);
+    logger.info(`⏱️ [SessionManager] loadSessionById took ${Date.now() - t0}ms`);
+    const t1 = Date.now();
     const script = await this.loadScriptById(session.scriptId);
+    logger.info(`⏱️ [SessionManager] loadScriptById took ${Date.now() - t1}ms`);
 
     try {
       // 2. 加载全局变量
@@ -974,7 +986,11 @@ export class SessionManager {
 
       // 6. 执行脚本（传递 userInput 以便 continueAction 正确处理）
       const prevHistoryLength = executionState.conversationHistory.length;
+      const tExec = Date.now();
       executionState = await this.executeScript(script, sessionId, executionState, userInput);
+      logger.info(
+        `⏱️ [SessionManager] scriptExecutor.executeSession (userInput) took ${Date.now() - tExec}ms`
+      );
 
       // 7. 保存执行结果
       await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
