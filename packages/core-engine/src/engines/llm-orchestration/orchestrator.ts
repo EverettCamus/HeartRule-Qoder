@@ -10,8 +10,13 @@ import type {
 import { createLogger } from '../../utils/logger.js';
 
 const logger = createLogger('LLMProvider');
-
 const orchestratorLogger = createLogger('LLMOrchestrator');
+
+function truncateText(text: string, maxLen: number = 300): string {
+  if (!text) return '(empty)';
+  if (text.length <= maxLen) return text;
+  return text.substring(0, maxLen) + `... (${text.length} chars total)`;
+}
 
 /**
  * 重新导出端口定义以保持向后兼容
@@ -167,6 +172,7 @@ export abstract class BaseLLMProvider implements ILLMProvider {
     const llmStartTime = Date.now();
 
     logger.info(`⏱️ [LLM] generateText started (model: ${mergedConfig.model || 'default'})`);
+    logger.info(`📥 [LLM] Prompt: ${truncateText(prompt, 300)}`);
 
     // 创建超时控制器 (25秒超时，小于前端的30秒)
     const abortController = new AbortController();
@@ -191,6 +197,7 @@ export abstract class BaseLLMProvider implements ILLMProvider {
       logger.info(
         `⏱️ [LLM] generateText completed in ${llmDuration}ms (tokens: ${tokenCount}, model: ${mergedConfig.model || 'default'})`
       );
+      logger.info(`📤 [LLM] Response: ${truncateText(result.text, 300)}`);
 
       // 提取实际发送给 LLM 的 prompt
       // Vercel AI SDK 会将 prompt 字符串包装成 messages 数组
