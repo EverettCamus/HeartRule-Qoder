@@ -12,7 +12,7 @@ services:
       POSTGRES_PASSWORD: heartrule_dev_2024
       POSTGRES_DB: heartrule_ai
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - heartrule-qcoder_postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db:/docker-entrypoint-initdb.d
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U heartrule']
@@ -30,7 +30,7 @@ services:
       - '6379:6379'
     command: redis-server --appendonly yes --requirepass heartrule_redis_2024
     volumes:
-      - redis_data:/data
+      - heartrule-qcoder_redis_data:/data
     healthcheck:
       test: ['CMD', 'redis-cli', '-a', 'heartrule_redis_2024', 'ping']
       interval: 10s
@@ -53,10 +53,10 @@ services:
       - heartrule-network
 
 volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
+  heartrule-qcoder_postgres_data:
+    external: true
+  heartrule-qcoder_redis_data:
+    external: true
 
 networks:
   heartrule-network:

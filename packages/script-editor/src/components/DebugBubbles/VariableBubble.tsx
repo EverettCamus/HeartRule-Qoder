@@ -297,20 +297,61 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
         <div>
           {actionId && (
             <div style={{ fontSize: '13px', color: '#666', marginBottom: '4px' }}>
-              <strong>Action:</strong> {actionId} 执行后
+              <strong>Action:</strong> {actionId}{' '}
+              {content.actionStatus === 'completed' ? '已完成' : '执行后'}
             </div>
           )}
-          {content.changedVariables.length > 0 && (
-            <div style={{ fontSize: '13px', marginBottom: '4px' }}>
-              <strong>新增/变化：</strong>
-              {content.changedVariables.slice(0, 3).map((v, i) => (
-                <span key={i}>
-                  {i > 0 && ', '}
-                  {v.name} = {formatValue(v.newValue)}
-                </span>
-              ))}
-              {content.changedVariables.length > 3 && '...'}
-            </div>
+          {content.actionStatus === 'completed' ? (
+            // 动作完成时显示收集变量摘要
+            content.collectionHistory && content.collectionHistory.length > 0 ? (
+              <div style={{ fontSize: '13px', marginBottom: '4px' }}>
+                <strong>收集变量：</strong>
+                {(() => {
+                  const lastRound =
+                    content.collectionHistory![content.collectionHistory!.length - 1];
+                  return lastRound.changes.slice(0, 3).map((c, i) => (
+                    <span key={i}>
+                      {i > 0 && ', '}
+                      {c.name} → {formatScopeValue(c.toValue)}
+                    </span>
+                  ));
+                })()}
+                {content.collectionHistory.length > 1 && (
+                  <span style={{ color: '#722ed1', marginLeft: '4px' }}>
+                    [+{content.collectionHistory.length - 1}轮]
+                  </span>
+                )}
+              </div>
+            ) : content.changedVariables.length > 0 ? (
+              // 如果没有历史，显示当前变化的变量
+              <div style={{ fontSize: '13px', marginBottom: '4px' }}>
+                <strong>收集变量：</strong>
+                {content.changedVariables.slice(0, 3).map((v, i) => (
+                  <span key={i}>
+                    {i > 0 && ', '}
+                    {v.name} → {formatScopeValue(v.newValue)}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: '13px', color: '#999', marginBottom: '4px' }}>
+                （无收集变量）
+              </div>
+            )
+          ) : (
+            // 动作进行中显示变化变量
+            content.changedVariables.length > 0 && (
+              <div style={{ fontSize: '13px', marginBottom: '4px' }}>
+                <strong>变化：</strong>
+                {content.changedVariables.slice(0, 3).map((v, i) => (
+                  <span key={i}>
+                    {i > 0 && ', '}
+                    {v.name} = {formatValue(v.newValue)}
+                  </span>
+                ))}
+                {content.changedVariables.length > 3 && '...'}
+              </div>
+            )
           )}
           <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>
             <strong>当前总计:</strong> {totalVarCount} 个变量

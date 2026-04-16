@@ -100,8 +100,67 @@ export class SessionManager {
     this.templateProvider = new DatabaseTemplateProvider();
   }
 
+  private static readonly PLACEHOLDER_PATTERNS = [
+    /^\(?(未收集|未提供|暂无|无|N\/A|n\/a|null)\)?$/i,
+    /^\(未收集\)$/,
+    /^\(未提供\)$/,
+  ];
+
+  private isPlaceholderValue(value: unknown): boolean {
+    if (value === null || value === undefined || value === '') return true;
+    if (typeof value !== 'string') return false;
+    const trimmed = value.trim();
+    if (trimmed === '') return true;
+    return SessionManager.PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(trimmed));
+  }
+
+  private unwrapVariableValue(value: unknown): unknown {
+    if (value !== null && typeof value === 'object' && 'value' in (value as object)) {
+      const unwrapped = (value as { value: unknown }).value;
+      if (this.isPlaceholderValue(unwrapped)) {
+        return undefined;
+      }
+      return unwrapped;
+    }
+    if (this.isPlaceholderValue(value)) {
+      return undefined;
+    }
+    return value;
+  }
+
+  private unwrapScopeValues(
+    scopeData: Record<string, unknown> | null | undefined
+  ): Record<string, unknown> {
+    if (!scopeData) return {};
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(scopeData)) {
+      const unwrapped = this.unwrapVariableValue(value);
+      if (unwrapped !== undefined) {
+        result[key] = unwrapped;
+      }
+    }
+    return result;
+  }
+
+  private findFirstNonEmptyScope(
+    scopes: Record<string, Record<string, unknown>> | undefined
+  ): Record<string, unknown> | null {
+    if (!scopes) return null;
+    for (const scopeKey of Object.keys(scopes)) {
+      const scopeData = scopes[scopeKey];
+      if (scopeData && typeof scopeData === 'object' && Object.keys(scopeData).length > 0) {
+        return scopeData;
+      }
+    }
+    return null;
+  }
+
   /**
    * 扁平化 variableStore，将嵌套的 phase/topic 结构转为当前位置的扁平结构
+   *
+   * 当 action 完成后，position 可能已跳到下一个 topic/phase，
+   * 但变量存储在源 action 的 topic/phase 中。
+   * 此时需要回退到有数据的 topic/phase，确保变量不丢失。
    */
   private flattenVariableStore(
     variableStore:
@@ -129,17 +188,32 @@ export class SessionManager {
       };
     }
 
+    const hasPhaseDataAtPosition =
+      position.phaseId &&
+      variableStore.phase?.[position.phaseId] &&
+      Object.keys(variableStore.phase[position.phaseId]).length > 0;
+    const hasTopicDataAtPosition =
+      position.topicId &&
+      variableStore.topic?.[position.topicId] &&
+      Object.keys(variableStore.topic[position.topicId]).length > 0;
+
+    const rawPhaseData = hasPhaseDataAtPosition
+      ? variableStore.phase![position.phaseId!]
+      : this.findFirstNonEmptyScope(variableStore.phase);
+    const rawTopicData = hasTopicDataAtPosition
+      ? variableStore.topic![position.topicId!]
+      : this.findFirstNonEmptyScope(variableStore.topic);
+
+    const globalData = this.unwrapScopeValues(variableStore.global || {});
+    const sessionData = this.unwrapScopeValues(variableStore.session || {});
+    const phaseData = this.unwrapScopeValues(rawPhaseData);
+    const topicData = this.unwrapScopeValues(rawTopicData);
+
     return {
-      global: variableStore.global || {},
-      session: variableStore.session || {},
-      phase:
-        position.phaseId && variableStore.phase?.[position.phaseId]
-          ? variableStore.phase[position.phaseId]
-          : {},
-      topic:
-        position.topicId && variableStore.topic?.[position.topicId]
-          ? variableStore.topic[position.topicId]
-          : {},
+      global: globalData,
+      session: sessionData,
+      phase: phaseData,
+      topic: topicData,
     };
   }
 

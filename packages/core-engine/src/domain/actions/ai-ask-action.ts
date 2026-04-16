@@ -200,8 +200,19 @@ export class AiAskAction extends BaseAction {
     if (exitDecision.shouldExit) {
       logger.info('✅ Decided to exit', { reason: exitDecision.reason });
       const finalResult = await this.finishAction(context, userInput);
+
+      // LLM 当前轮直接从用户输入提取的变量优先
+      // finishAction 从历史 JSON 回退提取，可能返回占位值（如"未收集"）
+      // 用 LLM 提取的真实值覆盖 finishAction 的占位值
+      const llmExtractedVars = this.extractVariablesFromJson(llmOutput as EnhancedAskLLMOutput);
+      const mergedExtractedVariables = {
+        ...(finalResult.extractedVariables || {}),
+        ...(llmExtractedVars || {}),
+      };
+
       return {
         ...finalResult,
+        extractedVariables: mergedExtractedVariables,
         aiMessage: llmResult.aiMessage || finalResult.aiMessage,
         debugInfo: llmResult.debugInfo,
         metadata: {
@@ -343,7 +354,16 @@ export class AiAskAction extends BaseAction {
         const value = llmOutputRecord[varName];
         if (this.isValidVariableValue(value)) {
           extractedVariables[varName] = value;
-          logger.info('✅ Extracted variable from JSON', { name: varName });
+          logger.info('✅ Extracted variable from JSON', {
+            name: varName,
+            value: String(value).substring(0, 50),
+          });
+        } else {
+          logger.info('⏭️ Skipped invalid variable value', {
+            name: varName,
+            value: String(value).substring(0, 50),
+            valueType: typeof value,
+          });
         }
       }
     }

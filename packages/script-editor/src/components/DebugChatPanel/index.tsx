@@ -82,6 +82,20 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   });
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
+  // 累积的变量收集历史（用于显示动作完成时的完整历史）
+  const [accumulatedCollectionHistory, setAccumulatedCollectionHistory] = useState<
+    Array<{
+      round: number;
+      timestamp: string;
+      changes: Array<{
+        name: string;
+        fromValue?: unknown;
+        toValue: unknown;
+        scope?: string;
+      }>;
+    }>
+  >([]);
+
   // 滚动到底部
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -682,31 +696,67 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           });
         }
 
-        // TODO: 计算变量的变化（需要保存前一状态）
+        // 获取动作状态
+        const actionStatus = (response as any).actionStatus;
+
+        // 累积变量收集历史
+        const roundChanges = (response as any).roundChanges;
+        let newAccumulatedHistory = accumulatedCollectionHistory;
+        if (actionStatus === 'running' && roundChanges) {
+          // 动作进行中，累积每轮的变化
+          newAccumulatedHistory = [...accumulatedCollectionHistory, roundChanges];
+          setAccumulatedCollectionHistory(newAccumulatedHistory);
+        } else if (actionStatus === 'completed') {
+          // 动作完成时，如果有新的变化也要添加
+          if (roundChanges) {
+            newAccumulatedHistory = [...accumulatedCollectionHistory, roundChanges];
+            setAccumulatedCollectionHistory(newAccumulatedHistory);
+          }
+          // 动作完成后重置累积历史
+          setAccumulatedCollectionHistory([]);
+        }
+
+        // 计算 changedVariables（从最新轮次变化）
+        const changedVariables = roundChanges
+          ? roundChanges.changes.map((c: any) => ({
+              name: c.name,
+              oldValue: c.fromValue,
+              newValue: c.toValue,
+              scope: c.scope as 'global' | 'session' | 'phase' | 'topic',
+            }))
+          : [];
+
         const variableBubble: DebugBubble = {
           id: uuidv4(),
           type: 'variable',
           timestamp: new Date().toISOString(),
-          isExpanded: false, // 变量默认折叠
+          isExpanded: false,
           actionId: response.position?.actionId,
           actionType: response.position?.actionType,
           content: {
             type: 'variable',
-            changedVariables: [], // TODO: 计算变化的变量
+            changedVariables,
             allVariables: categorizedVars,
             relevantVariables,
-            summary: '变量更新', // 简单摘要
-            actionStatus: (response as any).actionStatus,
+            summary: '变量更新',
+            actionStatus,
             currentRound: (response as any).currentRound,
             maxRounds: (response as any).maxRounds,
-            collectionHistory:
-              (response as any).collectionHistory || (response as any).roundChanges
-                ? [(response as any).roundChanges]
-                : undefined,
+            collectionHistory: newAccumulatedHistory.length > 0 ? newAccumulatedHistory : undefined,
             scopePath: {
-              phaseId: response.position?.phaseId || '',
+              phaseId:
+                actionStatus === 'completed' && (response as any).completedActionContext
+                  ? (response as any).completedActionContext.phaseId ||
+                    response.position?.phaseId ||
+                    ''
+                  : response.position?.phaseId || '',
               phaseName: '',
-              topicId: response.position?.topicId || '',
+              topicId:
+                actionStatus === 'completed' && (response as any).completedActionContext
+                  ? (response as any).completedActionContext.topicId ||
+                    response.position?.topicId ||
+                    ''
+                  : response.position?.topicId || '',
               topicName: '',
             },
             exitReason: (response as any).exitReason,

@@ -38,6 +38,7 @@ export type ExitReason =
  * - assessment: 语义评估（markdown格式），包含阻抗分析、风险识别、用户理解
  * - progress: 任务进度说明、变量收集状态（markdown格式）
  * - safety_check: LLM安全自查结果
+ * - 动态变量: 支持任意键名的变量（如来访者称呼、来访者年龄等）
  */
 export interface EnhancedAskLLMOutput {
   assessment?: string;
@@ -48,6 +49,8 @@ export interface EnhancedAskLLMOutput {
   progress?: string;
   safety_check?: SafetyCheck;
   crisis_detected: boolean;
+  // 动态变量字段（如来访者称呼、来访者年龄等）
+  [key: string]: unknown;
 }
 
 /**
@@ -108,25 +111,28 @@ export const SafetyCheckSchema = z.object({
  * - safety_check.passed: accepts both string and boolean
  * - safety_check.concern: converts string 'null' to actual null
  * - crisis_detected: accepts both string and boolean
+ * - catchall: preserves dynamic variable fields (如来访者称呼、来访者年龄等)
  */
-export const EnhancedAskLLMOutputSchema = z.object({
-  assessment: z.string().optional(),
-  exit: ExitFieldSchema,
-  exit_reason: z
-    .enum([
-      '信息已完整',
-      '信息不足',
-      '用户阻抗',
-      '达到最大轮次',
-      '用户理解困难',
-      '话题偏离',
-      '危机信号',
-      '继续收集',
-    ])
-    .optional(),
-  content: z.string().optional(),
-  brief: z.string().optional(),
-  progress: z.string().optional(),
-  safety_check: SafetyCheckSchema.optional(),
-  crisis_detected: BooleanLikeFieldSchema.default(false),
-});
+export const EnhancedAskLLMOutputSchema = z
+  .object({
+    assessment: z.string().optional(),
+    exit: ExitFieldSchema,
+    exit_reason: z
+      .enum([
+        '信息已完整',
+        '信息不足',
+        '用户阻抗',
+        '达到最大轮次',
+        '用户理解困难',
+        '话题偏离',
+        '危机信号',
+        '继续收集',
+      ])
+      .optional(),
+    content: z.string().optional(),
+    brief: z.string().optional(),
+    progress: z.string().optional(),
+    safety_check: SafetyCheckSchema.optional(),
+    crisis_detected: BooleanLikeFieldSchema.default(false),
+  })
+  .catchall(z.unknown());

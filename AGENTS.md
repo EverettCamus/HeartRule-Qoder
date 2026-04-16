@@ -45,10 +45,10 @@ packages/
 
 ### Template Files
 
-| Directory                  | Purpose              | Notes                                     |
-| -------------------------- | -------------------- | ----------------------------------------- |
-| `templates/consciousness/` | LLM prompt templates | Paired with scripts/consciousness/\*.yaml |
-| `_system/config/default/`  | Action templates     | ai_ask, ai_say, monitor versions          |
+| Directory                             | Purpose                   | Notes                                            |
+| ------------------------------------- | ------------------------- | ------------------------------------------------ |
+| `openspec/docs/consciousness-design/` | Consciousness design docs | Prototype prompt templates (not yet implemented) |
+| `_system/config/default/`             | Action templates          | ai_ask, ai_say, monitor versions                 |
 
 ## Commands
 

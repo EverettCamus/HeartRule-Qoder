@@ -247,7 +247,11 @@ export class ScriptExecutor {
     varValue: any,
     position: { phaseId?: string; topicId?: string; actionId: string }
   ): void {
-    logger.debug(`🔍 Processing variable "${varName}"`, { varName, varValue });
+    logger.debug(`🔍 Writing variable "${varName}"`, {
+      varName,
+      varValue: typeof varValue === 'string' ? varValue.substring(0, 50) : varValue,
+      topicId: position.topicId,
+    });
 
     const targetScope = scopeResolver.determineScope(varName);
     logger.debug(`📋 Target scope for "${varName}"`, { targetScope });
@@ -456,10 +460,34 @@ export class ScriptExecutor {
    * Handle completed action result
    */
   private handleCompletedAction(executionState: ExecutionState, result: ActionResult): void {
+    const action = executionState.currentAction;
     logger.debug('✅ Action completed via continue', {
-      actionId: executionState.currentAction!.actionId,
+      actionId: action?.actionId,
       hasAiMessage: !!result.aiMessage,
     });
+
+    // 保存已完成 action 的上下文（phaseId, topicId, actionId）
+    if (action) {
+      executionState.metadata.completedActionContext = {
+        phaseId: executionState.currentPhaseId,
+        topicId: executionState.currentTopicId,
+        actionId: action.actionId,
+      };
+      logger.info('📦 Saved completed action context (handleCompletedAction)', {
+        phaseId: executionState.currentPhaseId,
+        topicId: executionState.currentTopicId,
+        actionId: action.actionId,
+      });
+    }
+
+    // 保存最近完成的 action 的 output 配置
+    if (action?.config?.output) {
+      executionState.metadata.lastCompletedActionOutput = action.config.output;
+      logger.info('🔍 保存 lastCompletedActionOutput (handleCompletedAction)', {
+        actionId: action.actionId,
+        output: action.config.output,
+      });
+    }
 
     this.resultHandler.handleCompleted(executionState, result, (state, vars) => {
       const position = {
@@ -899,6 +927,19 @@ export class ScriptExecutor {
       };
       logger.debug('🔄 Saved action round info', executionState.metadata.lastActionRoundInfo);
     }
+
+    // 保存已完成 action 的上下文（phaseId, topicId, actionId）
+    // 因为 moveToNextAction 会移动指针，后续 buildSessionResponse 需要用原始位置来扁平化 variableStore
+    executionState.metadata.completedActionContext = {
+      phaseId,
+      topicId,
+      actionId: action.actionId,
+    };
+    logger.info('📦 Saved completed action context', {
+      phaseId,
+      topicId,
+      actionId: action.actionId,
+    });
   }
 
   /**
