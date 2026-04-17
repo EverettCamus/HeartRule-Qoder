@@ -414,6 +414,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               ),
               processedResponse: initialDebugInfo.response.text || '',
               preview: (initialDebugInfo.response.text || '').substring(0, 100) + '...',
+              responseTimeMs: initialDebugInfo.responseTimeMs,
             } as LLMResponseBubbleContent,
           };
           addDebugBubble(responseBubble);
@@ -805,6 +806,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             processedResponse: debugInfo.response?.text || response.aiMessage || '',
             preview:
               (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
+            responseTimeMs: debugInfo.responseTimeMs,
           } as LLMResponseBubbleContent,
         };
         addDebugBubble(responseBubble);
@@ -1088,6 +1090,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             processedResponse: debugInfo.response?.text || response.aiMessage || '',
             preview:
               (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
+            responseTimeMs: debugInfo.responseTimeMs,
           } as LLMResponseBubbleContent,
         };
         addDebugBubble(responseBubble);
@@ -1420,6 +1423,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                   ),
                   processedResponse: newSession.debugInfo.response.text || '',
                   preview: (newSession.debugInfo.response.text || '').substring(0, 100) + '...',
+                  responseTimeMs: newSession.debugInfo.responseTimeMs,
                 } as LLMResponseBubbleContent,
               };
               addDebugBubble(responseBubble);

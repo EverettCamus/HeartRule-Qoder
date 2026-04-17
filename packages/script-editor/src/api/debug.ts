@@ -36,6 +36,7 @@ export interface DebugSession {
     };
     timestamp: string;
     tokensUsed: number;
+    responseTimeMs?: number;
   };
 }
 
@@ -113,6 +114,7 @@ export interface DebugMessageResponse {
     };
     timestamp: string;
     tokensUsed: number;
+    responseTimeMs?: number;
   };
   error?: any;
 }
