@@ -30,6 +30,7 @@ export abstract class BaseLLMProvider implements LLMProvider {
     const model = this.getModel();
     const mergedConfig = { ...this.config, ...config };
     const timestamp = new Date().toISOString();
+    const startTime = Date.now();
 
     // 创建超时控制器 (25秒超时，小于前端的30秒)
     const abortController = new AbortController();
@@ -84,6 +85,7 @@ export abstract class BaseLLMProvider implements LLMProvider {
         config: mergedConfig,
         timestamp,
         tokensUsed: result.usage?.totalTokens,
+        responseTimeMs: Date.now() - startTime,
       };
 
       return {
