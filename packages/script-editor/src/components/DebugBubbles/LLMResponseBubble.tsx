@@ -98,6 +98,9 @@ const LLMResponseBubble: React.FC<LLMResponseBubbleProps> = ({
             <strong>模型:</strong> {content.model}
           </div>
           <div style={{ marginBottom: '4px' }}>
+            <strong>响应时间:</strong> {content.responseTimeMs ?? '-'}ms
+          </div>
+          <div style={{ marginBottom: '4px' }}>
             <strong>Token 使用:</strong> {content.tokens} / {content.maxTokens}
           </div>
           {actionId && (
@@ -128,6 +131,9 @@ const LLMResponseBubble: React.FC<LLMResponseBubbleProps> = ({
           <div style={{ marginBottom: '12px' }}>
             <div style={{ marginBottom: '4px' }}>
               <strong>模型:</strong> {content.model}
+            </div>
+            <div style={{ marginBottom: '4px' }}>
+              <strong>响应时间:</strong> {content.responseTimeMs ?? '-'}ms
             </div>
             <div style={{ marginBottom: '4px' }}>
               <strong>Token 使用:</strong> {content.tokens} / {content.maxTokens}
