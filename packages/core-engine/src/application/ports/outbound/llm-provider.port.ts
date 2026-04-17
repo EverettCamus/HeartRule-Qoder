@@ -1,14 +1,14 @@
 /**
  * LLM Provider Port (Outbound)
- * 
+ *
  * @remarks
  * DDD 六边形架构：出站端口定义
  * 该文件定义核心引擎对外部 LLM 服务的依赖接口
- * 
+ *
  * 职责分离：
  * - 本文件：定义接口契约（Port）
  * - api-server/adapters/outbound/llm/*：提供具体实现（Adapter）
- * 
+ *
  * 端口-适配器模式：
  * - 核心引擎只依赖此端口接口
  * - 具体的 LLM 实现（OpenAI/Volcano等）作为适配器注入
@@ -27,6 +27,7 @@ export interface LLMDebugInfo {
   config: Partial<LLMConfig>; // LLM配置
   timestamp: string; // 调用时间
   tokensUsed?: number; // 使用的token数
+  responseTimeMs?: number; // 响应时间（毫秒）
 }
 
 /**
@@ -51,7 +52,7 @@ export interface LLMConfig {
 
 /**
  * LLM提供者接口（出站端口）
- * 
+ *
  * @remarks
  * 定义了核心引擎调用 LLM 服务的标准契约
  * 具体实现由外部适配器提供（OpenAI/Volcano/Mock等）
@@ -59,14 +60,14 @@ export interface LLMConfig {
 export interface ILLMProvider {
   /**
    * 获取语言模型实例
-   * 
+   *
    * @returns Vercel AI SDK 的 LanguageModel 实例
    */
   getModel(): LanguageModel;
 
   /**
    * 生成文本（非流式）
-   * 
+   *
    * @param prompt - 提示词
    * @param config - LLM 配置（可选）
    * @returns 生成的文本及调试信息
@@ -75,7 +76,7 @@ export interface ILLMProvider {
 
   /**
    * 流式生成文本
-   * 
+   *
    * @param prompt - 提示词
    * @param config - LLM 配置（可选）
    * @returns 异步可迭代的文本流
