@@ -92,6 +92,8 @@ export interface LLMResponseBubbleContent {
   rawResponse: string; // 原始响应
   processedResponse: string; // 处理后响应
   preview: string; // 预览文本
+  responseTimeMs?: number; // 响应时间（毫秒）
+  ttftMs?: number; // 首字节时间（未来流式支持）
 }
 
 /**
