@@ -46,6 +46,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
                   config: { type: 'object', additionalProperties: true },
                   timestamp: { type: 'string' },
                   tokensUsed: { type: 'number' },
+                  responseTimeMs: { type: 'number' },
                 },
               },
               error: {
@@ -218,6 +219,11 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         const sessionMetadata = (session.metadata as any) || {};
         if (sessionMetadata.globalVariables) {
           response.globalVariables = sessionMetadata.globalVariables;
+        }
+
+        // 从 metadata 中提取 debugInfo（包含 responseTimeMs）
+        if (sessionMetadata.lastLLMDebugInfo) {
+          response.debugInfo = sessionMetadata.lastLLMDebugInfo;
         }
 
         // 构建完整的 position 信息（包含 ID 字段）
@@ -420,6 +426,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
                   config: { type: 'object', additionalProperties: true },
                   timestamp: { type: 'string' },
                   tokensUsed: { type: 'number' },
+                  responseTimeMs: { type: 'number' },
                 },
               },
               error: {

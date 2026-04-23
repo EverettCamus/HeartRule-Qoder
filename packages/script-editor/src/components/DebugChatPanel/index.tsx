@@ -370,6 +370,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       // 处理初始的 debugInfo（来自会话创建时的第一个 action）
       if (initialDebugInfo) {
         console.log('[DebugChat] 🔍 Processing initial debugInfo:', initialDebugInfo);
+        console.log('[DebugChat] ⏱️ Initial responseTimeMs:', initialDebugInfo.responseTimeMs);
 
         // 创建 LLM 提示词气泡
         const promptBubble: DebugBubble = {
@@ -790,6 +791,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         addDebugBubble(promptBubble);
 
         // 创建 LLM 响应气泡
+        console.log('[DebugChat] Full debugInfo received:', debugInfo);
         const responseBubble: DebugBubble = {
           id: uuidv4(),
           type: 'llm_response',
@@ -1201,6 +1203,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
       console.log('[DebugChat] ✅ New session created:', newSession.sessionId);
       console.log('[DebugChat] 🔍 New session debugInfo:', newSession.debugInfo);
+      console.log('[DebugChat] ⏱️ responseTimeMs from API:', newSession.debugInfo?.responseTimeMs);
 
       // 清空所有状态
       setMessages([]);

@@ -363,8 +363,8 @@ export class PromptTemplateManager {
     if (isConsultingTemplate) {
       const hasSafetyBoundary =
         templateContent.includes('【安全边界与伦理规范】') ||
-        templateContent.includes('安全边界') ||
-        templateContent.includes('Safety Boundary');
+        /^##*\s*安全边界/m.test(templateContent) ||
+        /^##*\s*Safety Boundary/im.test(templateContent);
 
       if (!hasSafetyBoundary) {
         warnings.push(

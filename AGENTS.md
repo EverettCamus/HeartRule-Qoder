@@ -277,4 +277,34 @@ export class Session {
 
 - [README.md](../README.md) - Project overview
 - [openspec/specs/\_global/process/development-guide.md](../openspec/specs/_global/process/development-guide.md) - Development guide
+
+## 经验教训 (Lessons Learned)
+
+### Fastify Response Schema 字段过滤
+
+**问题**: Fastify 默认会过滤掉响应 schema 中未定义的字段。如果 `debugInfo` 的 schema 缺少某个字段（如 `responseTimeMs`），前端将收到 `undefined`。
+
+**症状**: 后端日志显示字段存在且有值，但前端收到的是 `undefined`。
+
+**解决方案**: 在 `packages/api-server/src/routes/sessions.ts` 的响应 schema 中添加所有需要返回给前端的字段：
+
+```typescript
+debugInfo: {
+  type: 'object',
+  properties: {
+    prompt: { type: 'string' },
+    response: { type: 'object', additionalProperties: true },
+    model: { type: 'string' },
+    config: { type: 'object', additionalProperties: true },
+    timestamp: { type: 'string' },
+    tokensUsed: { type: 'number' },
+    responseTimeMs: { type: 'number' }, // 必须有此字段
+  },
+},
+```
+
+**测试**: `packages/api-server/src/routes/__tests__/response-schema.test.ts` 防止回归。
+
+**调试技巧**: 当后端有值但前端为 `undefined` 时，检查 Fastify schema 是否定义了该字段。
+
 - API docs: http://localhost:8000/docs (when running locally)

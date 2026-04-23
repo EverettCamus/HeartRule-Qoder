@@ -156,6 +156,7 @@ export abstract class BaseLLMProvider implements ILLMProvider {
     const model = this.getModel();
     const mergedConfig = { ...this.config, ...config };
     const timestamp = new Date().toISOString();
+    const startTime = Date.now();
 
     // 创建超时控制器 (25秒超时，小于前端的30秒)
     const abortController = new AbortController();
@@ -204,6 +205,7 @@ export abstract class BaseLLMProvider implements ILLMProvider {
       }
 
       // 构建调试信息
+      const responseTimeMs = Date.now() - startTime;
       const debugInfo: LLMDebugInfo = {
         prompt: actualPrompt, // 使用实际发送的 prompt
         response: {
@@ -217,6 +219,7 @@ export abstract class BaseLLMProvider implements ILLMProvider {
         config: mergedConfig,
         timestamp,
         tokensUsed: result.usage?.totalTokens,
+        responseTimeMs,
       };
 
       return {

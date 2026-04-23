@@ -73,6 +73,7 @@ export abstract class BaseLLMProvider implements LLMProvider {
       }
 
       // 构建调试信息
+      const responseTimeMs = Date.now() - startTime;
       const debugInfo: LLMDebugInfo = {
         prompt: actualPrompt,
         response: {
@@ -85,8 +86,14 @@ export abstract class BaseLLMProvider implements LLMProvider {
         config: mergedConfig,
         timestamp,
         tokensUsed: result.usage?.totalTokens,
-        responseTimeMs: Date.now() - startTime,
+        responseTimeMs,
       };
+
+      console.log('[BaseLLMProvider] ⏱️ Response time calculated:', {
+        responseTimeMs,
+        model: mergedConfig.model,
+        tokensUsed: result.usage?.totalTokens,
+      });
 
       return {
         text: result.text,

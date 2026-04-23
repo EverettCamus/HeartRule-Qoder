@@ -691,6 +691,7 @@ export class SessionManager {
           ...executionState.metadata,
           globalVariables,
           variableStore: executionState.variableStore,
+          lastLLMDebugInfo: executionState.lastLLMDebugInfo,
         },
         updatedAt: new Date(),
       })
@@ -991,7 +992,10 @@ export class SessionManager {
         globalVariables,
         false
       );
-      logger.info('🏁 initializeSession completed');
+      logger.info('🏁 initializeSession completed:', {
+        responseTimeMs: result.debugInfo?.responseTimeMs,
+        model: result.debugInfo?.model,
+      });
       return result;
     } catch (error) {
       logger.error('❌ Error during initialization:', error);
@@ -1051,6 +1055,7 @@ export class SessionManager {
               tokensUsed: result.debugInfo.tokensUsed,
               model: result.debugInfo.model,
               finishReason: result.debugInfo.response?.finishReason,
+              responseTimeMs: result.debugInfo.responseTimeMs,
             }
           : undefined,
         executionStatus: result.executionStatus,
