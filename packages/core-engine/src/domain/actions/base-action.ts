@@ -298,11 +298,11 @@ export abstract class BaseAction {
       const cwd = process.cwd();
       // 检测运行目录：适配 monorepo 结构
       if (cwd.includes('packages/api-server') || cwd.includes('packages\\api-server')) {
-        templateBasePath = path.resolve(cwd, '../../config/templates');
+        templateBasePath = path.resolve(cwd, '../../config/prompt-defaults');
       } else if (cwd.includes('packages/core-engine') || cwd.includes('packages\\core-engine')) {
-        templateBasePath = path.resolve(cwd, '../../config/templates');
+        templateBasePath = path.resolve(cwd, '../../config/prompt-defaults');
       } else {
-        templateBasePath = path.resolve(cwd, './config/templates');
+        templateBasePath = path.resolve(cwd, './config/prompt-defaults');
       }
     }
     return templateBasePath;

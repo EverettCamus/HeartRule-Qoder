@@ -25,7 +25,7 @@ export interface SessionConfig {
  * 模板解析器
  *
  * 负责模板路径解析：
- * - 文件系统模式：从 config/templates/default/ 读取
+ * - 文件系统模式：从 config/prompt-defaults/ 读取
  * - 数据库模式：使用虚拟路径 _system/config/default/
  *
  * 设计原则：
@@ -145,8 +145,8 @@ export class TemplateResolver {
     const path = await import('path');
     const projectPath = this.projectPath || process.cwd();
 
-    // 从 config/templates/default/ 读取
-    const defaultAbsPath = path.join(projectPath, 'config/templates/default', templateFileName);
+    // 从 config/prompt-defaults/ 读取
+    const defaultAbsPath = path.join(projectPath, 'config/prompt-defaults', templateFileName);
 
     const exists = await this.fileExists(defaultAbsPath, fs);
     if (!exists) {
@@ -156,8 +156,8 @@ export class TemplateResolver {
       );
     }
 
-    // 返回相对于项目根目录的路径，不包含 config/templates
-    const relativePath = path.join('config/templates/default', templateFileName);
+    // 返回相对于项目根目录的路径，不包含 config/prompt-defaults
+    const relativePath = path.join('config/prompt-defaults', templateFileName);
 
     return {
       path: relativePath,

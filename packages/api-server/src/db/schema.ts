@@ -1,4 +1,14 @@
-import { pgTable, uuid, varchar, text, timestamp, jsonb, index, pgEnum } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  varchar,
+  text,
+  timestamp,
+  jsonb,
+  index,
+  pgEnum,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 
 /**
  * 数据库Schema定义
@@ -154,7 +164,7 @@ export const projects = pgTable(
 
 /**
  * 脚本文件表（隶属于工程）
- * 
+ *
  * 对于模板文件（fileType='template'）：
  * - fileName: 模板文件名（如 ai_say_v1.md）
  * - fileContent: 存储模板的文本内容（包装为 {content: string}）
@@ -278,6 +288,31 @@ export const memories = pgTable(
   }
 );
 
+/**
+ * User-level global variable persistence
+ * Stores per-user-per-project global variable values across sessions
+ */
+export const userGlobalVariables = pgTable(
+  'user_global_variables',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: varchar('user_id', { length: 255 }).notNull(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    variables: jsonb('variables').notNull().default({}),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => {
+    return {
+      userProjectUnique: uniqueIndex('user_global_variables_user_project_unique_idx').on(
+        table.userId,
+        table.projectId
+      ),
+    };
+  }
+);
+
 // 导出类型
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
@@ -297,3 +332,5 @@ export type ProjectDraft = typeof projectDrafts.$inferSelect;
 export type NewProjectDraft = typeof projectDrafts.$inferInsert;
 export type ProjectVersion = typeof projectVersions.$inferSelect;
 export type NewProjectVersion = typeof projectVersions.$inferInsert;
+export type UserGlobalVariable = typeof userGlobalVariables.$inferSelect;
+export type NewUserGlobalVariable = typeof userGlobalVariables.$inferInsert;

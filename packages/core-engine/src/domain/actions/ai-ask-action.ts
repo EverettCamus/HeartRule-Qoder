@@ -111,6 +111,10 @@ export class AiAskAction extends BaseAction {
         return await this.executeSimple(context, userInput);
       }
     } catch (e: any) {
+      logger.error('❌ [execute] Exception caught:', {
+        message: e.message,
+        stack: e.stack?.split('\n').slice(0, 3).join('\n'),
+      });
       return {
         success: false,
         completed: true,
@@ -126,11 +130,12 @@ export class AiAskAction extends BaseAction {
     context: ActionContext,
     userInput?: string | null
   ): Promise<ActionResult> {
-    logger.debug('📝 Using template mode', { currentRound: this.currentRound });
+    logger.info('🔍 [executeMultiRound] START', { currentRound: this.currentRound });
 
     // 第一轮：生成初始问题
     if (this.currentRound === 0) {
       this.currentRound += 1;
+      logger.info('🔍 [executeMultiRound] Round 0: generating initial question');
       const result = await this.generateQuestionFromTemplate(context, AskTemplateType.MULTI_ROUND);
       return {
         ...result,
@@ -312,6 +317,11 @@ export class AiAskAction extends BaseAction {
     context: ActionContext,
     templateType: AskTemplateType
   ): Promise<ActionResult> {
+    logger.info('🔍 [generateQuestionFromTemplate] START', {
+      templateType,
+      round: this.currentRound,
+    });
+
     // 1. 加载模板
     const { resolution, template } = await this.loadTemplate(context);
 
@@ -327,15 +337,26 @@ export class AiAskAction extends BaseAction {
       systemVariables,
       monitorFeedback
     );
+    logger.info('🔍 [generateQuestionFromTemplate] Prompt built', { promptLength: prompt.length });
 
     // 4. 调用 LLM
+    logger.info('🔍 [generateQuestionFromTemplate] Calling LLM...');
     const llmResult = await this.callLLM(prompt);
+    logger.info('🔍 [generateQuestionFromTemplate] LLM response received', {
+      textLength: llmResult.text?.length,
+    });
 
     // 5. 安全检测
     const safetyCheck = this.checkSafetyBoundary(llmResult.text);
 
     // 6. 解析响应
-    return this.parseLLMResponse(llmResult, templateType, resolution, safetyCheck);
+    const result = this.parseLLMResponse(llmResult, templateType, resolution, safetyCheck);
+    logger.info('🔍 [generateQuestionFromTemplate] END', {
+      success: result.success,
+      completed: result.completed,
+      aiMessageLength: result.aiMessage?.length,
+    });
+    return result;
   }
 
   /**
@@ -806,13 +827,17 @@ ${historyText}
       const existingDef = context.scopeResolver!.getVariableDefinition(varName);
 
       if (!existingDef) {
-        // 未定义，自动在 topic 作用域中注册
+        // Check if this variable is registered as global
+        const scope = context.scopeResolver?.isGlobalVariable(varName)
+          ? VariableScope.GLOBAL
+          : VariableScope.TOPIC;
+
         context.scopeResolver!.setVariableDefinition({
           name: varName,
-          scope: VariableScope.TOPIC,
+          scope,
           define: varConfig.define || `Auto-registered from ai_ask output: ${varName}`,
         });
-        logger.info('✅ Auto-registered variable in topic scope', { varName });
+        logger.info(`✅ Auto-registered variable "${varName}" in ${scope} scope`);
       } else {
         logger.info('ℹ️ Variable already defined', {
           varName,
@@ -940,11 +965,22 @@ ${historyText}
    * 调用 LLM
    */
   private async callLLM(prompt: string) {
-    return await this.llmOrchestrator!.generateText(prompt, {
-      temperature: 0.7,
-      maxTokens: 800,
-      responseFormat: { type: 'json_object' },
-    });
+    if (!this.llmOrchestrator) {
+      throw new Error('[callLLM] LLM Orchestrator is null');
+    }
+    try {
+      return await this.llmOrchestrator.generateText(prompt, {
+        temperature: 0.7,
+        maxTokens: 4096,
+        responseFormat: { type: 'json_object' },
+      });
+    } catch (e: any) {
+      logger.error('❌ [callLLM] LLM call failed:', {
+        message: e.message,
+        promptLength: prompt.length,
+      });
+      throw e;
+    }
   }
 
   /**

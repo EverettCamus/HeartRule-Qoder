@@ -124,8 +124,8 @@ describe('安全边界检测集成测试', () => {
   it('应该能加载包含安全边界的模板', async () => {
     const manager = new PromptTemplateManager(PROJECT_ROOT);
 
-    // 加载模板（使用 config/templates/default/ai_ask_v1.md）
-    const template = await manager.loadTemplate('config/templates/default/ai_ask_v1.md');
+    // 加载模板（使用 config/prompt-defaults/ai_ask_v1.md）
+    const template = await manager.loadTemplate('config/prompt-defaults/ai_ask_v1.md');
 
     expect(template.content).toContain('【安全边界与伦理规范】');
     expect(template.content).toContain('不得进行精神疾病诊断');

@@ -110,8 +110,8 @@ export class DependencyContainer {
   }
 
   /**
-   * 创建 OpenAI Provider
-   */
+   * 创建 DeepSeek Provider
+    */
   private createOpenAIProvider(): OpenAIProvider {
     const apiKey = process.env.OPENAI_API_KEY || '';
     const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -150,6 +150,10 @@ export class DependencyContainer {
    * 获取 LLM Provider 名称（用于日志）
    */
   private getLLMProviderName(): string {
+    const providerType = process.env.LLM_PROVIDER || 'volcano';
+    if (providerType === 'deepseek') {
+      return 'DeepSeek';
+    }
     if (this.llmProvider instanceof VolcanoDeepSeekProvider) {
       return 'Volcano DeepSeek';
     }

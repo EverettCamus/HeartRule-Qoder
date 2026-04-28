@@ -17,6 +17,7 @@
     "test": "tsx test-version-switch-sync.js",
     "test:flow": "tsx test-full-flow.ts",
     "test:welcome": "tsx test-full-welcome.ts",
+    "test:global-vars": "tsx test-global-vars-persistence.ts",
     "cleanup-templates:analyze": "tsx analyze-and-cleanup-templates.ts",
     "cleanup-templates:execute": "tsx analyze-and-cleanup-templates.ts --execute",
     "cleanup-templates:auto": "tsx analyze-and-cleanup-templates.ts --execute --yes"

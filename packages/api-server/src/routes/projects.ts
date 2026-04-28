@@ -165,8 +165,22 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         .returning();
 
       // 创建默认文件
+      // Read default global.yaml from project-defaults
+      let globalVars: any = { variables: [] };
+      try {
+        const globalYamlPath = path.resolve(
+          __dirname,
+          '../../../../config/project-defaults/global.yaml'
+        );
+        const yamlContent = await fs.readFile(globalYamlPath, 'utf-8');
+        const yaml = await import('js-yaml');
+        globalVars = yaml.load(yamlContent);
+      } catch (e: any) {
+        console.warn(`[API] ⚠️  Default global.yaml not found: ${e.message}, using empty`);
+      }
+
       const defaultFiles = [
-        { fileType: 'global', fileName: 'global.yaml', fileContent: { variables: [] } },
+        { fileType: 'global', fileName: 'global.yaml', fileContent: globalVars },
         { fileType: 'roles', fileName: 'roles.yaml', fileContent: { roles: [] } },
         { fileType: 'skills', fileName: 'skills.yaml', fileContent: { skills: [] } },
       ];
@@ -190,8 +204,8 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
 
       // 初始化默认模板到数据库
       try {
-        // 使用 config/templates/default 作为模板源
-        const systemTemplatesPath = path.resolve(__dirname, '../../../../config/templates/default');
+        // 使用 config/prompt-defaults 作为模板源
+        const systemTemplatesPath = path.resolve(__dirname, '../../../../config/prompt-defaults');
 
         const templateFiles = await fs.readdir(systemTemplatesPath);
 
@@ -914,10 +928,10 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         console.log(`[PUT Template] Template not found in DB, attempting to create: ${filePath}`);
 
         try {
-          // 从 config/templates/default 读取默认模板内容
+          // 从 config/prompt-defaults 读取默认模板内容
           const systemTemplatesPath = path.resolve(
             __dirname,
-            '../../../../config/templates/default'
+            '../../../../config/prompt-defaults'
           );
           const systemFilePath = path.join(systemTemplatesPath, templatePath);
 

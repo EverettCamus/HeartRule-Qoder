@@ -19,13 +19,14 @@
  * - 查找时按优先级从内层到外层逐级查找
  */
 
+import { VariableScope } from '@heartrule/shared-types';
 import type {
   VariableStore,
   VariableValue,
   VariableDefinition,
   Position,
+  OnGlobalVariableChange,
 } from '@heartrule/shared-types';
-import { VariableScope } from '@heartrule/shared-types';
 
 import { createLogger } from '../../utils/logger.js';
 
@@ -48,6 +49,12 @@ export class VariableScopeResolver {
     value: unknown;
     timestamp: string;
   }>;
+
+  /** Variable names that should be treated as global scope */
+  public globalVariableNames: Set<string> = new Set();
+
+  /** Callback invoked when a global scope variable changes */
+  public onGlobalVariableChange: OnGlobalVariableChange | null = null;
 
   constructor(variableStore: VariableStore, variableDefinitions?: Map<string, VariableDefinition>) {
     this.variableStore = variableStore;
@@ -175,6 +182,25 @@ export class VariableScopeResolver {
    */
   public getVariableDefinition(varName: string): VariableDefinition | null {
     return this.variableDefinitions.get(varName) || null;
+  }
+
+  /** Check if a variable name is registered as global scope */
+  public isGlobalVariable(varName: string): boolean {
+    return this.globalVariableNames.has(varName);
+  }
+
+  /** Pre-register global variable names as definitions with GLOBAL scope */
+  public registerGlobalVariables(names: string[]): void {
+    for (const name of names) {
+      this.globalVariableNames.add(name);
+      if (!this.variableDefinitions.has(name)) {
+        this.setVariableDefinition({
+          name,
+          scope: 'global' as VariableScope,
+          define: `Global variable: ${name}`,
+        });
+      }
+    }
   }
 
   /**
@@ -311,12 +337,30 @@ export class VariableScopeResolver {
         });
         break;
 
-      case 'global':
+      case 'global': {
+        // Value-change guard: skip if value unchanged
+        const existingValue = this.variableStore.global[varName]?.value;
+        if (existingValue === value) {
+          logger.debug(`⏭️ Skipped duplicate global write for "${varName}": value unchanged`);
+          return;
+        }
         this.variableStore.global[varName] = variableValue;
-        logger.debug(`✅ Set variable "${varName}" in global scope`, {
-          value,
-        });
+        logger.info(
+          `🌐 [setVariable] Written to GLOBAL scope: "${varName}" = ${JSON.stringify(value)}`
+        );
+
+        // Trigger persistence callback
+        if (this.onGlobalVariableChange) {
+          logger.info(`🔔 [setVariable] Firing onGlobalVariableChange for "${varName}"`);
+          void Promise.resolve(this.onGlobalVariableChange(varName, value)).catch((error: any) => {
+            logger.error(
+              `❌ onGlobalVariableChange callback failed for "${varName}":`,
+              error.message
+            );
+          });
+        }
         break;
+      }
 
       default:
         logger.debug(`❌ Unknown scope:`, scope);

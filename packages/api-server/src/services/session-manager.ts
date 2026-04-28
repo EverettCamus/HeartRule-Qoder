@@ -12,7 +12,7 @@ import {
 } from '@heartrule/core-engine';
 import type { DetailedApiError } from '@heartrule/shared-types';
 import { VariableScope, ExecutionStatus } from '@heartrule/shared-types';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
 
@@ -23,6 +23,7 @@ import {
   scripts,
   variables,
   scriptFiles,
+  userGlobalVariables,
   type NewVariable,
 } from '../db/schema.js';
 import { container } from '../ioc/container.js';
@@ -36,6 +37,7 @@ const logger = createLogger('SessionManager');
 interface SessionData {
   id: string;
   scriptId: string;
+  userId: string;
   status: string;
   executionStatus: string;
   variables: Record<string, unknown> | null;
@@ -455,6 +457,20 @@ export class SessionManager {
       ...((sessionVariables as Record<string, unknown>) || {}),
     };
     executionState.conversationHistory = conversationHistory;
+
+    // Populate variableStore.global with loaded global variables (fix gap)
+    if (executionState.variableStore) {
+      if (!executionState.variableStore.global) executionState.variableStore.global = {};
+      for (const [key, value] of Object.entries(globalVariables)) {
+        executionState.variableStore.global[key] = {
+          value,
+          type: typeof value,
+          source: 'global_init',
+          lastUpdated: new Date().toISOString(),
+          scope: VariableScope.GLOBAL,
+        };
+      }
+    }
 
     // 将 session.metadata 中的数据传递到 executionState.metadata
     if (sessionMetadata) {
@@ -877,7 +893,13 @@ export class SessionManager {
   /**
    * 加载项目的全局变量
    */
-  private async loadGlobalVariables(scriptName: string): Promise<Record<string, any>> {
+  private async loadGlobalVariables(
+    scriptName: string,
+    userId: string
+  ): Promise<{
+    values: Record<string, any>;
+    definitions: Array<{ name: string; define?: string; defaultValue?: unknown }>;
+  }> {
     try {
       // 查找包含该脚本文件的项目
       const sessionFile = await db.query.scriptFiles.findFirst({
@@ -885,50 +907,79 @@ export class SessionManager {
       });
 
       if (!sessionFile) {
-        return {};
+        return { values: {}, definitions: [] };
       }
 
       // 查找该项目的 global.yaml 文件
       const globalFile = await db.query.scriptFiles.findFirst({
-        where: (fields, { and, eq }) =>
-          and(eq(fields.projectId, sessionFile.projectId), eq(fields.fileType, 'global')),
+        where: (fields, { and: andFn, eq: eqFn }) =>
+          andFn(eqFn(fields.projectId, sessionFile.projectId), eqFn(fields.fileType, 'global')),
       });
 
       if (!globalFile) {
-        return {};
+        return { values: {}, definitions: [] };
       }
 
-      // 解析全局变量
-      const globalVariables: Record<string, any> = {};
+      // 解析变量定义
+      const definitions: Array<{ name: string; define?: string; defaultValue?: unknown }> = [];
 
       if (globalFile.yamlContent) {
-        // 从 yamlContent 解析
         const parsed = yaml.parse(globalFile.yamlContent);
         if (parsed && parsed.variables && Array.isArray(parsed.variables)) {
           for (const varDef of parsed.variables) {
-            if (varDef.name && varDef.value !== undefined) {
-              globalVariables[varDef.name] = varDef.value;
+            if (varDef.name) {
+              definitions.push({
+                name: varDef.name,
+                define: varDef.define,
+                defaultValue: varDef.defaultValue,
+              });
             }
           }
         }
       } else if (globalFile.fileContent) {
-        // 从 fileContent 解析
         const content = globalFile.fileContent as any;
         if (content.variables && Array.isArray(content.variables)) {
           for (const varDef of content.variables) {
-            if (varDef.name && varDef.value !== undefined) {
-              globalVariables[varDef.name] = varDef.value;
+            if (varDef.name) {
+              definitions.push({
+                name: varDef.name,
+                define: varDef.define,
+                defaultValue: varDef.defaultValue,
+              });
             }
           }
         }
       }
 
-      logger.debug('📋 Loaded global variables from global.yaml:', Object.keys(globalVariables));
+      // 查询用户已存储的全局变量值
+      let storedValues: Record<string, any> = {};
+      if (userId && sessionFile.projectId) {
+        const userVars = await db.query.userGlobalVariables.findFirst({
+          where: (fields, { and: andFn, eq: eqFn }) =>
+            andFn(eqFn(fields.userId, userId), eqFn(fields.projectId, sessionFile.projectId)),
+        });
+        if (userVars?.variables) {
+          storedValues = userVars.variables as Record<string, any>;
+        }
+      }
 
-      return globalVariables;
+      // 解析最终值：已存值 > defaultValue
+      const values: Record<string, any> = {};
+      for (const def of definitions) {
+        if (def.name in storedValues) {
+          values[def.name] = storedValues[def.name];
+        } else if (def.defaultValue !== undefined) {
+          values[def.name] = def.defaultValue;
+        }
+      }
+
+      logger.debug('📋 Loaded global variables from global.yaml:', Object.keys(values));
+      logger.debug('📋 Global variable definitions:', definitions.length);
+
+      return { values, definitions };
     } catch (error) {
       logger.error('❌ Error loading global variables:', error);
-      return {};
+      return { values: {}, definitions: [] };
     }
   }
 
@@ -945,7 +996,8 @@ export class SessionManager {
 
     try {
       // 2. 加载全局变量和对话历史
-      const globalVariables = await this.loadGlobalVariables(script.scriptName);
+      const { values: globalVariables, definitions: globalVariableDefinitions } =
+        await this.loadGlobalVariables(script.scriptName, session.userId);
       const conversationHistory = await this.loadConversationHistory(sessionId);
 
       // 3. 创建初始执行状态，将projectId传递给metadata
@@ -958,6 +1010,52 @@ export class SessionManager {
           projectId: script.projectId, // 传递projectId用于模板加载
         }
       );
+
+      // 4. Inject global variable persistence callback and definitions into metadata
+      executionState.metadata.globalVariableDefinitions = globalVariableDefinitions;
+      executionState.metadata.globalVariableCallback = async (name: string, value: unknown) => {
+        try {
+          logger.info(`🔔 [GlobalVarCallback] Called: "${name}" = "${value}"`);
+          if (!script.projectId) {
+            logger.warn(`[SessionManager] Cannot persist global "${name}": projectId missing`);
+            return;
+          }
+
+          const existing = await db.query.userGlobalVariables.findFirst({
+            where: (fields, { and: andFn, eq: eqFn }) =>
+              andFn(eqFn(fields.userId, session.userId), eqFn(fields.projectId, script.projectId!)),
+          });
+
+          const merged = {
+            ...((existing?.variables as Record<string, unknown>) || {}),
+            [name]: value,
+          };
+
+          if (existing) {
+            await db
+              .update(userGlobalVariables)
+              .set({ variables: merged, updatedAt: new Date() })
+              .where(
+                and(
+                  eq(userGlobalVariables.userId, session.userId),
+                  eq(userGlobalVariables.projectId, script.projectId!)
+                )
+              );
+          } else {
+            await db.insert(userGlobalVariables).values({
+              userId: session.userId,
+              projectId: script.projectId,
+              variables: { [name]: value },
+            });
+          }
+          logger.info(`💾 [GlobalVarCallback] Persisted: "${name}" = "${value}"`);
+        } catch (err: any) {
+          logger.error(
+            `[SessionManager] Failed to persist global variable "${name}":`,
+            err.message
+          );
+        }
+      };
 
       // 5. 执行脚本
       const prevHistoryLength = executionState.conversationHistory.length;
@@ -1014,8 +1112,9 @@ export class SessionManager {
     const script = await this.loadScriptById(session.scriptId);
 
     try {
-      // 2. 加载全局变量
-      const globalVariables = await this.loadGlobalVariables(script.scriptName);
+      // 2. 加载全局变量（包含definition用于重建callback）
+      const { values: globalVariables, definitions: globalVariableDefinitions } =
+        await this.loadGlobalVariables(script.scriptName, session.userId);
 
       // 3. 保存用户消息（先保存，再加载，确保 conversationHistory 完整）
       await this.saveUserMessage(sessionId, userInput);
@@ -1029,6 +1128,52 @@ export class SessionManager {
         globalVariables,
         conversationHistory
       );
+
+      // 5.5 重建全局变量定义和回调（JSON序列化会丢失函数）
+      executionState.metadata.globalVariableDefinitions = globalVariableDefinitions;
+      executionState.metadata.globalVariableCallback = async (name: string, value: unknown) => {
+        try {
+          logger.info(`🔔 [GlobalVarCallback] Called: "${name}" = "${value}"`);
+          if (!script.projectId) {
+            logger.warn(`[SessionManager] Cannot persist global "${name}": projectId missing`);
+            return;
+          }
+
+          const existing = await db.query.userGlobalVariables.findFirst({
+            where: (fields, { and: andFn, eq: eqFn }) =>
+              andFn(eqFn(fields.userId, session.userId), eqFn(fields.projectId, script.projectId!)),
+          });
+
+          const merged = {
+            ...((existing?.variables as Record<string, unknown>) || {}),
+            [name]: value,
+          };
+
+          if (existing) {
+            await db
+              .update(userGlobalVariables)
+              .set({ variables: merged, updatedAt: new Date() })
+              .where(
+                and(
+                  eq(userGlobalVariables.userId, session.userId),
+                  eq(userGlobalVariables.projectId, script.projectId!)
+                )
+              );
+          } else {
+            await db.insert(userGlobalVariables).values({
+              userId: session.userId,
+              projectId: script.projectId,
+              variables: { [name]: value },
+            });
+          }
+          logger.info(`💾 [GlobalVarCallback] Persisted: "${name}" = "${value}"`);
+        } catch (err: any) {
+          logger.error(
+            `[SessionManager] Failed to persist global variable "${name}":`,
+            err.message
+          );
+        }
+      };
 
       // 6. 执行脚本（传递 userInput 以便 continueAction 正确处理）
       const prevHistoryLength = executionState.conversationHistory.length;

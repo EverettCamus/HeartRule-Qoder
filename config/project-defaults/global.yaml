@@ -1,0 +1,7 @@
+variables:
+  - name: 来访者名
+    define: 来访者的称呼，通常从用户首次对话中自我介绍的姓名/昵称中获取
+    defaultValue: 来访者
+  - name: 咨询师名
+    define: 咨询师在对话中的自称，用于建立专业关系
+    defaultValue: 咨询师

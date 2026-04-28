@@ -230,6 +230,7 @@ export class ScriptExecutor {
     logger.debug('🔍 Current position', { position });
 
     const scopeResolver = new VariableScopeResolver(executionState.variableStore!);
+    this.configureScopeResolver(scopeResolver, executionState);
 
     for (const [varName, varValue] of Object.entries(extractedVariables)) {
       this.writeVariableToScope(scopeResolver, varName, varValue, position);
@@ -284,6 +285,25 @@ export class ScriptExecutor {
         ? Object.keys(executionState.variableStore!.topic[position.topicId])
         : undefined;
       logger.debug(`- Topic[${position.topicId}]`, { keys: topicKeys });
+    }
+  }
+
+  /** Configure VariableScopeResolver with global variable settings from metadata */
+  private configureScopeResolver(
+    scopeResolver: VariableScopeResolver,
+    executionState: ExecutionState
+  ): void {
+    const metadata = executionState.metadata as any;
+    const globalNames: string[] | undefined = metadata.globalVariableDefinitions?.map(
+      (d: any) => d.name
+    );
+    if (globalNames && globalNames.length > 0) {
+      scopeResolver.registerGlobalVariables(globalNames);
+      logger.debug('🌐 Registered global variable names:', globalNames);
+    }
+    if (metadata.globalVariableCallback) {
+      scopeResolver.onGlobalVariableChange = metadata.globalVariableCallback;
+      logger.debug('🔗 Registered global variable change callback');
     }
   }
 
@@ -965,6 +985,7 @@ export class ScriptExecutor {
     });
 
     const scopeResolver = new VariableScopeResolver(executionState.variableStore);
+    this.configureScopeResolver(scopeResolver, executionState);
     const position = { phaseId, topicId, actionId: action.actionId };
 
     for (const [varName, varValue] of Object.entries(extractedVariables)) {
@@ -1029,6 +1050,7 @@ export class ScriptExecutor {
     let scopeResolver: VariableScopeResolver | undefined;
     if (executionState.variableStore) {
       scopeResolver = new VariableScopeResolver(executionState.variableStore);
+      this.configureScopeResolver(scopeResolver, executionState);
     }
 
     // Build execution context
@@ -1067,6 +1089,7 @@ export class ScriptExecutor {
     let scopeResolver: VariableScopeResolver | undefined;
     if (executionState.variableStore) {
       scopeResolver = new VariableScopeResolver(executionState.variableStore);
+      this.configureScopeResolver(scopeResolver, executionState);
     }
 
     // Build execution context

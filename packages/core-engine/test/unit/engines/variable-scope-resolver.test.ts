@@ -1,6 +1,6 @@
 /**
  * 测试变量作用域结构验证功能
- * 
+ *
  * 测试覆盖：
  * 1. validateStoreStructure 验证 VariableStore 结构完整性
  * 2. 变量操作历史记录追踪
@@ -167,7 +167,13 @@ describe('变量作用域结构验证', () => {
       // 场景：抑郁评分测试
       resolver.setVariable('用户姓名', '张三', VariableScope.SESSION, position, 'init_action');
       resolver.setVariable('抑郁评分', 12, VariableScope.TOPIC, position, 'assessment_action');
-      resolver.setVariable('是否需要转介', false, VariableScope.TOPIC, position, 'assessment_action');
+      resolver.setVariable(
+        '是否需要转介',
+        false,
+        VariableScope.TOPIC,
+        position,
+        'assessment_action'
+      );
 
       // 验证变量操作记录
       const operations = resolver.getVariableOperations();
@@ -187,4 +193,121 @@ describe('变量作用域结构验证', () => {
       expect(variableStore.topic['topic_1']['抑郁评分'].scope).toBe(VariableScope.TOPIC);
     });
   });
+
+  describe('Global variable support', () => {
+    it('should register global variable names', () => {
+      const variableStore = createEmptyStore();
+      const resolver = new VariableScopeResolver(variableStore);
+      resolver.registerGlobalVariables(['来访者名', '咨询师名']);
+
+      expect(resolver.isGlobalVariable('来访者名')).toBe(true);
+      expect(resolver.isGlobalVariable('咨询师名')).toBe(true);
+      expect(resolver.isGlobalVariable('未知变量')).toBe(false);
+    });
+
+    it('should register definitions with GLOBAL scope for global variables', () => {
+      const variableStore = createEmptyStore();
+      const resolver = new VariableScopeResolver(variableStore);
+      resolver.registerGlobalVariables(['来访者名']);
+
+      const def = resolver.getVariableDefinition('来访者名');
+      expect(def).not.toBeNull();
+      expect(def!.scope).toBe('global');
+    });
+
+    it('determineScope should return global for registered names', () => {
+      const variableStore = createEmptyStore();
+      const resolver = new VariableScopeResolver(variableStore);
+      resolver.registerGlobalVariables(['来访者名']);
+
+      expect(resolver.determineScope('来访者名')).toBe('global');
+      expect(resolver.determineScope('未知变量')).toBe('topic');
+    });
+
+    it('should invoke onGlobalVariableChange callback on global write', async () => {
+      const variableStore = createEmptyStore();
+      const resolver = new VariableScopeResolver(variableStore);
+      resolver.registerGlobalVariables(['来访者名']);
+
+      let callbackCalled = false;
+      let callbackName = '';
+      let callbackValue = '';
+
+      resolver.onGlobalVariableChange = async (name, value) => {
+        callbackCalled = true;
+        callbackName = name;
+        callbackValue = value as string;
+      };
+
+      resolver.setVariable('来访者名', '小明', VariableScope.GLOBAL, {
+        phaseId: 'p1',
+        topicId: 't1',
+        actionId: 'a1',
+      });
+
+      // Wait for the fire-and-forget callback to complete
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(callbackCalled).toBe(true);
+      expect(callbackName).toBe('来访者名');
+      expect(callbackValue).toBe('小明');
+    });
+
+    it('should skip callback when global variable value unchanged', async () => {
+      const variableStore = createEmptyStore();
+      const resolver = new VariableScopeResolver(variableStore);
+      resolver.registerGlobalVariables(['来访者名']);
+
+      let callbackCount = 0;
+      resolver.onGlobalVariableChange = async () => {
+        callbackCount++;
+      };
+
+      const pos = { phaseId: 'p1', topicId: 't1', actionId: 'a1' };
+
+      // First write
+      resolver.setVariable('来访者名', '小明', VariableScope.GLOBAL, pos);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(callbackCount).toBe(1);
+
+      // Second write with same value
+      resolver.setVariable('来访者名', '小明', VariableScope.GLOBAL, pos);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(callbackCount).toBe(1); // Skipped
+
+      // Third write with different value
+      resolver.setVariable('来访者名', '小红', VariableScope.GLOBAL, pos);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(callbackCount).toBe(2);
+    });
+
+    it('should not invoke callback for topic-scope writes', async () => {
+      const variableStore = createEmptyStore();
+      const resolver = new VariableScopeResolver(variableStore);
+
+      let callbackCalled = false;
+      resolver.onGlobalVariableChange = async () => {
+        callbackCalled = true;
+      };
+
+      resolver.setVariable('普通变量', 'test', VariableScope.TOPIC, {
+        phaseId: 'p1',
+        topicId: 't1',
+        actionId: 'a1',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(callbackCalled).toBe(false);
+    });
+  });
 });
+
+function createEmptyStore(): VariableStore {
+  return {
+    global: {},
+    session: {},
+    phase: {},
+    topic: {},
+  };
+}

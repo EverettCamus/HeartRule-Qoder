@@ -147,7 +147,7 @@ async function importAiAskExitProject() {
     // 第三步：复制提示词模板文件
     console.log('\n📋 第三步：复制提示词模板文件到工程');
 
-    const templatesDir = path.join(process.cwd(), 'config/templates/default');
+    const templatesDir = path.join(process.cwd(), 'config/prompt-defaults');
     const templateFiles = fs
       .readdirSync(templatesDir)
       .filter((file) => file.endsWith('.md'));

@@ -121,3 +121,13 @@ export const PositionSchema = z.object({
   topicId: z.string().optional(),
   actionId: z.string().optional(),
 });
+
+/** Variable definition from global.yaml */
+export interface GlobalVariableDefinition {
+  name: string;
+  define?: string;
+  defaultValue?: unknown;
+}
+
+/** Callback invoked when a global-scope variable value changes */
+export type OnGlobalVariableChange = (name: string, value: unknown) => void | Promise<void>;
