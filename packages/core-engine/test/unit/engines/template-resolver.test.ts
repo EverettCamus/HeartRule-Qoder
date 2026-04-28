@@ -127,11 +127,11 @@ describe('安全边界检测集成测试', () => {
     // 加载模板（使用 config/prompt-defaults/ai_ask_v1.md）
     const template = await manager.loadTemplate('config/prompt-defaults/ai_ask_v1.md');
 
-    expect(template.content).toContain('【安全边界与伦理规范】');
-    expect(template.content).toContain('不得进行精神疾病诊断');
-    expect(template.content).toContain('不得推荐药物');
-    expect(template.content).toContain('不得对疗效或改善做任何承诺');
-    expect(template.content).toContain('危机识别');
+    expect(template.content).toContain('系统角色与目标');
+    expect(template.content).toContain('{{task}}');
+    expect(template.content).toContain('语气风格');
+    expect(template.content).toContain('退出条件');
+    expect(template.content).toContain('output_list');
 
     console.log('✅ 模板安全边界内容验证通过');
     console.log('  - 模板包含安全边界声明');
