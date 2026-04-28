@@ -128,9 +128,9 @@ describe('安全边界检测集成测试', () => {
     const template = await manager.loadTemplate('config/templates/default/ai_ask_v1.md');
 
     expect(template.content).toContain('【安全边界与伦理规范】');
-    expect(template.content).toContain('诊断禁止');
-    expect(template.content).toContain('处方禁止');
-    expect(template.content).toContain('保证禁止');
+    expect(template.content).toContain('不得进行精神疾病诊断');
+    expect(template.content).toContain('不得推荐药物');
+    expect(template.content).toContain('不得对疗效或改善做任何承诺');
     expect(template.content).toContain('危机识别');
 
     console.log('✅ 模板安全边界内容验证通过');
