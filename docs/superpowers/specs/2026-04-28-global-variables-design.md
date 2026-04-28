@@ -73,23 +73,48 @@ in a dedicated table ensures they persist across sessions.
 
 #### 4.1 Initialization Flow (Session Start)
 
-In `session-manager.ts:loadGlobalVariables()`:
+In `session-manager.ts:loadGlobalVariables()` returns **both values and definitions**:
 
 ```
 1. Read project's global.yaml from DB → get variable definitions
    [{name, define, defaultValue}, ...]
 
-2. Register variable definitions in VariableScopeResolver
-   → mark which variables belong to global scope
-
-3. Query user_global_variables WHERE user_id=X AND project_id=Y
+2. Query user_global_variables WHERE user_id=X AND project_id=Y
    → stored values: {来访者名: "小明"}
 
-4. For each defined variable:
+3. For each defined variable:
    ├─ Has stored value → use stored value
-   └─ No stored value → use defaultValue
+   └─ No stored value   → use defaultValue
 
-5. Write final values to VariableStore.global
+4. Return { values: {来访者名: "小明", ...}, definitions: [{name, define, defaultValue}, ...] }
+```
+
+In `session-manager.ts:createInitialExecutionState()` — **fix gap**: populate
+`variableStore.global` with global variable values. The current code only sets
+`executionState.variables` (flat map) but leaves `variableStore.global` empty
+on fresh sessions. The `restoreExecutionState()` already does this at lines
+516-528; `createInitialExecutionState()` must do the same.
+
+In `session-manager.ts:initializeSession()`:
+
+```
+const { values, definitions } = await this.loadGlobalVariables(script.scriptName);
+
+// Pass definitions to execution metadata (used by script-executor to register global names)
+executionState.metadata.globalVariableDefinitions = definitions;
+executionState.metadata.globalVariableCallback = (name, value) => {
+    db.upsert(user_global_variables, ...);  // UPSERT via closure over userId/projectId
+};
+
+// Populate variableStore.global (fix gap from current code)
+for (const [key, value] of Object.entries(values)) {
+    executionState.variableStore.global[key] = {
+        value, type: typeof value,
+        source: 'global_init',
+        lastUpdated: new Date().toISOString(),
+        scope: VariableScope.GLOBAL,
+    };
+}
 ```
 
 #### 4.2 Persistence Trigger (Variable Write)
@@ -109,25 +134,35 @@ setVariable(name, value, "global", position)
 **Callback injection chain**:
 
 ```
-api-server/session-manager.ts                  core-engine
-────────────────────────────                   ──────────
-createSession()
-  → new SessionApplicationService()
-  → session.start()
-    → VariableScopeResolver created
-    → resolver.onGlobalVariableChange =
-        async (name, value) => {
-          db.upsert(user_global_variables, {
-            userId, projectId, variables: { [name]: value }
-          })
-        }
-    → resolver.setGlobalVariableNames([...])
-    → resolver.setVariable(...)               ← triggers callback on global writes
+api-server/session-manager.ts                              core-engine/script-executor.ts
+────────────────────────────────                           ────────────────────────────
+initializeSession()
+  → loadGlobalVariables()                                  ...
+  → executionState.metadata.globalVariableDefinitions = defs
+  → executionState.metadata.globalVariableCallback =       ...
+      async (name, value) => {                             executeScript()
+        db.upsert(user_global_variables, ...)  ──────────→   → initializeSession()
+      }                                                      → new VariableScopeResolver(variableStore)
+  → populate variableStore.global with values                → if metadata.globalVariableDefinitions:
+                                                                resolver.globalVariableNames = [...]
+                                                                resolver.onGlobalVariableChange =
+                                                                  metadata.globalVariableCallback
 ```
 
 The `onGlobalVariableChange` callback receives `name` and `value` only.
 The `userId` and `projectId` are captured via closure when the callback is
-registered in `session-manager.ts`.
+registered in `session-manager.ts`. The callback is stored in
+`executionState.metadata` and picked up by `script-executor.ts` when it
+creates the `VariableScopeResolver`.
+
+**Value-change guard (avoid excessive DB writes)**: In `VariableScopeResolver.setVariable()`,
+before invoking the callback, check if the value actually changed:
+
+```
+if (this.variableStore.global[name]?.value === value) {
+    return;  // skip duplicate write
+}
+```
 
 **Upsert logic** (PostgreSQL):
 
@@ -219,14 +254,14 @@ All references must be updated:
 
 ### Runtime
 
-| File                                                                  | Change                                                                            |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `api-server/src/routes/projects.ts`                                   | Copy `global.yaml` from `project-defaults/` instead of hardcoding empty           |
-| `api-server/src/services/session-manager.ts`                          | Extend `loadGlobalVariables()` with user-value lookup and `defaultValue` fallback |
-| `core-engine/src/engines/variable-scope/variable-scope-resolver.ts`   | Add `onGlobalVariableChange` callback, invoke on global-scope writes              |
-| `core-engine/src/domain/actions/ai-ask-action.ts`                     | In `registerOutputVariables()`, check global registry before defaulting to TOPIC  |
-| `core-engine/src/application/usecases/session-application-service.ts` | Register global variable definitions in resolver; inject persistence callback     |
-| `shared-types/src/domain/variable.ts`                                 | Add `GlobalVariableDefinition` and `OnGlobalVariableChange` types                 |
+| File                                                                | Change                                                                                                                                                                                                       |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `api-server/src/routes/projects.ts`                                 | Copy `global.yaml` from `project-defaults/` instead of hardcoding empty                                                                                                                                      |
+| `api-server/src/services/session-manager.ts`                        | Extend `loadGlobalVariables()` (return definitions + values, read `user_global_variables`); populate `variableStore.global` in `createInitialExecutionState`; inject callback into `executionState.metadata` |
+| `core-engine/src/engines/script-execution/script-executor.ts`       | Pick up `globalVariableDefinitions` and `globalVariableCallback` from `executionState.metadata`; configure `VariableScopeResolver` on creation                                                               |
+| `core-engine/src/engines/variable-scope/variable-scope-resolver.ts` | Add `globalVariableNames` set, `onGlobalVariableChange` callback, value-change guard on global writes                                                                                                        |
+| `core-engine/src/domain/actions/ai-ask-action.ts`                   | In `registerOutputVariables()`, check global registry before defaulting to TOPIC                                                                                                                             |
+| `shared-types/src/domain/variable.ts`                               | Add `GlobalVariableDefinition` and `OnGlobalVariableChange` types                                                                                                                                            |
 
 ## Key Type Definitions
 
@@ -241,15 +276,44 @@ interface GlobalVariableDefinition {
 type OnGlobalVariableChange = (name: string, value: unknown) => void | Promise<void>;
 ```
 
+## Edge Cases
+
+1. **`variableStore.global` gap on fresh session**: `createInitialExecutionState`
+   only sets flat `executionState.variables` but not `variableStore.global`.
+   This means `scopeResolver.resolveVariable()` can't find global vars on
+   fresh sessions (only works on restored sessions via `restoreExecutionState`).
+   Must be fixed for first-time sessions.
+
+2. **Duplicate DB writes**: Without a value-change guard, every `ai_ask` round
+   that extracts the same variable writes to DB. The guard `variableStore.global[name]?.value === value`
+   prevents this.
+
+3. **`global.yaml` updated in editor while session is running**: New session will
+   pick up updated definitions; running sessions use definitions loaded at init.
+   This is acceptable — no hot-reload needed.
+
+4. **Variable deleted from `global.yaml`**: If a script author removes a variable,
+   the `user_global_variables` row still has the old value (orphan data, no harm).
+
+5. **Concurrent sessions for same user/project**: Multiple sessions writing to
+   `user_global_variables` simultaneously — last write wins, acceptable for
+   variable values that are infrequently updated (name, preferences).
+
+6. **`script_files` table has existing `global.yaml` without `define` field**:
+   Backward compatible — `define` and `defaultValue` are optional. Existing
+   projects continue to work with `{variables: [{name, value}]}` format.
+
 ## Test Coverage
 
 - Unit: `global.yaml` parsing with `define` and `defaultValue` fields
-- Unit: `loadGlobalVariables()` default value fallback
-- Unit: `setVariable()` triggers callback for global scope
+- Unit: `loadGlobalVariables()` returns values + definitions; `defaultValue` fallback
+- Unit: `createInitialExecutionState` populates `variableStore.global` with loaded values
+- Unit: `setVariable()` triggers callback for global scope; skips callback when value unchanged
 - Unit: `registerOutputVariables()` uses global scope for registered variables (ai-ask-action)
 - Unit: `setGlobalVariableNames()` / `isGlobalVariable()` in resolver
 - Integration: Session init with existing `user_global_variables` record
 - Integration: Session init without existing record (first-time user)
 - Integration: Variable write during session persists to `user_global_variables`
 - Integration: Cross-session value retention (second session uses stored value)
+- Integration: `{{来访者名}}` in ai_ask template resolves from `variableStore.global`
 - E2E: New project creation copies `global.yaml` from `project-defaults/`
