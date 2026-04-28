@@ -96,14 +96,48 @@ In `session-manager.ts:loadGlobalVariables()`:
 
 In `VariableScopeResolver.setVariable()`:
 
-- When scope is `global`, invoke an `onGlobalVariableChange` callback
+- When scope is `global`, invoke the registered `onGlobalVariableChange` callback
 - The callback pattern decouples core-engine (no DB access) from api-server (DB access)
 
 ```
 setVariable(name, value, "global", position)
   → VariableStore.global[name] = value
-  → onGlobalVariableChange(name, value)  // callback to api-server
+  → this.onGlobalVariableChange?.(name, value)  // callback to api-server
     → api-server: UPSERT user_global_variables
+```
+
+**Callback injection chain**:
+
+```
+api-server/session-manager.ts                  core-engine
+────────────────────────────                   ──────────
+createSession()
+  → new SessionApplicationService()
+  → session.start()
+    → VariableScopeResolver created
+    → resolver.onGlobalVariableChange =
+        async (name, value) => {
+          db.upsert(user_global_variables, {
+            userId, projectId, variables: { [name]: value }
+          })
+        }
+    → resolver.setGlobalVariableNames([...])
+    → resolver.setVariable(...)               ← triggers callback on global writes
+```
+
+The `onGlobalVariableChange` callback receives `name` and `value` only.
+The `userId` and `projectId` are captured via closure when the callback is
+registered in `session-manager.ts`.
+
+**Upsert logic** (PostgreSQL):
+
+```sql
+INSERT INTO user_global_variables (user_id, project_id, variables)
+VALUES ($1, $2, jsonb_build_object($3, $4))
+ON CONFLICT (user_id, project_id)
+DO UPDATE SET variables = jsonb_set(
+  user_global_variables.variables, ARRAY[$3], to_jsonb($4)
+), updated_at = NOW();
 ```
 
 #### 4.3 Template Substitution (No Changes)
@@ -122,27 +156,77 @@ In `POST /projects` route handler and `ProjectInitializer`:
 | Templates from `config/templates/default/`   | Templates from `config/prompt-defaults/`                        |
 | `global.yaml` hardcoded as `{variables: []}` | `global.yaml` copied from `config/project-defaults/global.yaml` |
 
-### 6. Scope Assignment Rule
+### 6. Scope Assignment Rule — "Definition Determines Scope"
 
 Variables defined in `global.yaml` are automatically treated as **global** scope.
-When `ai_ask` extracts a variable and calls `setVariable()`, the resolver checks
-whether the variable is registered as global — if yes, it writes to global scope
-and triggers persistence.
+The mechanism works as follows:
+
+```
+1. Session init: loadGlobalVariables() reads global.yaml definitions
+   → scopeResolver.setGlobalVariableNames(["来访者名", "咨询师名"])
+
+2. ai_ask extracts variable "来访者名" = "小明"
+   → registerOutputVariables() checks: is "来访者名" in global registry?
+   → YES → setVariable("来访者名", "小明", "global", position)
+           → VariableStore.global + persistence callback
+   → NO  → setVariable("来访者名", "小明", "topic", position)   (default)
+```
+
+**Change in `ai-ask-action.ts:registerOutputVariables()`**: Currently all output variables
+default to TOPIC scope. Add a check: if the variable name is in the resolver's global
+registry, use `VariableScope.GLOBAL` instead.
+
+**New method in `VariableScopeResolver`**: `setGlobalVariableNames(names: string[])` —
+maintains a set of variable names that should be treated as global scope. Used by
+`setVariable()` and externally by `registerOutputVariables()` via a getter.
 
 Variables NOT defined in `global.yaml` continue to default to TOPIC scope as before.
 
 ## Files to Modify
 
-| File                                                                | Change                                                                                |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `config/`                                                           | Rename `templates/default` → `prompt-defaults`, create `project-defaults/global.yaml` |
-| `api-server/src/db/schema.ts`                                       | Add `user_global_variables` table definition                                          |
-| `api-server/drizzle/migrations/`                                    | New migration for `user_global_variables` table                                       |
-| `api-server/src/routes/projects.ts`                                 | Update copy paths for templates and global.yaml                                       |
-| `api-server/src/services/project-initializer.ts`                    | Update `importDefaultTemplates()` path reference                                      |
-| `api-server/src/services/session-manager.ts`                        | Extend `loadGlobalVariables()` with user-value lookup and `defaultValue` fallback     |
-| `core-engine/src/engines/variable-scope/variable-scope-resolver.ts` | Add `onGlobalVariableChange` callback, invoke on global-scope writes                  |
-| `shared-types/src/domain/variable.ts`                               | Add `GlobalVariableDefinition` and `OnGlobalVariableChange` types                     |
+### New files
+
+| File                                  | Purpose                                              |
+| ------------------------------------- | ---------------------------------------------------- |
+| `config/project-defaults/global.yaml` | Default global variable definitions for new projects |
+
+### Filesystem rename
+
+| Before                      | After                     |
+| --------------------------- | ------------------------- |
+| `config/templates/default/` | `config/prompt-defaults/` |
+
+All references must be updated:
+
+| File                                                           | Current path reference                                             | Change                                  |
+| -------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------- |
+| `core-engine/src/engines/prompt-template/template-resolver.ts` | `config/templates/default` (lines 149, 160)                        | → `config/prompt-defaults`              |
+| `core-engine/src/domain/actions/base-action.ts`                | `../../config/templates`, `./config/templates` (lines 301,303,305) | → `../../config/prompt-defaults` etc.   |
+| `core-engine/test/unit/template-validation.test.ts`            | `config/templates/default/ai_ask_v1.md` (line 400)                 | → `config/prompt-defaults/ai_ask_v1.md` |
+| `core-engine/test/unit/engines/template-resolver.test.ts`      | `config/templates/default/ai_ask_v1.md` (line 128)                 | → `config/prompt-defaults/ai_ask_v1.md` |
+| `api-server/src/routes/projects.ts`                            | `../../../../config/templates/default` (lines 194, 920)            | → `../../../../config/prompt-defaults`  |
+| `api-server/src/services/project-initializer.ts`               | `config/templates` (line 54)                                       | → `config/prompt-defaults`              |
+| `scripts/db/import-ai-ask-exit-project.ts`                     | `config/templates/default` (line 150)                              | → `config/prompt-defaults`              |
+
+> **Note**: Database virtual path `_system/config/default/` is a naming contract and is **NOT** affected by this filesystem rename.
+
+### Schema & migration
+
+| File                             | Change                                          |
+| -------------------------------- | ----------------------------------------------- |
+| `api-server/src/db/schema.ts`    | Add `user_global_variables` table definition    |
+| `api-server/drizzle/migrations/` | New migration for `user_global_variables` table |
+
+### Runtime
+
+| File                                                                  | Change                                                                            |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `api-server/src/routes/projects.ts`                                   | Copy `global.yaml` from `project-defaults/` instead of hardcoding empty           |
+| `api-server/src/services/session-manager.ts`                          | Extend `loadGlobalVariables()` with user-value lookup and `defaultValue` fallback |
+| `core-engine/src/engines/variable-scope/variable-scope-resolver.ts`   | Add `onGlobalVariableChange` callback, invoke on global-scope writes              |
+| `core-engine/src/domain/actions/ai-ask-action.ts`                     | In `registerOutputVariables()`, check global registry before defaulting to TOPIC  |
+| `core-engine/src/application/usecases/session-application-service.ts` | Register global variable definitions in resolver; inject persistence callback     |
+| `shared-types/src/domain/variable.ts`                                 | Add `GlobalVariableDefinition` and `OnGlobalVariableChange` types                 |
 
 ## Key Type Definitions
 
@@ -162,6 +246,10 @@ type OnGlobalVariableChange = (name: string, value: unknown) => void | Promise<v
 - Unit: `global.yaml` parsing with `define` and `defaultValue` fields
 - Unit: `loadGlobalVariables()` default value fallback
 - Unit: `setVariable()` triggers callback for global scope
+- Unit: `registerOutputVariables()` uses global scope for registered variables (ai-ask-action)
+- Unit: `setGlobalVariableNames()` / `isGlobalVariable()` in resolver
 - Integration: Session init with existing `user_global_variables` record
 - Integration: Session init without existing record (first-time user)
+- Integration: Variable write during session persists to `user_global_variables`
+- Integration: Cross-session value retention (second session uses stored value)
 - E2E: New project creation copies `global.yaml` from `project-defaults/`
