@@ -943,6 +943,7 @@ ${historyText}
     return await this.llmOrchestrator!.generateText(prompt, {
       temperature: 0.7,
       maxTokens: 800,
+      responseFormat: { type: 'json_object' },
     });
   }
 

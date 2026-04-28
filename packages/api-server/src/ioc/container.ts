@@ -17,6 +17,7 @@
 import { LLMOrchestrator, ScriptExecutor } from '@heartrule/core-engine';
 import type { ILLMProvider } from '@heartrule/core-engine';
 
+import { DeepSeekProvider } from '../adapters/outbound/llm/deepseek-provider.js';
 import { OpenAIProvider } from '../adapters/outbound/llm/openai-provider.js';
 import { VolcanoDeepSeekProvider } from '../adapters/outbound/llm/volcano-provider.js';
 
@@ -69,6 +70,9 @@ export class DependencyContainer {
     switch (providerType.toLowerCase()) {
       case 'openai':
         return this.createOpenAIProvider();
+
+      case 'deepseek':
+        return this.createDeepSeekProvider();
 
       case 'volcano':
       case 'volcengine':
@@ -123,6 +127,26 @@ export class DependencyContainer {
   }
 
   /**
+   * 创建 DeepSeek Provider
+   */
+  private createDeepSeekProvider(): DeepSeekProvider {
+    const apiKey = process.env.DEEPSEEK_API_KEY || '';
+    const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+    const baseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
+
+    return new DeepSeekProvider(
+      {
+        model,
+        temperature: 0.7,
+        maxTokens: 2000,
+      },
+      apiKey,
+      model,
+      baseUrl
+    );
+  }
+
+  /**
    * 获取 LLM Provider 名称（用于日志）
    */
   private getLLMProviderName(): string {
@@ -131,6 +155,9 @@ export class DependencyContainer {
     }
     if (this.llmProvider instanceof OpenAIProvider) {
       return 'OpenAI';
+    }
+    if (this.llmProvider instanceof DeepSeekProvider) {
+      return 'DeepSeek';
     }
     return 'Unknown';
   }

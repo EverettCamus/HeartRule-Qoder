@@ -46,6 +46,7 @@ export abstract class BaseLLMProvider implements LLMProvider {
         frequencyPenalty: mergedConfig.frequencyPenalty,
         presencePenalty: mergedConfig.presencePenalty,
         abortSignal: abortController.signal,
+        ...(mergedConfig.responseFormat && { responseFormat: mergedConfig.responseFormat }),
       });
 
       clearTimeout(timeoutId);
@@ -122,6 +123,7 @@ export abstract class BaseLLMProvider implements LLMProvider {
       topP: mergedConfig.topP,
       frequencyPenalty: mergedConfig.frequencyPenalty,
       presencePenalty: mergedConfig.presencePenalty,
+      ...(mergedConfig.responseFormat && { responseFormat: mergedConfig.responseFormat }),
     });
 
     for await (const chunk of result.textStream) {

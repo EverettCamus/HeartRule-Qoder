@@ -48,6 +48,7 @@ export interface LLMConfig {
   topP?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
+  responseFormat?: { type: 'json_object' };
 }
 
 /**

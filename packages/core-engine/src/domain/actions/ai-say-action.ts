@@ -192,6 +192,7 @@ export class AiSayAction extends BaseAction {
     const llmResult = await this.llmOrchestrator!.generateText(prompt, {
       temperature: 0.7,
       maxTokens: 1000,
+      responseFormat: { type: 'json_object' },
     });
 
     // 5. 安全边界检测
@@ -381,6 +382,7 @@ export class AiSayAction extends BaseAction {
         const result = await this.llmOrchestrator.generateText(`${systemPrompt}\n\n${userPrompt}`, {
           temperature: 0.7,
           maxTokens: 500,
+          responseFormat: { type: 'json_object' },
         });
 
         content = result.text;
