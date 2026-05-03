@@ -506,6 +506,22 @@ const ProjectEditor: React.FC = () => {
       if (!result.valid) {
         console.log(`[Validation] 文件打开验证失败，发现 ${result.errors.length} 个错误`);
       }
+    } else if (file.fileType === 'global' && content) {
+      setParsedScript(null);
+      setCurrentPhases([]);
+      setSelectedActionPath(null);
+      setEditMode('yaml'); // 全局变量文件只能用 YAML 模式
+
+      // 触发点 1: 文件打开时验证
+      const result = validationServiceRef.current.validateOnOpen(content);
+      setValidationResult(result);
+      setShowValidationErrors(true);
+
+      if (!result.valid) {
+        console.log(
+          `[Validation] global.yaml 文件打开验证失败，发现 ${result.errors.length} 个错误`
+        );
+      }
     } else {
       setParsedScript(null);
       setCurrentPhases([]);
@@ -604,6 +620,17 @@ const ProjectEditor: React.FC = () => {
             console.log(`[Validation] 内容变更验证失败，发现 ${result.errors.length} 个错误`);
           }
         });
+      } else if (selectedFile?.fileType === 'global') {
+        // 全局变量文件内容变更时验证（带防抖）
+        validationServiceRef.current.validateOnChange(e.target.value, (result) => {
+          setValidationResult(result);
+          setShowValidationErrors(true);
+          if (!result.valid) {
+            console.log(
+              `[Validation] global.yaml 内容变更验证失败，发现 ${result.errors.length} 个错误`
+            );
+          }
+        });
       }
     },
     [selectedFile]
@@ -641,7 +668,7 @@ const ProjectEditor: React.FC = () => {
       }
 
       // 触发点 3: 保存前验证（阻塞式）
-      if (selectedFile.fileType === 'session') {
+      if (selectedFile.fileType === 'session' || selectedFile.fileType === 'global') {
         const result = await validationServiceRef.current.validateBeforeSave(fileContent);
         setValidationResult(result);
         setShowValidationErrors(true);
@@ -875,7 +902,7 @@ const ProjectEditor: React.FC = () => {
       setHasUnsavedChanges(true);
 
       // 重新触发验证
-      if (selectedFile?.fileType === 'session') {
+      if (selectedFile?.fileType === 'session' || selectedFile?.fileType === 'global') {
         validationServiceRef.current.validateOnChange(formattedYaml, (result) => {
           setValidationResult(result);
           setShowValidationErrors(true);
@@ -1244,7 +1271,10 @@ const ProjectEditor: React.FC = () => {
           onCreateSession={handleCreateSession}
           onFormatYaml={handleFormatYAML}
           onValidate={() => {
-            if (selectedFile?.fileType === 'session' && fileContent) {
+            if (
+              (selectedFile?.fileType === 'session' || selectedFile?.fileType === 'global') &&
+              fileContent
+            ) {
               const result = validationServiceRef.current.validateManual(fileContent);
               setValidationResult(result);
               setShowValidationErrors(true);
@@ -1254,7 +1284,7 @@ const ProjectEditor: React.FC = () => {
                 message.error(`验证失败，发现 ${result.errors.length} 个错误`);
               }
             } else {
-              message.info('请选择一个会谈脚本文件');
+              message.info('请选择一个会谈脚本或全局变量文件');
             }
           }}
           onVersionHistoryClick={() => setVersionPanelVisible(true)}

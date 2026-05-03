@@ -129,6 +129,7 @@ export class SchemaPromptGenerator {
       'ai-think-config': 'ai_think动作配置',
       'use-skill-config': 'use_skill动作配置',
       'output-field': '输出字段配置',
+      global: 'Global全局变量定义',
     };
     return titleMap[schemaType] || schemaType;
   }

@@ -17,6 +17,7 @@ import aiThinkSchema from '../actions/ai-think.schema.json';
 import actionBaseSchema from '../actions/base.schema.json';
 import useSkillSchema from '../actions/use-skill.schema.json';
 import outputFieldSchema from '../common/output-field.schema.json';
+import globalSchema from '../global.schema.json';
 import phaseSchema from '../phase.schema.json';
 import sessionSchema from '../session.schema.json';
 import topicSchema from '../topic.schema.json';
@@ -30,7 +31,8 @@ export type SchemaType =
   | 'ai-say-config'
   | 'ai-think-config'
   | 'use-skill-config'
-  | 'output-field';
+  | 'output-field'
+  | 'global';
 
 /**
  * Schema 注册表
@@ -74,8 +76,12 @@ export class SchemaRegistry {
     this.ajv.addSchema(phaseSchema);
     this.ajv.addSchema(sessionSchema);
 
+    // 注册 Global Schema
+    this.ajv.addSchema(globalSchema);
+
     // 预编译常用 Schema
     this.compileSchema('session');
+    this.compileSchema('global');
     this.compileSchema('action-base');
     this.compileSchema('ai-ask-config');
     this.compileSchema('ai-say-config');
@@ -119,6 +125,7 @@ export class SchemaRegistry {
       'ai-think-config': 'ai-think-config.schema.json',
       'use-skill-config': 'use-skill-config.schema.json',
       'output-field': 'output-field.schema.json',
+      global: 'global.schema.json',
     };
     return idMap[type];
   }
