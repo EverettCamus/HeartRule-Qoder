@@ -1,6 +1,8 @@
-import { Button, Space } from 'antd';
-import React, { useState } from 'react';
+import { EditOutlined, CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons';
+import { Button, Input, Space } from 'antd';
+import React, { useRef, useState } from 'react';
 
+import { debugApi } from '../../api/debug';
 import type { VariableBubbleContent } from '../../types/debug';
 
 interface VariableBubbleProps {
@@ -9,6 +11,9 @@ interface VariableBubbleProps {
   timestamp: string;
   actionId?: string;
   onToggleExpand: () => void;
+  sessionId?: string;
+  onVariableEdit?: (scope: string, name: string, newValue: unknown) => void;
+  isLatest?: boolean;
 }
 
 const VariableBubble: React.FC<VariableBubbleProps> = ({
@@ -17,8 +22,15 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
   timestamp,
   actionId,
   onToggleExpand,
+  sessionId,
+  onVariableEdit,
+  isLatest,
 }) => {
   const [expandedScopes, setExpandedScopes] = useState<Set<string>>(new Set(['topic']));
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const inputRef = useRef<any>(null);
 
   const formatTime = (isoString: string) => {
     try {
@@ -180,8 +192,75 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
               Object.entries(variables).map(([key, value]) => {
                 const isInput = content.relevantVariables?.inputVariables.includes(key);
                 const isOutput = content.relevantVariables?.outputVariables.includes(key);
+                const editKey = `${scopeName}|${key}`;
+                const isEditing = editingKey === editKey;
+                const canEdit = content.actionStatus === 'running' && !!sessionId && isLatest;
+
+                const handleStartEdit = () => {
+                  setEditingKey(editKey);
+                  setEditValue(formatScopeValue(value));
+                  setSaveStatus('idle');
+                };
+
+                const handleSave = async () => {
+                  if (saveStatus === 'saving') return;
+                  const oldValue = value;
+                  let parsedValue: unknown = editValue;
+                  try {
+                    parsedValue = JSON.parse(editValue);
+                  } catch {
+                    // keep as string
+                  }
+
+                  setSaveStatus('saving');
+                  onVariableEdit?.(scopeName, key, parsedValue);
+
+                  if (sessionId) {
+                    try {
+                      await debugApi.updateVariable(sessionId, {
+                        variableName: key,
+                        scope: scopeName,
+                        value: parsedValue,
+                        phaseId: content.scopePath?.phaseId,
+                        topicId: content.scopePath?.topicId,
+                      });
+                      setSaveStatus('saved');
+                      setTimeout(() => {
+                        setEditingKey(null);
+                        setSaveStatus('idle');
+                      }, 1500);
+                    } catch {
+                      setSaveStatus('error');
+                      onVariableEdit?.(scopeName, key, oldValue);
+                      setTimeout(() => {
+                        setEditingKey(null);
+                        setSaveStatus('idle');
+                      }, 3000);
+                    }
+                  }
+                };
+
+                const handleCancelEdit = () => {
+                  setEditingKey(null);
+                  setSaveStatus('idle');
+                };
+
+                const handleKeyDown = (e: React.KeyboardEvent) => {
+                  if (e.key === 'Enter') handleSave();
+                  if (e.key === 'Escape') handleCancelEdit();
+                };
+
                 return (
-                  <div key={key} style={{ marginBottom: '2px' }}>
+                  <div
+                    key={key}
+                    className="variable-row"
+                    style={{
+                      marginBottom: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
                     <span style={{ fontWeight: 'bold' }}>{key}</span>
                     {isInput && (
                       <span style={{ fontSize: '10px', color: '#1890ff', marginLeft: '4px' }}>
@@ -194,7 +273,49 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
                       </span>
                     )}
                     <span>: </span>
-                    <span style={{ fontFamily: 'monospace' }}>{formatScopeValue(value)}</span>
+                    {isEditing ? (
+                      <>
+                        <Input
+                          ref={inputRef}
+                          size="small"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          onBlur={handleSave}
+                          autoFocus
+                          style={{ width: 120, fontFamily: 'monospace' }}
+                        />
+                        {saveStatus === 'saved' && (
+                          <CheckCircleFilled style={{ color: '#52c41a', fontSize: 14 }} />
+                        )}
+                        {saveStatus === 'error' && (
+                          <CloseCircleFilled style={{ color: '#ff4d4f', fontSize: 14 }} />
+                        )}
+                        {saveStatus === 'saving' && (
+                          <span style={{ fontSize: 11, color: '#999' }}>保存中...</span>
+                        )}
+                      </>
+                    ) : (
+                      <span
+                        style={{ fontFamily: 'monospace' }}
+                        onDoubleClick={canEdit ? handleStartEdit : undefined}
+                      >
+                        {formatScopeValue(value)}
+                      </span>
+                    )}
+                    {canEdit && !isEditing && (
+                      <EditOutlined
+                        className="edit-icon"
+                        onClick={handleStartEdit}
+                        style={{
+                          fontSize: 11,
+                          color: '#bbb',
+                          cursor: 'pointer',
+                          opacity: 0,
+                          transition: 'opacity 0.2s',
+                        }}
+                      />
+                    )}
                   </div>
                 );
               })
@@ -423,6 +544,9 @@ const VariableBubble: React.FC<VariableBubbleProps> = ({
           </Button>
         )}
       </Space>
+      <style>{`
+        .variable-row:hover .edit-icon { opacity: 1 !important; }
+      `}</style>
     </div>
   );
 };

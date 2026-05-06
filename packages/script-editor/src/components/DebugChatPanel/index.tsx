@@ -367,38 +367,24 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         }
       }
 
-      // 处理初始的 debugInfo（来自会话创建时的第一个 action）
+      // 处理初始的 debugInfo（来自会话创建时的第一个 action，支持数组格式）
       if (initialDebugInfo) {
-        console.log('[DebugChat] 🔍 Processing initial debugInfo:', initialDebugInfo);
-        console.log('[DebugChat] ⏱️ Initial responseTimeMs:', initialDebugInfo.responseTimeMs);
+        const initialDebugInfos = Array.isArray(initialDebugInfo)
+          ? initialDebugInfo
+          : [initialDebugInfo];
+        console.log(
+          '[DebugChat] 🔍 Processing initial debugInfos:',
+          initialDebugInfos.length,
+          'entries'
+        );
+        initialDebugInfos.forEach((info: any) => {
+          console.log('[DebugChat] ⏱️ Initial responseTimeMs:', info.responseTimeMs);
 
-        // 创建 LLM 提示词气泡
-        const promptBubble: DebugBubble = {
-          id: uuidv4(),
-          type: 'llm_prompt',
-          timestamp: initialDebugInfo.timestamp || new Date().toISOString(),
-          isExpanded: false,
-          actionId:
-            (sessionDetail.position as any)?.sourceActionId || sessionDetail.position?.actionId,
-          actionType:
-            (sessionDetail.position as any)?.sourceActionType || sessionDetail.position?.actionType,
-          content: {
-            type: 'llm_prompt',
-            systemPrompt: '',
-            userPrompt: initialDebugInfo.prompt || '',
-            conversationHistory: [],
-            preview: (initialDebugInfo.prompt || '').substring(0, 100) + '...',
-          } as LLMPromptBubbleContent,
-        };
-        addDebugBubble(promptBubble);
-        console.log('[DebugChat] ✅ Created initial LLM prompt bubble');
-
-        // 创建 LLM 响应气泡
-        if (initialDebugInfo.response) {
-          const responseBubble: DebugBubble = {
+          // 创建 LLM 提示词气泡
+          const promptBubble: DebugBubble = {
             id: uuidv4(),
-            type: 'llm_response',
-            timestamp: initialDebugInfo.timestamp || new Date().toISOString(),
+            type: 'llm_prompt',
+            timestamp: info.timestamp || new Date().toISOString(),
             isExpanded: false,
             actionId:
               (sessionDetail.position as any)?.sourceActionId || sessionDetail.position?.actionId,
@@ -406,21 +392,43 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               (sessionDetail.position as any)?.sourceActionType ||
               sessionDetail.position?.actionType,
             content: {
-              type: 'llm_response',
-              model: initialDebugInfo.model || 'unknown',
-              tokens: initialDebugInfo.tokensUsed || 0,
-              maxTokens: initialDebugInfo.config?.maxTokens || 0,
-              rawResponse: JSON.stringify(
-                initialDebugInfo.response.raw || initialDebugInfo.response
-              ),
-              processedResponse: initialDebugInfo.response.text || '',
-              preview: (initialDebugInfo.response.text || '').substring(0, 100) + '...',
-              responseTimeMs: initialDebugInfo.responseTimeMs,
-            } as LLMResponseBubbleContent,
+              type: 'llm_prompt',
+              systemPrompt: '',
+              userPrompt: info.prompt || '',
+              conversationHistory: [],
+              preview: (info.prompt || '').substring(0, 100) + '...',
+            } as LLMPromptBubbleContent,
           };
-          addDebugBubble(responseBubble);
-          console.log('[DebugChat] ✅ Created initial LLM response bubble');
-        }
+          addDebugBubble(promptBubble);
+          console.log('[DebugChat] ✅ Created initial LLM prompt bubble');
+
+          // 创建 LLM 响应气泡
+          if (info.response) {
+            const responseBubble: DebugBubble = {
+              id: uuidv4(),
+              type: 'llm_response',
+              timestamp: info.timestamp || new Date().toISOString(),
+              isExpanded: false,
+              actionId:
+                (sessionDetail.position as any)?.sourceActionId || sessionDetail.position?.actionId,
+              actionType:
+                (sessionDetail.position as any)?.sourceActionType ||
+                sessionDetail.position?.actionType,
+              content: {
+                type: 'llm_response',
+                model: info.model || 'unknown',
+                tokens: info.tokensUsed || 0,
+                maxTokens: info.config?.maxTokens || 0,
+                rawResponse: JSON.stringify(info.response.raw || info.response),
+                processedResponse: info.response.text || '',
+                preview: (info.response.text || '').substring(0, 100) + '...',
+                responseTimeMs: info.responseTimeMs,
+              } as LLMResponseBubbleContent,
+            };
+            addDebugBubble(responseBubble);
+            console.log('[DebugChat] ✅ Created initial LLM response bubble');
+          }
+        });
       }
 
       // 创建初始变量气泡（如果会话有变量）
@@ -461,6 +469,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           });
         }
 
+        const sessionActionStatus: 'running' | 'completed' | 'error' =
+          sessionDetail.executionStatus === 'completed' || sessionDetail.executionStatus === 'error'
+            ? (sessionDetail.executionStatus as 'completed' | 'error')
+            : 'running';
+
         const variableBubble: DebugBubble = {
           id: uuidv4(),
           type: 'variable',
@@ -474,6 +487,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             allVariables: categorizedVars,
             relevantVariables,
             summary: '初始变量状态',
+            actionStatus: sessionActionStatus,
           } as VariableBubbleContent,
         };
         addDebugBubble(variableBubble);
@@ -590,6 +604,10 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         hasDebugInfo: !!response.debugInfo,
         debugInfo: response.debugInfo,
       });
+
+      if (response.executionStatus && sessionInfo) {
+        setSessionInfo({ ...sessionInfo, executionStatus: response.executionStatus });
+      }
 
       // 检查响应中是否包含错误信息
       if (response.error) {
@@ -767,52 +785,56 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         addDebugBubble(variableBubble);
       }
 
-      // 检查 LLM 调试信息并创建 LLM 气泡
+      // 检查 LLM 调试信息并创建 LLM 气泡（支持多个 action 的 debugInfo）
       if (response.debugInfo) {
-        const debugInfo = response.debugInfo;
-        console.log('[DebugChat] 📍 Received LLM debugInfo:', debugInfo);
-
-        // 创建 LLM 提示词气泡
-        const promptBubble: DebugBubble = {
-          id: uuidv4(),
-          type: 'llm_prompt',
-          timestamp: debugInfo.timestamp || new Date().toISOString(),
-          isExpanded: false,
-          actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
-          actionType: (response.position as any)?.sourceActionType || response.position?.actionType,
-          content: {
+        const debugInfos = Array.isArray(response.debugInfo)
+          ? response.debugInfo
+          : [response.debugInfo];
+        console.log('[DebugChat] 📍 Received LLM debugInfos:', debugInfos.length, 'entries');
+        debugInfos.forEach((debugInfo) => {
+          // 创建 LLM 提示词气泡
+          const promptBubble: DebugBubble = {
+            id: uuidv4(),
             type: 'llm_prompt',
-            systemPrompt: '', // 服务端暂未返回
-            userPrompt: debugInfo.prompt || '',
-            conversationHistory: [], // 服务端暂未返回
-            preview: (debugInfo.prompt || '').substring(0, 100) + '...',
-          } as LLMPromptBubbleContent,
-        };
-        addDebugBubble(promptBubble);
+            timestamp: debugInfo.timestamp || new Date().toISOString(),
+            isExpanded: false,
+            actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
+            actionType:
+              (response.position as any)?.sourceActionType || response.position?.actionType,
+            content: {
+              type: 'llm_prompt',
+              systemPrompt: '', // 服务端暂未返回
+              userPrompt: debugInfo.prompt || '',
+              conversationHistory: [], // 服务端暂未返回
+              preview: (debugInfo.prompt || '').substring(0, 100) + '...',
+            } as LLMPromptBubbleContent,
+          };
+          addDebugBubble(promptBubble);
 
-        // 创建 LLM 响应气泡
-        console.log('[DebugChat] Full debugInfo received:', debugInfo);
-        const responseBubble: DebugBubble = {
-          id: uuidv4(),
-          type: 'llm_response',
-          timestamp: debugInfo.timestamp || new Date().toISOString(),
-          isExpanded: false,
-          actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
-          actionType: (response.position as any)?.sourceActionType || response.position?.actionType,
-          content: {
+          // 创建 LLM 响应气泡
+          console.log('[DebugChat] Full debugInfo received:', debugInfo);
+          const responseBubble: DebugBubble = {
+            id: uuidv4(),
             type: 'llm_response',
-            model: debugInfo.model || 'unknown',
-            tokens: debugInfo.tokensUsed || 0,
-            maxTokens: debugInfo.config?.maxTokens || 0,
-            rawResponse: JSON.stringify(debugInfo.response, null, 2),
-            processedResponse: debugInfo.response?.text || response.aiMessage || '',
-            preview:
-              (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
-            responseTimeMs: debugInfo.responseTimeMs,
-          } as LLMResponseBubbleContent,
-        };
-        addDebugBubble(responseBubble);
-
+            timestamp: debugInfo.timestamp || new Date().toISOString(),
+            isExpanded: false,
+            actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
+            actionType:
+              (response.position as any)?.sourceActionType || response.position?.actionType,
+            content: {
+              type: 'llm_response',
+              model: debugInfo.model || 'unknown',
+              tokens: debugInfo.tokensUsed || 0,
+              maxTokens: debugInfo.config?.maxTokens || 0,
+              rawResponse: JSON.stringify(debugInfo.response, null, 2),
+              processedResponse: debugInfo.response?.text || response.aiMessage || '',
+              preview:
+                (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
+              responseTimeMs: debugInfo.responseTimeMs,
+            } as LLMResponseBubbleContent,
+          };
+          addDebugBubble(responseBubble);
+        });
         console.log('[DebugChat] ✅ Created LLM prompt and response bubbles');
       }
 
@@ -1038,6 +1060,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           };
         }
 
+        const ackActionStatus: 'running' | 'completed' | 'error' =
+          response.executionStatus === 'completed' || response.executionStatus === 'error'
+            ? (response.executionStatus as 'completed' | 'error')
+            : 'running';
+
         const variableBubble: DebugBubble = {
           id: uuidv4(),
           type: 'variable',
@@ -1051,51 +1078,58 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             allVariables: categorizedVars,
             relevantVariables,
             summary: '变量更新',
+            actionStatus: ackActionStatus,
           } as VariableBubbleContent,
         };
         addDebugBubble(variableBubble);
       }
 
-      // 检查 LLM 调试信息并创建 LLM 气泡
+      // 检查 LLM 调试信息并创建 LLM 气泡（支持多个 action 的 debugInfo）
       if (response.debugInfo) {
-        const debugInfo = response.debugInfo;
-        const promptBubble: DebugBubble = {
-          id: uuidv4(),
-          type: 'llm_prompt',
-          timestamp: debugInfo.timestamp || new Date().toISOString(),
-          isExpanded: false,
-          actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
-          actionType: (response.position as any)?.sourceActionType || response.position?.actionType,
-          content: {
+        const debugInfos = Array.isArray(response.debugInfo)
+          ? response.debugInfo
+          : [response.debugInfo];
+        debugInfos.forEach((debugInfo) => {
+          const promptBubble: DebugBubble = {
+            id: uuidv4(),
             type: 'llm_prompt',
-            systemPrompt: '',
-            userPrompt: debugInfo.prompt || '',
-            conversationHistory: [],
-            preview: (debugInfo.prompt || '').substring(0, 100) + '...',
-          } as LLMPromptBubbleContent,
-        };
-        addDebugBubble(promptBubble);
+            timestamp: debugInfo.timestamp || new Date().toISOString(),
+            isExpanded: false,
+            actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
+            actionType:
+              (response.position as any)?.sourceActionType || response.position?.actionType,
+            content: {
+              type: 'llm_prompt',
+              systemPrompt: '',
+              userPrompt: debugInfo.prompt || '',
+              conversationHistory: [],
+              preview: (debugInfo.prompt || '').substring(0, 100) + '...',
+            } as LLMPromptBubbleContent,
+          };
+          addDebugBubble(promptBubble);
 
-        const responseBubble: DebugBubble = {
-          id: uuidv4(),
-          type: 'llm_response',
-          timestamp: debugInfo.timestamp || new Date().toISOString(),
-          isExpanded: false,
-          actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
-          actionType: (response.position as any)?.sourceActionType || response.position?.actionType,
-          content: {
+          const responseBubble: DebugBubble = {
+            id: uuidv4(),
             type: 'llm_response',
-            model: debugInfo.model || 'unknown',
-            tokens: debugInfo.tokensUsed || 0,
-            maxTokens: debugInfo.config?.maxTokens || 0,
-            rawResponse: JSON.stringify(debugInfo.response, null, 2),
-            processedResponse: debugInfo.response?.text || response.aiMessage || '',
-            preview:
-              (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
-            responseTimeMs: debugInfo.responseTimeMs,
-          } as LLMResponseBubbleContent,
-        };
-        addDebugBubble(responseBubble);
+            timestamp: debugInfo.timestamp || new Date().toISOString(),
+            isExpanded: false,
+            actionId: (response.position as any)?.sourceActionId || response.position?.actionId,
+            actionType:
+              (response.position as any)?.sourceActionType || response.position?.actionType,
+            content: {
+              type: 'llm_response',
+              model: debugInfo.model || 'unknown',
+              tokens: debugInfo.tokensUsed || 0,
+              maxTokens: debugInfo.config?.maxTokens || 0,
+              rawResponse: JSON.stringify(debugInfo.response, null, 2),
+              processedResponse: debugInfo.response?.text || response.aiMessage || '',
+              preview:
+                (debugInfo.response?.text || response.aiMessage || '').substring(0, 100) + '...',
+              responseTimeMs: debugInfo.responseTimeMs,
+            } as LLMResponseBubbleContent,
+          };
+          addDebugBubble(responseBubble);
+        });
       }
 
       // 更新执行位置
@@ -1362,6 +1396,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               });
             }
 
+            const restartActionStatus: 'running' | 'completed' | 'error' =
+              sessionDetail.executionStatus === 'completed' ||
+              sessionDetail.executionStatus === 'error'
+                ? (sessionDetail.executionStatus as 'completed' | 'error')
+                : 'running';
+
             const variableBubble: DebugBubble = {
               id: uuidv4(),
               type: 'variable',
@@ -1375,6 +1415,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                 allVariables: categorizedVars,
                 relevantVariables,
                 summary: '初始变量状态',
+                actionStatus: restartActionStatus,
               } as VariableBubbleContent,
             };
             addDebugBubble(variableBubble);
@@ -1632,6 +1673,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                   (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                 );
 
+                // 计算最新 variable 气泡 ID（仅最新气泡可编辑）
+                const latestVarBubbleId = debugBubbles
+                  .filter((b) => b.type === 'variable')
+                  .pop()?.id;
+
                 // 渲染
                 return items.map((item, index) => (
                   <React.Fragment key={`${item.type}-${index}`}>
@@ -1670,6 +1716,29 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                             timestamp={item.data.timestamp}
                             actionId={item.data.actionId}
                             onToggleExpand={() => toggleBubbleExpand(item.data.id)}
+                            sessionId={activeSessionId || sessionId || undefined}
+                            isLatest={item.data.id === latestVarBubbleId}
+                            onVariableEdit={(scope, name, newValue) => {
+                              setDebugBubbles((prev) =>
+                                prev.map((b) => {
+                                  if (b.type !== 'variable') return b;
+                                  const content = b.content as VariableBubbleContent;
+                                  const updatedAllVars = {
+                                    ...content.allVariables,
+                                    [scope]: {
+                                      ...(content.allVariables[
+                                        scope as keyof typeof content.allVariables
+                                      ] || {}),
+                                      [name]: newValue,
+                                    },
+                                  };
+                                  return {
+                                    ...b,
+                                    content: { ...content, allVariables: updatedAllVars },
+                                  };
+                                })
+                              );
+                            }}
                           />
                         )}
                         {item.data.type === 'llm_prompt' && (
@@ -1726,6 +1795,32 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           }}
         >
           {(() => {
+            // 检查会话是否已结束
+            const isSessionEnded =
+              sessionInfo?.executionStatus === 'completed' ||
+              sessionInfo?.executionStatus === 'error' ||
+              sessionInfo?.executionStatus === 'failed';
+
+            if (isSessionEnded) {
+              return (
+                <div style={{ textAlign: 'center', padding: '16px' }}>
+                  <Tag color={sessionInfo?.executionStatus === 'completed' ? 'green' : 'red'}>
+                    会话已结束 ({sessionInfo?.executionStatus})
+                  </Tag>
+                  {onSessionRestart && (
+                    <Button
+                      type="primary"
+                      size="small"
+                      style={{ marginLeft: '12px' }}
+                      onClick={() => onSessionRestart(activeSessionId || '')}
+                    >
+                      重新开始调试
+                    </Button>
+                  )}
+                </div>
+              );
+            }
+
             // 检查是否是 ai_say max_rounds=1 的确认模式
             const isAcknowledgmentMode =
               currentPosition?.actionType === 'ai_say' &&
