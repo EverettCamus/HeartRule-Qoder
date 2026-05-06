@@ -118,27 +118,29 @@ export async function registerSessionRoutes(app: FastifyInstance) {
 
         // Auto-cleanup: keep max 50 sessions per project
         if (projectId) {
-          const projectSessionCountResult = await db
-            .select({ count: count() })
-            .from(sessions)
-            .where(sql`${sessions.metadata}->>'projectId' = ${projectId}`);
-          const projectSessionCount = projectSessionCountResult[0]?.count ?? 0;
-
-          if (projectSessionCount > 50) {
-            const excessCount = projectSessionCount - 50;
-            const oldestToDelete = await db
-              .select({ id: sessions.id })
+          await db.transaction(async (tx) => {
+            const projectSessionCountResult = await tx
+              .select({ count: count() })
               .from(sessions)
-              .where(sql`${sessions.metadata}->>'projectId' = ${projectId}`)
-              .orderBy(sql`${sessions.updatedAt} ASC`)
-              .limit(excessCount);
+              .where(sql`${sessions.metadata}->>'projectId' = ${projectId}`);
+            const projectSessionCount = projectSessionCountResult[0]?.count ?? 0;
 
-            for (const old of oldestToDelete) {
-              await db.delete(messages).where(eq(messages.sessionId, old.id));
-              await db.delete(sessions).where(eq(sessions.id, old.id));
+            if (projectSessionCount > 50) {
+              const excessCount = projectSessionCount - 50;
+              const oldestToDelete = await tx
+                .select({ id: sessions.id })
+                .from(sessions)
+                .where(sql`${sessions.metadata}->>'projectId' = ${projectId}`)
+                .orderBy(sql`${sessions.updatedAt} ASC`)
+                .limit(excessCount);
+
+              for (const old of oldestToDelete) {
+                await tx.delete(messages).where(eq(messages.sessionId, old.id));
+                await tx.delete(sessions).where(eq(sessions.id, old.id));
+              }
+              app.log.info({ deletedCount: oldestToDelete.length }, 'Auto-cleaned old sessions');
             }
-            app.log.info({ deletedCount: oldestToDelete.length }, 'Auto-cleaned old sessions');
-          }
+          });
         }
 
         // 初始化会话，获取第一条 AI 消息
