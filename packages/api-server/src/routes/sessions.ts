@@ -130,7 +130,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
             const projectSessionCountResult = await tx
               .select({ count: count() })
               .from(sessions)
-              .where(sql`${sessions.metadata}->>'projectId' = ${projectId}`);
+              .where(sql`(((${sessions.metadata}#>>'{}'))::jsonb->>'projectId') = ${projectId}`);
             const projectSessionCount = projectSessionCountResult[0]?.count ?? 0;
 
             if (projectSessionCount > 50) {
@@ -138,7 +138,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
               const oldestToDelete = await tx
                 .select({ id: sessions.id })
                 .from(sessions)
-                .where(sql`${sessions.metadata}->>'projectId' = ${projectId}`)
+                .where(sql`(((${sessions.metadata}#>>'{}'))::jsonb->>'projectId') = ${projectId}`)
                 .orderBy(sql`${sessions.updatedAt} ASC`)
                 .limit(excessCount);
 
@@ -237,13 +237,19 @@ export async function registerSessionRoutes(app: FastifyInstance) {
             updatedAt: sessions.updatedAt,
           })
           .from(sessions)
-          .where(sql`${sessions.metadata}->>'projectId' = ${projectId}`)
+          .where(sql`(((${sessions.metadata}#>>'{}'))::jsonb->>'projectId') = ${projectId}`)
           .orderBy(sql`${sessions.updatedAt} DESC`)
           .limit(Math.min(limit, 50));
 
         // Batch query: all scripts and message counts at once
-        const scriptIds = [...new Set(projectSessions.map((s) => s.scriptId).filter(Boolean))];
         const sessionIds = projectSessions.map((s) => s.id);
+
+        // Early return for empty results to avoid inArray() with empty array
+        if (sessionIds.length === 0) {
+          return { success: true, data: [] };
+        }
+
+        const scriptIds = [...new Set(projectSessions.map((s) => s.scriptId).filter(Boolean))];
 
         const [scriptRows, msgCountRows] = await Promise.all([
           scriptIds.length > 0
