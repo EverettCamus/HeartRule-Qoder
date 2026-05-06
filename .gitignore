@@ -23,6 +23,7 @@ packages\script-editor\e2e\test-results
 .playwright/
 
 # 环境变量
+.env
 .env.local
 .env.*.local
 
