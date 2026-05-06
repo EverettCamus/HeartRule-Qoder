@@ -672,7 +672,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
       if (response.executionStatus && sessionInfo) {
         setSessionInfo({ ...sessionInfo, executionStatus: response.executionStatus });
-        onSessionStatusChange?.(currentSessionId, response.executionStatus);
       }
 
       // 检查响应中是否包含错误信息
@@ -1228,10 +1227,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       console.log('[DebugChat] Current scriptId:', sessionInfo.scriptId);
 
       // 创建新会话
+      const projectId = (sessionInfo?.metadata as any)?.projectId;
       const newSession = await debugApi.createDebugSession({
         userId: sessionInfo.userId || 'user-123',
         scriptId: sessionInfo.scriptId,
         initialVariables: {},
+        projectId: projectId || undefined,
       });
 
       console.log('[DebugChat] ✅ New session created:', newSession.sessionId);
