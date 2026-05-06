@@ -116,6 +116,31 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           updatedAt: now,
         });
 
+        // Auto-cleanup: keep max 50 sessions per project
+        if (projectId) {
+          const projectSessionCountResult = await db
+            .select({ count: count() })
+            .from(sessions)
+            .where(sql`${sessions.metadata}->>'projectId' = ${projectId}`);
+          const projectSessionCount = projectSessionCountResult[0]?.count ?? 0;
+
+          if (projectSessionCount > 50) {
+            const excessCount = projectSessionCount - 50;
+            const oldestToDelete = await db
+              .select({ id: sessions.id })
+              .from(sessions)
+              .where(sql`${sessions.metadata}->>'projectId' = ${projectId}`)
+              .orderBy(sql`${sessions.updatedAt} ASC`)
+              .limit(excessCount);
+
+            for (const old of oldestToDelete) {
+              await db.delete(messages).where(eq(messages.sessionId, old.id));
+              await db.delete(sessions).where(eq(sessions.id, old.id));
+            }
+            app.log.info({ deletedCount: oldestToDelete.length }, 'Auto-cleaned old sessions');
+          }
+        }
+
         // 初始化会话，获取第一条 AI 消息
         const sessionManager = new SessionManager();
         const initResult = await sessionManager.initializeSession(sessionId);
@@ -246,6 +271,45 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           success: false,
           error: 'Failed to list sessions',
         });
+      }
+    }
+  );
+
+  // 删除调试会话
+  app.delete(
+    '/api/sessions/:id',
+    {
+      schema: {
+        tags: ['sessions'],
+        description: '删除调试会话及其消息',
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      try {
+        const session = await db.query.sessions.findFirst({
+          where: eq(sessions.id, id),
+        });
+
+        if (!session) {
+          return reply.status(404).send({ success: false, error: 'Session not found' });
+        }
+
+        await db.delete(messages).where(eq(messages.sessionId, id));
+        await db.delete(sessions).where(eq(sessions.id, id));
+
+        return { success: true };
+      } catch (error) {
+        logError(app.log, error, { sessionId: id });
+        return reply.status(500).send({ success: false, error: 'Failed to delete session' });
       }
     }
   );
