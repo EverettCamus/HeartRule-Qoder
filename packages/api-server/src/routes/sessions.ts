@@ -1,5 +1,5 @@
 import { ExecutionStatus, ErrorCode } from '@heartrule/shared-types';
-import { eq } from 'drizzle-orm';
+import { eq, sql, count } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -162,6 +162,84 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         return sendErrorResponse(reply, error, {
           scriptId,
           scriptName: script?.scriptName,
+        });
+      }
+    }
+  );
+
+  // 列出项目的调试会话
+  app.get(
+    '/api/sessions',
+    {
+      schema: {
+        tags: ['sessions'],
+        description: '列出项目的调试会话（最近50个）',
+        querystring: {
+          type: 'object',
+          required: ['projectId'],
+          properties: {
+            projectId: { type: 'string', format: 'uuid' },
+            limit: { type: 'number', default: 50 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { projectId, limit = 50 } = request.query as {
+        projectId: string;
+        limit: number;
+      };
+
+      try {
+        // Query sessions where metadata->>'projectId' matches
+        const projectSessions = await db
+          .select({
+            id: sessions.id,
+            scriptId: sessions.scriptId,
+            status: sessions.status,
+            executionStatus: sessions.executionStatus,
+            position: sessions.position,
+            variables: sessions.variables,
+            metadata: sessions.metadata,
+            createdAt: sessions.createdAt,
+            updatedAt: sessions.updatedAt,
+          })
+          .from(sessions)
+          .where(sql`${sessions.metadata}->>'projectId' = ${projectId}`)
+          .orderBy(sql`${sessions.updatedAt} DESC`)
+          .limit(Math.min(limit, 50));
+
+        // Enrich with script file name and message count
+        const enriched = await Promise.all(
+          projectSessions.map(async (s) => {
+            const script = await db.query.scripts.findFirst({
+              where: eq(scripts.id, s.scriptId),
+            });
+            const msgCountResult = await db
+              .select({ count: count() })
+              .from(messages)
+              .where(eq(messages.sessionId, s.id));
+            const msgCount = msgCountResult[0]?.count ?? 0;
+
+            return {
+              sessionId: s.id,
+              scriptId: s.scriptId,
+              scriptFileName: script?.scriptName || 'unknown.yaml',
+              executionStatus: s.executionStatus,
+              createdAt: s.createdAt.toISOString(),
+              updatedAt: s.updatedAt.toISOString(),
+              position: s.position,
+              messageCount: msgCount,
+            };
+          })
+        );
+
+        return { success: true, data: enriched };
+      } catch (error) {
+        app.log.error(error);
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to list sessions',
         });
       }
     }
