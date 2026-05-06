@@ -203,4 +203,38 @@ export const debugApi = {
     );
     return response.data;
   },
+
+  /**
+   * 列出项目的调试会话历史
+   */
+  async listDebugSessions(projectId: string, limit = 50) {
+    const response = await axios.get<{
+      success: boolean;
+      data: Array<{
+        sessionId: string;
+        scriptId: string;
+        scriptFileName: string;
+        executionStatus: string;
+        createdAt: string;
+        updatedAt: string;
+        position: ExecutionPosition;
+        messageCount: number;
+      }>;
+    }>(`${API_BASE_URL}/sessions`, {
+      params: { projectId, limit },
+      timeout: 10000,
+    });
+    return response.data;
+  },
+
+  /**
+   * 删除调试会话
+   */
+  async deleteDebugSession(sessionId: string) {
+    const response = await axios.delete<{ success: boolean }>(
+      `${API_BASE_URL}/sessions/${sessionId}`,
+      { timeout: 10000 }
+    );
+    return response.data;
+  },
 };
