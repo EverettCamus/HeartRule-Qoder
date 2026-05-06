@@ -82,25 +82,25 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
       sessionFilesCount: sessionFiles.length,
       timestamp: new Date().toISOString(),
     });
-  
+
     try {
       setError(null);
       console.log('[DebugConfig] ⏳ Validating form fields...');
       const values = await form.validateFields();
       console.log('[DebugConfig] ✅ Form validation passed:', values);
-  
+
       // 检查是否选择了Session文件
       if (!values.sessionFileId) {
         console.error('[DebugConfig] ❌ No session file selected');
         setError('Please select a Session script');
         return;
       }
-  
+
       // 根据调试目标获取脚本内容
       console.log('[DebugConfig] 🎯 Debug target:', debugTarget, 'VersionId:', selectedVersionId);
       let scriptContent: string;
       let scriptFileName: string;
-      
+
       if (debugTarget === 'draft') {
         // 使用草稿内容
         const selectedFile = sessionFiles.find((f) => f.id === values.sessionFileId);
@@ -130,7 +130,7 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
           setError('Project ID not available');
           return;
         }
-        
+
         // 先获取选中的文件信息（用于获取文件名）
         const selectedFile = sessionFiles.find((f) => f.id === values.sessionFileId);
         if (!selectedFile) {
@@ -139,7 +139,7 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
           return;
         }
         const targetFileName = selectedFile.fileName;
-        
+
         console.log('[DebugConfig] 🔍 Fetching version content:', selectedVersionId);
         console.log('[DebugConfig] 🎯 Looking for session file:', targetFileName);
         try {
@@ -147,24 +147,27 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
           if (!versionRes.success || !versionRes.data) {
             throw new Error('Failed to fetch version content');
           }
-          
+
           const versionFiles = versionRes.data.versionFiles as Record<string, any>;
-          console.log('[DebugConfig] 📦 Version files:', Object.keys(versionFiles).map(key => ({
-            key,
-            fileName: versionFiles[key]?.fileName,
-            fileType: versionFiles[key]?.fileType,
-          })));
-          
+          console.log(
+            '[DebugConfig] 📦 Version files:',
+            Object.keys(versionFiles).map((key) => ({
+              key,
+              fileName: versionFiles[key]?.fileName,
+              fileType: versionFiles[key]?.fileType,
+            }))
+          );
+
           // 按文件名查找session文件（而不是按ID，因为版本快照中的ID可能不同）
           const sessionFileKey = Object.keys(versionFiles).find((key) => {
             const file = versionFiles[key];
             return file.fileType === 'session' && file.fileName === targetFileName;
           });
-          
+
           if (!sessionFileKey || !versionFiles[sessionFileKey]?.yamlContent) {
             throw new Error(`Session file "${targetFileName}" not found in version`);
           }
-          
+
           scriptContent = versionFiles[sessionFileKey].yamlContent;
           scriptFileName = versionFiles[sessionFileKey].fileName;
           console.log('[DebugConfig] ✅ Using version content:', {
@@ -179,9 +182,9 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
           return;
         }
       }
-  
+
       setLoading(true);
-  
+
       try {
         // 步骤1: 导入脚本到数据库，获取scriptId
         console.log('[DebugConfig] 🔵 Step 1: Importing script to database...');
@@ -199,21 +202,22 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
           currentProject?.id // 传递 projectId
         );
         console.log('[DebugConfig] ✅ Import result:', importResult);
-  
+
         if (!importResult.success || !importResult.data?.scriptId) {
           console.error('[DebugConfig] ❌ Import failed: Invalid response format');
           throw new Error('Failed to import script');
         }
-  
+
         const scriptId = importResult.data.scriptId;
         console.log('[DebugConfig] ✅ Script imported successfully, scriptId:', scriptId);
-  
+
         // 步顤2: 创建调试会话
         console.log('[DebugConfig] 🔵 Step 2: Creating debug session...');
         const sessionData = {
           userId: values.userId || 'debug_user',
           scriptId: scriptId,
           initialVariables: {},
+          projectId: currentProject?.id,
         };
         console.log('[DebugConfig] 📡 API Call: createDebugSession', sessionData);
         const sessionResult = await debugApi.createDebugSession(sessionData);
@@ -223,7 +227,7 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
           executionStatus: sessionResult.executionStatus,
           aiMessage: sessionResult.aiMessage,
         });
-  
+
         // 成功后回调
         message.success('Debug session created successfully');
         const selectedVersion = versions.find((v) => v.id === selectedVersionId);
@@ -365,11 +369,7 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
                 optionFilterProp="label"
               >
                 {versions.map((version) => (
-                  <Option
-                    key={version.id}
-                    value={version.id}
-                    label={version.versionNumber}
-                  >
+                  <Option key={version.id} value={version.id} label={version.versionNumber}>
                     <Space>
                       <span>{version.versionNumber}</span>
                       {version.id === currentProject?.currentVersionId && (
@@ -397,11 +397,7 @@ const DebugConfigModal: React.FC<DebugConfigModalProps> = ({
           />
         )}
 
-        <Form.Item
-          label="User ID"
-          name="userId"
-          tooltip="Simulated user identifier for debugging"
-        >
+        <Form.Item label="User ID" name="userId" tooltip="Simulated user identifier for debugging">
           <Input placeholder="debug_user" />
         </Form.Item>
       </Form>

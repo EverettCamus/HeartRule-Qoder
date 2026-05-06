@@ -26,6 +26,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
             userId: { type: 'string', minLength: 1 },
             scriptId: { type: 'string', format: 'uuid' },
             initialVariables: { type: 'object', additionalProperties: true },
+            projectId: { type: 'string', format: 'uuid' },
           },
         },
         response: {
@@ -72,10 +73,16 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { userId, scriptId, initialVariables } = request.body as {
+      const {
+        userId,
+        scriptId,
+        initialVariables,
+        projectId: bodyProjectId,
+      } = request.body as {
         userId: string;
         scriptId: string;
         initialVariables?: Record<string, unknown>;
+        projectId?: string;
       };
 
       let script: any = null;
@@ -95,7 +102,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         // 从 script.tags 中提取 projectId
         const tags = (script.tags as string[]) || [];
         const projectTag = tags.find((tag) => tag.startsWith('project:'));
-        const projectId = projectTag ? projectTag.replace('project:', '') : undefined;
+        const projectId =
+          bodyProjectId || (projectTag ? projectTag.replace('project:', '') : undefined);
 
         app.log.info({ scriptId, projectId, tags }, 'Creating session with projectId');
 

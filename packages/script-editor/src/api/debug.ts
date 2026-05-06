@@ -103,6 +103,7 @@ export interface CreateDebugSessionRequest {
   userId: string;
   scriptId: string;
   initialVariables?: Record<string, unknown>;
+  projectId?: string;
 }
 
 export interface SendDebugMessageRequest {
