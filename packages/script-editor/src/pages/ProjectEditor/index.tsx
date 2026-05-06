@@ -16,11 +16,13 @@ import yaml from 'js-yaml';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
+import { debugApi } from '../../api/debug';
 import { projectsApi, versionsApi } from '../../api/projects';
 import type { ScriptFile } from '../../api/projects';
 import type { ActionNodeListRef } from '../../components/ActionNodeList';
 import DebugChatPanel from '../../components/DebugChatPanel';
 import DebugConfigModal from '../../components/DebugConfigModal';
+import DebugHistoryList from '../../components/DebugHistoryList';
 import type { SessionData } from '../../components/SessionPropertyPanel';
 import TemplateEditor from '../../components/TemplateEditor';
 import TemplateSchemeManager from '../../components/TemplateSchemeManager';
@@ -177,6 +179,9 @@ const ProjectEditor: React.FC = () => {
     versionId?: string;
     versionNumber?: string;
   } | null>(null);
+  const [debugHistoryVisible, setDebugHistoryVisible] = useState(false);
+  const [lastSessionId, setLastSessionId] = useState<string | null>(null);
+  const [lastSessionUnfinished, setLastSessionUnfinished] = useState(false);
 
   // Refs
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -669,6 +674,69 @@ const ProjectEditor: React.FC = () => {
       }
     },
     [selectedFile]
+  );
+
+  // 继续调试会话
+  const handleContinueDebug = useCallback(async () => {
+    if (!lastSessionId || !projectId) return;
+
+    try {
+      // Verify the session still exists
+      await debugApi.getDebugSession(lastSessionId);
+
+      // Find a session file to import
+      const sessionFiles = files.filter((f) => f.fileType === 'session');
+      if (sessionFiles.length === 0) {
+        message.error('没有找到会话脚本文件');
+        return;
+      }
+
+      // Use the first session file (or try to match by name)
+      const targetFile = sessionFiles[0];
+
+      if (!targetFile.yamlContent) {
+        message.error('脚本文件没有内容');
+        return;
+      }
+
+      // Import latest script
+      const importResult = await debugApi.importScript(
+        targetFile.yamlContent,
+        targetFile.fileName,
+        projectId
+      );
+
+      if (!importResult.success || !importResult.data?.scriptId) {
+        message.error('导入脚本失败');
+        return;
+      }
+
+      // Open debug panel with the history session
+      setDebugSessionId(lastSessionId);
+      setDebugInitialMessage('');
+      setDebugInitialDebugInfo(null);
+      setDebugTarget(null);
+      setDebugPanelVisible(true);
+    } catch (err: any) {
+      console.error('[ContinueDebug] Failed:', err);
+      message.error('恢复调试会话失败: ' + (err.message || 'Unknown error'));
+    }
+  }, [lastSessionId, projectId, files]);
+
+  // 进入历史调试会话
+  const handleEnterHistorySession = useCallback(
+    (sessionId: string, _executionStatus: string) => {
+      setDebugHistoryVisible(false);
+      setDebugSessionId(sessionId);
+      setDebugInitialMessage('');
+      setDebugInitialDebugInfo(null);
+      setDebugTarget(null);
+      setDebugPanelVisible(true);
+      if (projectId) {
+        localStorage.setItem(`debug_last:${projectId}`, sessionId);
+      }
+    },
+    [projectId]
   );
 
   // 保存文件
@@ -1227,6 +1295,28 @@ const ProjectEditor: React.FC = () => {
     loadProjectData();
   }, [loadProjectData]);
 
+  // Check for last debug session on project load
+  useEffect(() => {
+    if (!projectId) return;
+    const lastKey = `debug_last:${projectId}`;
+    const storedSessionId = localStorage.getItem(lastKey);
+    if (storedSessionId) {
+      debugApi
+        .getDebugSession(storedSessionId)
+        .then((session) => {
+          const isUnfinished =
+            session.executionStatus === 'running' || session.executionStatus === 'waiting_input';
+          setLastSessionId(storedSessionId);
+          setLastSessionUnfinished(isUnfinished);
+        })
+        .catch(() => {
+          localStorage.removeItem(lastKey);
+          setLastSessionId(null);
+          setLastSessionUnfinished(false);
+        });
+    }
+  }, [projectId]);
+
   // 自动保存（需求3）：监听 currentPhases 变化，1秒后自动保存
   useEffect(() => {
     // 只在可视化编辑模式且有未保存变化时才自动保存
@@ -1295,14 +1385,14 @@ const ProjectEditor: React.FC = () => {
         saving={saving}
         versionPanelVisible={versionPanelVisible}
         files={files}
-        hasLastSession={false}
-        lastSessionUnfinished={false}
+        hasLastSession={!!lastSessionId}
+        lastSessionUnfinished={lastSessionUnfinished}
         onBack={() => navigate('/projects')}
         onSave={handleSave}
         onPublish={() => setPublishModalVisible(true)}
         onDebug={() => setDebugConfigVisible(true)}
-        onContinueDebug={() => setDebugConfigVisible(true)}
-        onDebugHistory={() => {}}
+        onContinueDebug={handleContinueDebug}
+        onDebugHistory={() => setDebugHistoryVisible(true)}
         onVersionToggle={() => setVersionPanelVisible(!versionPanelVisible)}
       />
 
@@ -1429,6 +1519,16 @@ const ProjectEditor: React.FC = () => {
         onCancel={() => setDebugConfigVisible(false)}
       />
 
+      {/* 调试历史列表 */}
+      {projectId && (
+        <DebugHistoryList
+          visible={debugHistoryVisible}
+          projectId={projectId}
+          onEnter={handleEnterHistorySession}
+          onClose={() => setDebugHistoryVisible(false)}
+        />
+      )}
+
       {/* 调试对话面板 */}
       <DebugChatPanel
         visible={debugPanelVisible}
@@ -1438,10 +1538,23 @@ const ProjectEditor: React.FC = () => {
         debugTarget={debugTarget}
         onClose={() => {
           setDebugPanelVisible(false);
-          setDebugSessionId(null);
-          setDebugInitialMessage('');
-          setDebugInitialDebugInfo(null);
-          setDebugTarget(null);
+        }}
+        onSessionRestart={(newSessionId) => {
+          setDebugSessionId(newSessionId);
+          if (projectId) {
+            localStorage.setItem(`debug_last:${projectId}`, newSessionId);
+          }
+        }}
+        onSessionStatusChange={(sessionId, status) => {
+          if (projectId) {
+            const isUnfinished = status === 'running' || status === 'waiting_input';
+            if (isUnfinished) {
+              localStorage.setItem(`debug_last:${projectId}`, sessionId);
+            } else {
+              localStorage.removeItem(`debug_last:${projectId}`);
+              setLastSessionUnfinished(false);
+            }
+          }
         }}
       />
 

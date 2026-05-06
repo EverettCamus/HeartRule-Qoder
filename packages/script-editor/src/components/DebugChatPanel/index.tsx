@@ -45,6 +45,7 @@ interface DebugChatPanelProps {
   debugTarget?: { type: 'draft' | 'version'; versionId?: string; versionNumber?: string } | null;
   onClose: () => void;
   onSessionRestart?: (newSessionId: string) => void; // 新增：重新开始调试的回调
+  onSessionStatusChange?: (sessionId: string, executionStatus: string) => void; // 会话状态变化回调
 }
 
 /**
@@ -113,6 +114,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   debugTarget,
   onClose,
   onSessionRestart, // 新增：接收回调
+  onSessionStatusChange, // 会话状态变化回调
 }) => {
   const [messages, setMessages] = useState<DebugMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -548,6 +550,14 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // 通知父组件会话状态变化
+  useEffect(() => {
+    const currentSessionId = activeSessionId || sessionId;
+    if (currentSessionId && sessionInfo?.executionStatus && onSessionStatusChange) {
+      onSessionStatusChange(currentSessionId, sessionInfo.executionStatus);
+    }
+  }, [sessionInfo?.executionStatus, activeSessionId, sessionId]);
 
   // 发送消息
   // 处理发送消息
@@ -1224,6 +1234,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
         // 获取会话详情
         const sessionDetail = await debugApi.getDebugSession(tempSessionId);
+        setSessionInfo(sessionDetail);
         console.log('[DebugChat] ✅ Session detail loaded:', sessionDetail);
 
         // 构建导航树
