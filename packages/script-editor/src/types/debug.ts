@@ -101,6 +101,7 @@ export interface LLMResponseBubbleContent {
  */
 export interface VariableBubbleContent {
   type: 'variable';
+  sessionId?: string;
   changedVariables: Array<{
     // 变化的变量
     name: string;

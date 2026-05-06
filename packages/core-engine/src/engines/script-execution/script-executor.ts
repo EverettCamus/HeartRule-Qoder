@@ -85,8 +85,8 @@ export interface ExecutionState {
   currentTopicId?: string;
   currentActionId?: string;
   currentActionType?: string;
-  // LLM debug info (from last LLM call)
-  lastLLMDebugInfo?: LLMDebugInfo;
+  // LLM debug info (accumulated from all LLM calls in current request)
+  lastLLMDebugInfo?: LLMDebugInfo[];
 
   /**
    * 当前Topic的实例化规划 (Story 2.1)
@@ -294,12 +294,15 @@ export class ScriptExecutor {
     executionState: ExecutionState
   ): void {
     const metadata = executionState.metadata as any;
-    const globalNames: string[] | undefined = metadata.globalVariableDefinitions?.map(
-      (d: any) => d.name
-    );
-    if (globalNames && globalNames.length > 0) {
-      scopeResolver.registerGlobalVariables(globalNames);
-      logger.debug('🌐 Registered global variable names:', globalNames);
+    const globalDefs = metadata.globalVariableDefinitions as
+      | Array<{ name: string; define?: string; defaultValue?: unknown }>
+      | undefined;
+    if (globalDefs && globalDefs.length > 0) {
+      scopeResolver.registerGlobalVariables(globalDefs);
+      logger.debug(
+        '🌐 Registered global variable definitions:',
+        globalDefs.map((d) => d.name)
+      );
     }
     if (metadata.globalVariableCallback) {
       scopeResolver.onGlobalVariableChange = metadata.globalVariableCallback;
@@ -343,11 +346,31 @@ export class ScriptExecutor {
       }
 
       // Execute all phases
+      logger.debug('executeAllPhases entry', {
+        currentPhaseIdx: executionState.currentPhaseIdx,
+        phasesLength: phases.length,
+        currentStatus: executionState.status,
+        userInput: userInput ? 'provided' : 'null/undefined',
+      });
       await this.executeAllPhases(executionState, phases, sessionId, userInput);
+      logger.debug('executeAllPhases exit', {
+        finalStatus: executionState.status,
+        finalPhaseIdx: executionState.currentPhaseIdx,
+        hasLastAiMessage: !!executionState.lastAiMessage,
+        hasError: !!executionState.metadata.error,
+        errorMessage: executionState.metadata.error,
+      });
 
-      // Only set COMPLETED if not waiting for input
-      if (executionState.status !== ExecutionStatus.WAITING_INPUT) {
+      // Only set COMPLETED if not waiting for input and not in error state
+      if (
+        executionState.status !== ExecutionStatus.WAITING_INPUT &&
+        executionState.status !== ExecutionStatus.ERROR
+      ) {
         executionState.status = ExecutionStatus.COMPLETED;
+      } else if (executionState.status === ExecutionStatus.ERROR) {
+        logger.warn('Preserving ERROR status (not overwriting to COMPLETED)', {
+          error: executionState.metadata.error,
+        });
       }
       return executionState;
     } catch (e: any) {
@@ -437,16 +460,33 @@ export class ScriptExecutor {
       return false; // Stop execution on error
     }
 
+    // 保存当前 action 类型（prepareNext 会更新 currentActionType 为下一个 action）
+    const completedActionType = executionState.currentActionType;
+
     // 先调用 prepareNext 更新索引
     this.resultHandler.prepareNext(executionState, phases);
 
-    if (result.aiMessage && executionState.status !== ExecutionStatus.COMPLETED) {
-      logger.info('✅ Action completed with aiMessage, returning to client');
+    // 脚本完成后停止
+    if (executionState.status === ExecutionStatus.COMPLETED) {
+      logger.debug('✅ Script completed after resuming action');
+      return false;
+    }
+
+    // ai_ask 完成后继续执行后续 action（用户已提供输入，exit:true 表示信息收集完毕）
+    if (completedActionType === 'ai_ask') {
+      logger.debug('✅ ai_ask completed, continuing to execute next actions');
+      return true;
+    }
+
+    // 其他类型（ai_say 等）：有新消息时暂停以展示给客户端
+    // 没有新消息时（如 require_acknowledgment 确认），继续执行后续 action
+    if (result.aiMessage) {
+      logger.debug('⏸️ Action completed, returning message to client');
       executionState.status = ExecutionStatus.WAITING_INPUT;
       return false;
     }
 
-    logger.debug('✅ Action completed, continuing to execute next actions');
+    logger.debug('✅ Action completed (no new message), continuing');
     return true;
   }
 
@@ -528,18 +568,49 @@ export class ScriptExecutor {
     sessionId: string,
     userInput: string | null | undefined
   ): Promise<void> {
+    logger.debug('executeAllPhases while-loop entry', {
+      currentPhaseIdx: executionState.currentPhaseIdx,
+      phasesLength: phases.length,
+      willEnter: executionState.currentPhaseIdx < phases.length,
+      status: executionState.status,
+    });
+
     while (executionState.currentPhaseIdx < phases.length) {
       const phase = phases[executionState.currentPhaseIdx];
       executionState.currentPhaseId = phase.phase_id;
 
+      logger.debug('Executing phase', {
+        phaseIdx: executionState.currentPhaseIdx,
+        phaseId: phase.phase_id,
+        topicCount: phase.topics?.length,
+      });
+
       await this.executePhase(phase, sessionId, executionState, userInput);
 
+      logger.debug('Phase execution returned', {
+        status: executionState.status,
+        phaseIdx: executionState.currentPhaseIdx,
+        actionIdx: executionState.currentActionIdx,
+        hasError: !!executionState.metadata.error,
+      });
+
       if (executionState.status === ExecutionStatus.WAITING_INPUT) {
+        logger.debug('Phase is WAITING_INPUT, returning');
         return; // Exit and wait for input
+      }
+
+      if (executionState.status === ExecutionStatus.ERROR) {
+        logger.debug('Phase is ERROR, returning');
+        return; // Exit and propagate error
       }
 
       this.moveToNextPhase(executionState, phases);
     }
+
+    logger.debug('executeAllPhases while-loop exited', {
+      finalPhaseIdx: executionState.currentPhaseIdx,
+      finalStatus: executionState.status,
+    });
   }
 
   /**
@@ -711,7 +782,10 @@ export class ScriptExecutor {
 
       await this.executeTopic(topic, phaseId, sessionId, executionState, userInput);
 
-      if (executionState.status === ExecutionStatus.WAITING_INPUT) {
+      if (
+        executionState.status === ExecutionStatus.WAITING_INPUT ||
+        executionState.status === ExecutionStatus.ERROR
+      ) {
         return;
       }
 
@@ -815,12 +889,16 @@ export class ScriptExecutor {
         executionState,
         userInput
       );
-      logger.debug('✅ Action result', {
+      logger.debug('Action result', {
         actionId: action.actionId,
+        actionType: executionState.currentActionType,
         completed: result.completed,
         success: result.success,
         hasAiMessage: !!result.aiMessage,
         aiMessageLength: result.aiMessage?.length,
+        hasError: !!result.error,
+        errorMessage: result.error,
+        extractedVariables: result.extractedVariables ? Object.keys(result.extractedVariables) : [],
       });
 
       // user_input only used once
@@ -836,6 +914,14 @@ export class ScriptExecutor {
       if (result.success) {
         this.handleActionCompleted(executionState, result, phaseId, topicId, action);
       } else {
+        logger.error('Action completed with error, setting ERROR status', {
+          actionId: action.actionId,
+          actionType: executionState.currentActionType,
+          error: result.error,
+          phaseIdx: executionState.currentPhaseIdx,
+          topicIdx: executionState.currentTopicIdx,
+          actionIdx: executionState.currentActionIdx,
+        });
         executionState.status = ExecutionStatus.ERROR;
         executionState.metadata.error = result.error;
         return;
@@ -871,7 +957,12 @@ export class ScriptExecutor {
     }
 
     if (result.debugInfo) {
-      executionState.lastLLMDebugInfo = result.debugInfo;
+      ExecutionResultHandler.pushDebugInfo(
+        executionState,
+        result.debugInfo,
+        executionState.currentActionId,
+        executionState.currentActionType
+      );
       logger.debug('💾 Saved LLM debug info (action not completed)', {
         hasPrompt: !!result.debugInfo.prompt,
         hasResponse: !!result.debugInfo.response,
@@ -918,8 +1009,12 @@ export class ScriptExecutor {
       }
     }
 
-    // 添加到对话历史
-    if (result.aiMessage) {
+    // Do not add transitional ai_ask exit messages to conversation history
+    const isAiAskExit = ExecutionResultHandler.isAiAskExit(
+      executionState.currentActionType,
+      result.metadata
+    );
+    if (result.aiMessage && !isAiAskExit) {
       executionState.conversationHistory.push({
         role: 'assistant',
         content: result.aiMessage,
@@ -929,9 +1024,13 @@ export class ScriptExecutor {
       executionState.lastAiMessage = result.aiMessage;
     }
 
-    // 保存 LLM debug info
     if (result.debugInfo) {
-      executionState.lastLLMDebugInfo = result.debugInfo;
+      ExecutionResultHandler.pushDebugInfo(
+        executionState,
+        result.debugInfo,
+        executionState.currentActionId,
+        executionState.currentActionType
+      );
       logger.debug('💾 Saved LLM debug info', {
         hasPrompt: !!result.debugInfo.prompt,
         hasResponse: !!result.debugInfo.response,
@@ -1159,6 +1258,7 @@ export class ScriptExecutor {
       conversationHistory: [],
       metadata: {},
       lastAiMessage: null,
+      lastLLMDebugInfo: [],
     };
   }
 }

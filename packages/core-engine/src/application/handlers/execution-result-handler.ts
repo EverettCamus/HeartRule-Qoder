@@ -15,7 +15,10 @@ import type {
   ExecutionStatus,
 } from '../../engines/script-execution/script-executor.js';
 import type { MonitorOrchestrator } from '../orchestrators/monitor-orchestrator.js';
+import type { LLMDebugInfo } from '../ports/outbound/llm-provider.port.js';
 import type { ActionStateManager } from '../state/action-state-manager.js';
+
+const MAX_DEBUG_INFO_ENTRIES = 50;
 
 /**
  * Execution Result Handler
@@ -27,6 +30,33 @@ export class ExecutionResultHandler {
     private monitorOrchestrator: MonitorOrchestrator,
     private actionStateManager: ActionStateManager
   ) {}
+
+  /**
+   * Check if an ai_ask action's response is a transitional exit message
+   * that should NOT be added to conversationHistory.
+   *
+   * Round 0: result.metadata.shouldExit === true (no exit_decision object)
+   * Round 1+: result.metadata.exit_decision.shouldExit === true
+   */
+  static isAiAskExit(actionType: string | undefined, metadata: unknown): boolean {
+    if (actionType !== 'ai_ask') return false;
+    const m = metadata as any;
+    return m?.shouldExit === true || m?.exit_decision?.shouldExit === true;
+  }
+
+  /**
+   * Push debug info to executionState.lastLLMDebugInfo with enrichment and a size cap.
+   */
+  static pushDebugInfo(
+    state: ExecutionState,
+    debugInfo: LLMDebugInfo,
+    actionId?: string,
+    actionType?: string
+  ): void {
+    if (!state.lastLLMDebugInfo) state.lastLLMDebugInfo = [];
+    if (state.lastLLMDebugInfo.length >= MAX_DEBUG_INFO_ENTRIES) return;
+    state.lastLLMDebugInfo.push({ ...debugInfo, actionId, actionType });
+  }
 
   /**
    * Handle incomplete action result (save intermediate state)
@@ -69,8 +99,12 @@ export class ExecutionResultHandler {
 
     // Save LLM debug info
     if (result.debugInfo) {
-      executionState.lastLLMDebugInfo = result.debugInfo;
-      executionState.metadata.debugInfo = result.debugInfo;
+      ExecutionResultHandler.pushDebugInfo(
+        executionState,
+        result.debugInfo,
+        executionState.currentActionId,
+        executionState.currentActionType
+      );
     }
 
     // Save round info
@@ -137,8 +171,12 @@ export class ExecutionResultHandler {
         updateVariablesFn(executionState, result.extractedVariables);
       }
 
-      // Add AI message to conversation history
-      if (result.aiMessage) {
+      // Do not add transitional ai_ask exit messages to conversation history
+      const isAiAskExit = ExecutionResultHandler.isAiAskExit(
+        executionState.currentActionType,
+        result.metadata
+      );
+      if (result.aiMessage && !isAiAskExit) {
         executionState.conversationHistory.push({
           role: 'assistant',
           content: result.aiMessage,
@@ -150,7 +188,12 @@ export class ExecutionResultHandler {
 
       // Save LLM debug info
       if (result.debugInfo) {
-        executionState.lastLLMDebugInfo = result.debugInfo;
+        ExecutionResultHandler.pushDebugInfo(
+          executionState,
+          result.debugInfo,
+          executionState.currentActionId,
+          executionState.currentActionType
+        );
       }
 
       // Clear action state after completion

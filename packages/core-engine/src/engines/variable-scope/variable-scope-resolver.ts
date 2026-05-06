@@ -189,15 +189,17 @@ export class VariableScopeResolver {
     return this.globalVariableNames.has(varName);
   }
 
-  /** Pre-register global variable names as definitions with GLOBAL scope */
-  public registerGlobalVariables(names: string[]): void {
-    for (const name of names) {
-      this.globalVariableNames.add(name);
-      if (!this.variableDefinitions.has(name)) {
+  /** Pre-register global variable definitions with GLOBAL scope */
+  public registerGlobalVariables(
+    defs: Array<{ name: string; define?: string; defaultValue?: unknown }>
+  ): void {
+    for (const def of defs) {
+      this.globalVariableNames.add(def.name);
+      if (!this.variableDefinitions.has(def.name)) {
         this.setVariableDefinition({
-          name,
+          name: def.name,
           scope: 'global' as VariableScope,
-          define: `Global variable: ${name}`,
+          define: def.define || `Global variable: ${def.name}`,
         });
       }
     }

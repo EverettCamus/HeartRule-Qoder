@@ -50,8 +50,8 @@ export interface ExecutionRuntime {
   // 最近的AI消息（用于返回给用户）
   lastAiMessage: string | null;
 
-  // 最近一次LLM调用的调试信息
-  lastLLMDebugInfo?: LLMDebugInfo;
+  // 本次请求中所有LLM调用的调试信息
+  lastLLMDebugInfo?: LLMDebugInfo[];
 }
 
 /**
@@ -166,8 +166,8 @@ export interface LegacyExecutionState {
   currentTopicId?: string;
   currentActionId?: string;
   currentActionType?: string;
-  // LLM调试信息
-  lastLLMDebugInfo?: LLMDebugInfo;
+  // LLM调试信息（累积）
+  lastLLMDebugInfo?: LLMDebugInfo[];
 }
 
 /**

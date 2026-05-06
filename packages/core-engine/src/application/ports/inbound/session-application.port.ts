@@ -99,8 +99,8 @@ export interface SessionExecutionResponse {
     phase: Record<string, unknown>;
     topic: Record<string, unknown>;
   };
-  /** LLM 调试信息 */
-  debugInfo?: LLMDebugInfo;
+  /** LLM 调试信息（支持多个 action 的调试信息） */
+  debugInfo?: LLMDebugInfo[];
   /** 错误信息（如果执行失败） */
   error?: {
     code: string;

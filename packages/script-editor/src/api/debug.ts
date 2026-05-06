@@ -13,31 +13,35 @@ export interface DebugSession {
   variables?: Record<string, unknown>; // 所有变量（已合并）
   globalVariables?: Record<string, unknown>; // 全局变量
   position?: ExecutionPosition;
-  debugInfo?: {
-    prompt: string;
-    response: {
-      text: string;
-      finishReason: string;
-      usage: {
-        completionTokens: number;
-        promptTokens: number;
-        totalTokens: number;
-      };
-      raw: any;
+  debugInfo?: DebugInfo[];
+}
+
+export interface DebugInfo {
+  prompt: string;
+  response: {
+    text: string;
+    finishReason: string;
+    usage: {
+      completionTokens: number;
+      promptTokens: number;
+      totalTokens: number;
     };
-    model: string;
-    config: {
-      temperature: number;
-      maxTokens: number;
-      topP: number;
-      frequencyPenalty: number;
-      presencePenalty: number;
-      model: string;
-    };
-    timestamp: string;
-    tokensUsed: number;
-    responseTimeMs?: number;
+    raw: any;
   };
+  model: string;
+  config: {
+    temperature: number;
+    maxTokens: number;
+    topP: number;
+    frequencyPenalty: number;
+    presencePenalty: number;
+    model: string;
+  };
+  timestamp: string;
+  tokensUsed: number;
+  responseTimeMs?: number;
+  actionId?: string;
+  actionType?: string;
 }
 
 export interface DebugMessage {
@@ -91,31 +95,7 @@ export interface DebugMessageResponse {
     topic: Record<string, unknown>;
   };
   position?: ExecutionPosition;
-  debugInfo?: {
-    prompt: string;
-    response: {
-      text: string;
-      finishReason: string;
-      usage: {
-        completionTokens: number;
-        promptTokens: number;
-        totalTokens: number;
-      };
-      raw: any;
-    };
-    model: string;
-    config: {
-      temperature: number;
-      maxTokens: number;
-      topP: number;
-      frequencyPenalty: number;
-      presencePenalty: number;
-      model: string;
-    };
-    timestamp: string;
-    tokensUsed: number;
-    responseTimeMs?: number;
-  };
+  debugInfo?: DebugInfo[];
   error?: any;
 }
 
@@ -177,6 +157,31 @@ export const debugApi = {
         timeout: 30000,
       }
     );
+    return response.data;
+  },
+
+  /**
+   * 更新变量值（手动编辑）
+   */
+  async updateVariable(
+    sessionId: string,
+    data: {
+      variableName: string;
+      scope: string;
+      value: unknown;
+      phaseId?: string;
+      topicId?: string;
+    }
+  ) {
+    const response = await axios.patch<{
+      success: boolean;
+      variableName: string;
+      scope: string;
+      value: unknown;
+      updatedAt: string;
+    }>(`${API_BASE_URL}/sessions/${sessionId}/variables`, data, {
+      timeout: 10000,
+    });
     return response.data;
   },
 

@@ -38,7 +38,7 @@ describe('SchemaValidator', () => {
       expect(result.valid).toBe(false);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0].errorType).toBe('SYNTAX_ERROR');
-      expect(result.errors[0].message).toContain('YAML 语法错误');
+      expect(result.errors[0].message).toContain('YAML 内容不完整');
     });
 
     it('应该检测无法识别的脚本类型', () => {

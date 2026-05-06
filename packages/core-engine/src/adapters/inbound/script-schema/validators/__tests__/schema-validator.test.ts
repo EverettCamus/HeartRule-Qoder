@@ -249,7 +249,7 @@ session:
       const result = validator.validateYAML(invalidYaml);
       expect(result.valid).toBe(false);
       expect(result.errors[0].errorType).toBe('SYNTAX_ERROR');
-      expect(result.errors[0].message).toContain('YAML 语法错误');
+      expect(result.errors[0].message).toContain('YAML 内容不完整');
     });
 
     it('应该验证失败：无法识别的脚本类型', () => {

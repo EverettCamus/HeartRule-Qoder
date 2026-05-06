@@ -174,7 +174,8 @@ describe('Phase 8 重构：ExecutionResultHandler 执行结果处理器分离', 
         updateVariablesFn
       );
 
-      expect(executionState.metadata.debugInfo).toEqual({
+      expect(executionState.lastLLMDebugInfo).toHaveLength(1);
+      expect(executionState.lastLLMDebugInfo[0]).toMatchObject({
         requestId: 'test-2',
       });
     });

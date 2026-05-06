@@ -198,7 +198,7 @@ describe('变量作用域结构验证', () => {
     it('should register global variable names', () => {
       const variableStore = createEmptyStore();
       const resolver = new VariableScopeResolver(variableStore);
-      resolver.registerGlobalVariables(['来访者名', '咨询师名']);
+      resolver.registerGlobalVariables([{ name: '来访者名' }, { name: '咨询师名' }]);
 
       expect(resolver.isGlobalVariable('来访者名')).toBe(true);
       expect(resolver.isGlobalVariable('咨询师名')).toBe(true);
@@ -208,7 +208,7 @@ describe('变量作用域结构验证', () => {
     it('should register definitions with GLOBAL scope for global variables', () => {
       const variableStore = createEmptyStore();
       const resolver = new VariableScopeResolver(variableStore);
-      resolver.registerGlobalVariables(['来访者名']);
+      resolver.registerGlobalVariables([{ name: '来访者名' }]);
 
       const def = resolver.getVariableDefinition('来访者名');
       expect(def).not.toBeNull();
@@ -218,7 +218,7 @@ describe('变量作用域结构验证', () => {
     it('determineScope should return global for registered names', () => {
       const variableStore = createEmptyStore();
       const resolver = new VariableScopeResolver(variableStore);
-      resolver.registerGlobalVariables(['来访者名']);
+      resolver.registerGlobalVariables([{ name: '来访者名' }]);
 
       expect(resolver.determineScope('来访者名')).toBe('global');
       expect(resolver.determineScope('未知变量')).toBe('topic');
@@ -227,7 +227,7 @@ describe('变量作用域结构验证', () => {
     it('should invoke onGlobalVariableChange callback on global write', async () => {
       const variableStore = createEmptyStore();
       const resolver = new VariableScopeResolver(variableStore);
-      resolver.registerGlobalVariables(['来访者名']);
+      resolver.registerGlobalVariables([{ name: '来访者名' }]);
 
       let callbackCalled = false;
       let callbackName = '';
@@ -256,7 +256,7 @@ describe('变量作用域结构验证', () => {
     it('should skip callback when global variable value unchanged', async () => {
       const variableStore = createEmptyStore();
       const resolver = new VariableScopeResolver(variableStore);
-      resolver.registerGlobalVariables(['来访者名']);
+      resolver.registerGlobalVariables([{ name: '来访者名' }]);
 
       let callbackCount = 0;
       resolver.onGlobalVariableChange = async () => {

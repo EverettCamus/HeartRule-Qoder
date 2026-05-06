@@ -10,10 +10,10 @@ import type {
 
 /**
  * Session Application Service 测试套件
- * 
+ *
  * @remarks
  * DDD 第三阶段重构 - 应用服务接口测试
- * 
+ *
  * 测试目标:
  * 1. 验证应用服务接口的正确实现
  * 2. 确保核心引擎与 API 层的边界清晰
@@ -95,13 +95,15 @@ describe('SessionApplicationService', () => {
         ],
         metadata: {},
         lastAiMessage: 'Hello, Alice!',
-        lastLLMDebugInfo: {
-          prompt: 'System prompt',
-          response: { text: 'Hello, Alice!' },
-          model: 'test-model',
-          config: {},
-          timestamp: new Date().toISOString(),
-        },
+        lastLLMDebugInfo: [
+          {
+            prompt: 'System prompt',
+            response: { text: 'Hello, Alice!' },
+            model: 'test-model',
+            config: {},
+            timestamp: new Date().toISOString(),
+          },
+        ],
       });
 
       // Act
@@ -117,7 +119,7 @@ describe('SessionApplicationService', () => {
       });
       expect(response.variables).toEqual({ user_name: 'Alice' });
       expect(response.debugInfo).toBeDefined();
-      expect(response.debugInfo?.model).toBe('test-model');
+      expect(response.debugInfo?.[0]?.model).toBe('test-model');
 
       // 验证调用参数
       expect(mockScriptExecutor.executeSession).toHaveBeenCalledWith(
@@ -170,9 +172,7 @@ describe('SessionApplicationService', () => {
         currentActionIdx: 1,
         variables: {},
         variableStore: { global: {}, session: {}, phase: {}, topic: {} },
-        conversationHistory: [
-          { role: 'assistant', content: 'Welcome!', actionId: 'action1' },
-        ],
+        conversationHistory: [{ role: 'assistant', content: 'Welcome!', actionId: 'action1' }],
         metadata: {},
         lastAiMessage: 'Welcome!',
       });
@@ -348,9 +348,7 @@ describe('SessionApplicationService', () => {
       };
 
       // Mock ScriptExecutor 抛出错误
-      mockScriptExecutor.executeSession.mockRejectedValue(
-        new Error('LLM timeout')
-      );
+      mockScriptExecutor.executeSession.mockRejectedValue(new Error('LLM timeout'));
 
       // Act
       const response = await service.processUserInput(request);
@@ -431,7 +429,12 @@ describe('SessionApplicationService', () => {
             phases: [
               {
                 phase_id: 'p1',
-                topics: [{ topic_id: 't1', actions: [{ action_id: 'a1', action_type: 'ai_say', content: 'Hi' }] }],
+                topics: [
+                  {
+                    topic_id: 't1',
+                    actions: [{ action_id: 'a1', action_type: 'ai_say', content: 'Hi' }],
+                  },
+                ],
               },
             ],
           },
@@ -457,7 +460,7 @@ describe('SessionApplicationService', () => {
         conversationHistory: [],
         metadata: {},
         lastAiMessage: 'Hi',
-        lastLLMDebugInfo: mockDebugInfo,
+        lastLLMDebugInfo: [mockDebugInfo],
       });
 
       // Act
@@ -465,9 +468,9 @@ describe('SessionApplicationService', () => {
 
       // Assert
       expect(response.debugInfo).toBeDefined();
-      expect(response.debugInfo?.prompt).toBe('Test prompt');
-      expect(response.debugInfo?.model).toBe('test-model');
-      expect(response.debugInfo?.config.temperature).toBe(0.7);
+      expect(response.debugInfo?.[0]?.prompt).toBe('Test prompt');
+      expect(response.debugInfo?.[0]?.model).toBe('test-model');
+      expect(response.debugInfo?.[0]?.config.temperature).toBe(0.7);
     });
 
     it('[P1] should include debugInfo even when action is not completed', async () => {
@@ -504,7 +507,7 @@ describe('SessionApplicationService', () => {
         ],
         metadata: { actionState: { actionId: 'ask1', currentRound: 1 } },
         lastAiMessage: "What's your name?",
-        lastLLMDebugInfo: mockDebugInfo,
+        lastLLMDebugInfo: [mockDebugInfo],
       });
 
       // Act
@@ -513,7 +516,7 @@ describe('SessionApplicationService', () => {
       // Assert
       expect(response.executionStatus).toBe(ExecutionStatus.WAITING_INPUT);
       expect(response.debugInfo).toBeDefined();
-      expect(response.debugInfo?.prompt).toBe('Generate question');
+      expect(response.debugInfo?.[0]?.prompt).toBe('Generate question');
     });
   });
 
@@ -556,9 +559,7 @@ describe('SessionApplicationService', () => {
       };
 
       // Mock 参数验证错误
-      mockScriptExecutor.executeSession.mockRejectedValue(
-        new Error('Invalid session ID')
-      );
+      mockScriptExecutor.executeSession.mockRejectedValue(new Error('Invalid session ID'));
 
       // Act
       const response = await service.processUserInput(request);

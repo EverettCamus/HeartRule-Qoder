@@ -19,7 +19,7 @@ export interface SafetyCheck {
 }
 
 /**
- * 退出理由枚举
+ * 退出理由（已知值保留自动补全，同时接受自定义字符串）
  */
 export type ExitReason =
   | '信息已完整'
@@ -29,7 +29,8 @@ export type ExitReason =
   | '用户理解困难'
   | '话题偏离'
   | '危机信号'
-  | '继续收集';
+  | '继续收集'
+  | (string & NonNullable<unknown>);
 
 /**
  * Enhanced AI_Ask LLM输出接口
@@ -117,18 +118,7 @@ export const EnhancedAskLLMOutputSchema = z
   .object({
     assessment: z.string().optional(),
     exit: ExitFieldSchema,
-    exit_reason: z
-      .enum([
-        '信息已完整',
-        '信息不足',
-        '用户阻抗',
-        '达到最大轮次',
-        '用户理解困难',
-        '话题偏离',
-        '危机信号',
-        '继续收集',
-      ])
-      .optional(),
+    exit_reason: z.string().optional(),
     content: z.string().optional(),
     brief: z.string().optional(),
     progress: z.string().optional(),

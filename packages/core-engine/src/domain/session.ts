@@ -45,7 +45,7 @@ export class Session {
   public currentAction: BaseAction | null; // 当前正在执行的 Action 实例
   public conversationHistory: ConversationEntry[]; // 对话历史
   public lastAiMessage: string | null; // 最近的 AI 消息
-  public lastLLMDebugInfo?: LLMDebugInfo; // LLM 调试信息
+  public lastLLMDebugInfo: LLMDebugInfo[]; // LLM 调试信息（累积所有LLM调用）
 
   public metadata: Map<string, unknown>;
   public createdAt: Date;
@@ -64,7 +64,7 @@ export class Session {
     currentAction?: BaseAction | null;
     conversationHistory?: ConversationEntry[];
     lastAiMessage?: string | null;
-    lastLLMDebugInfo?: LLMDebugInfo;
+    lastLLMDebugInfo?: LLMDebugInfo[];
     metadata?: Map<string, unknown>;
     createdAt?: Date;
     updatedAt?: Date;
@@ -86,7 +86,7 @@ export class Session {
     this.currentAction = params.currentAction || null;
     this.conversationHistory = params.conversationHistory || [];
     this.lastAiMessage = params.lastAiMessage || null;
-    this.lastLLMDebugInfo = params.lastLLMDebugInfo;
+    this.lastLLMDebugInfo = params.lastLLMDebugInfo || [];
     this.metadata = params.metadata || new Map();
     this.createdAt = params.createdAt || new Date();
     this.updatedAt = params.updatedAt || new Date();

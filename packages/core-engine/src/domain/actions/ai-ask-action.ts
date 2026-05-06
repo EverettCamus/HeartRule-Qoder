@@ -137,6 +137,26 @@ export class AiAskAction extends BaseAction {
       this.currentRound += 1;
       logger.info('🔍 [executeMultiRound] Round 0: generating initial question');
       const result = await this.generateQuestionFromTemplate(context, AskTemplateType.MULTI_ROUND);
+
+      // Check if the action can complete immediately (all vars already collected + LLM says exit)
+      const shouldExit = result.metadata?.shouldExit === true;
+      if (
+        shouldExit &&
+        this.areAllRequiredVarsCollected(context, result.extractedVariables ?? undefined)
+      ) {
+        logger.info(
+          '✅ [executeMultiRound] Round 0: all vars collected + LLM exit, completing immediately'
+        );
+        return {
+          ...result,
+          completed: true,
+          metadata: {
+            ...result.metadata,
+            exit_reason: result.metadata?.exit_reason || '信息已完整',
+          },
+        };
+      }
+
       return {
         ...result,
         completed: false,
@@ -565,7 +585,7 @@ export class AiAskAction extends BaseAction {
     });
 
     // 构建 output_list（多变量输出格式）
-    const outputList = this.buildOutputList();
+    const outputList = this.buildOutputList(context);
 
     // 构建已收集变量列表
     const collectedVariables = this.buildCollectedVariables(context);
@@ -617,7 +637,7 @@ export class AiAskAction extends BaseAction {
   /**
    * 构建多变量输出格式字符串
    */
-  private buildOutputList(): string {
+  private buildOutputList(context: ActionContext): string {
     const outputConfig = this.getConfig('output', []);
 
     // 如果没有配置 output，返回空字符串
@@ -630,21 +650,19 @@ export class AiAskAction extends BaseAction {
     for (let i = 0; i < outputConfig.length; i++) {
       const varConfig = outputConfig[i];
       const varName = varConfig.get;
-      const varDefine = varConfig.define || '';
 
       if (!varName) continue;
 
-      // 构建 JSON 字段
+      // define 优先级: action output config > 变量作用域定义
+      const varDefine =
+        varConfig.define || context.scopeResolver?.getVariableDefinition(varName)?.define || '';
+
+      // 构建 JSON 字段：有 define 时用 define 描述提取内容，否则回退到变量名
       const isLast = i === outputConfig.length - 1;
       const comma = isLast ? '' : ',';
+      const describe = varDefine ? `提取的${varName}，${varDefine}` : `提取的${varName}`;
 
-      if (varDefine) {
-        // 带注释的格式
-        lines.push(`  "${varName}": "提取的${varName}"${comma} // ${varDefine}`);
-      } else {
-        // 不带注释的格式
-        lines.push(`  "${varName}": "提取的${varName}"${comma}`);
-      }
+      lines.push(`  "${varName}": "${describe}"${comma}`);
     }
 
     // 用换行连接所有行，不需要前置逗号（模板中已有）
@@ -711,24 +729,31 @@ ${historyText}
         // 使用 safeParse 进行类型转换和验证
         const schemaResult = EnhancedAskLLMOutputSchema.safeParse(parsedJson);
 
-        if (!schemaResult.success) {
-          // Schema验证失败，记录错误但继续处理
-          logger.warn('Schema验证失败', { errors: schemaResult.error.errors });
-          throw new Error(`Schema validation failed: ${schemaResult.error.message}`);
-        }
+        let output: EnhancedAskLLMOutput;
+        let schemaWarning: string | undefined;
 
-        const output = schemaResult.data;
-
-        // 解析成功，记录日志
-        if (parseAttempt > 1) {
-          logger.warn('JSON解析重试成功', { attempt: parseAttempt, strategy });
+        if (schemaResult.success) {
+          output = schemaResult.data;
+        } else {
+          // Schema验证失败不致命：降级使用原始JSON.parse结果
+          // 关键字段（content, exit）在大多数情况下仍然存在且可用
+          logger.warn('Schema验证失败，降级使用原始JSON', {
+            errors: schemaResult.error.errors,
+          });
+          schemaWarning = schemaResult.error.message;
+          output = parsedJson as EnhancedAskLLMOutput;
         }
 
         return {
           output,
           cleanedResponse,
-          parseError:
-            parseAttempt > 1
+          parseError: schemaWarning
+            ? {
+                retryCount: parseAttempt,
+                strategies: RETRY_STRATEGIES.slice(0, parseAttempt),
+                finalError: schemaWarning,
+              }
+            : parseAttempt > 1
               ? {
                   retryCount: parseAttempt,
                   strategies: RETRY_STRATEGIES.slice(0, parseAttempt),
@@ -1109,5 +1134,28 @@ ${historyText}
           context.scopeResolver?.resolveVariable(name, position)?.value || context.variables[name];
         return this.isValidVariableValue(value);
       });
+  }
+
+  /**
+   * Check if all required output variables are collected (from store + freshly extracted)
+   */
+  private areAllRequiredVarsCollected(
+    context: ActionContext,
+    freshlyExtracted?: Record<string, any>
+  ): boolean {
+    const outputConfig = this.getConfig('output', []);
+    if (outputConfig.length === 0) return false;
+
+    const alreadyCollected = this.getCollectedVariables(context);
+
+    return outputConfig.every((v: any) => {
+      const name = v.get;
+      if (!name) return true; // skip malformed config entries
+      // Valid if already in variable store, or just extracted from LLM JSON
+      return (
+        alreadyCollected.includes(name) ||
+        (freshlyExtracted && this.isValidVariableValue(freshlyExtracted[name]))
+      );
+    });
   }
 }

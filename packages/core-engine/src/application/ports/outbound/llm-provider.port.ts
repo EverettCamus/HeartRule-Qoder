@@ -28,6 +28,8 @@ export interface LLMDebugInfo {
   timestamp: string; // 调用时间
   tokensUsed?: number; // 使用的token数
   responseTimeMs?: number; // 响应时间（毫秒）
+  actionId?: string; // 产生此 debugInfo 的 action ID
+  actionType?: string; // 产生此 debugInfo 的 action 类型
 }
 
 /**

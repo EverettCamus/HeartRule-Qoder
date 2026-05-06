@@ -526,6 +526,7 @@ export class SessionManager {
       conversationHistory: conversationHistory,
       metadata: metadata,
       lastAiMessage: null,
+      lastLLMDebugInfo: [],
     };
 
     // 确保 variableStore.global 包含最新的全局变量，并添加 scope 元数据
@@ -1215,5 +1216,140 @@ export class SessionManager {
       logger.error('❌ Error during user input processing:', error);
       return this.buildErrorResponse(error, session, script, sessionId);
     }
+  }
+
+  /**
+   * 更新变量值（手动编辑）
+   */
+  async updateVariable(
+    session: SessionData,
+    params: {
+      variableName: string;
+      scope: string;
+      value: unknown;
+      phaseId?: string;
+      topicId?: string;
+    }
+  ): Promise<{ variableName: string; scope: string; value: unknown; updatedAt: string }> {
+    const { variableName, scope, value, phaseId, topicId } = params;
+    const now = new Date().toISOString();
+    const metadata = (session.metadata as Record<string, any>) || {};
+    const variableStore = metadata.variableStore || {
+      global: {},
+      session: {},
+      phase: {},
+      topic: {},
+    };
+
+    // 构建 VariableValue 包装
+    const previousValue =
+      scope === 'global' || scope === 'session'
+        ? variableStore[scope]?.[variableName]
+        : variableStore[scope]?.[scope === 'phase' ? phaseId || '' : topicId || '']?.[variableName];
+
+    const history = previousValue?.history || [];
+    if (previousValue?.value !== undefined) {
+      history.push({
+        value: previousValue.value,
+        type: previousValue.type,
+        lastUpdated: previousValue.lastUpdated,
+        source: previousValue.source,
+      });
+    }
+
+    const variableWrapper = {
+      value,
+      type: value === null ? 'null' : typeof value,
+      lastUpdated: now,
+      source: 'manual_edit',
+      scope,
+      history,
+    };
+
+    // 写入 variableStore
+    if (scope === 'global' || scope === 'session') {
+      if (!variableStore[scope]) variableStore[scope] = {};
+      variableStore[scope][variableName] = variableWrapper;
+    } else if (scope === 'phase' && phaseId) {
+      if (!variableStore.phase) variableStore.phase = {};
+      if (!variableStore.phase[phaseId]) variableStore.phase[phaseId] = {};
+      variableStore.phase[phaseId][variableName] = variableWrapper;
+    } else if (scope === 'topic' && topicId) {
+      if (!variableStore.topic) variableStore.topic = {};
+      if (!variableStore.topic[topicId]) variableStore.topic[topicId] = {};
+      variableStore.topic[topicId][variableName] = variableWrapper;
+    }
+
+    // 更新扁平变量
+    const flatVariables: Record<string, unknown> = {
+      ...((session.variables as Record<string, unknown>) || {}),
+      [variableName]: value,
+    };
+
+    // 全局作用域: 持久化到 user_global_variables
+    if (scope === 'global') {
+      try {
+        const tags = (await this.getScriptTags(session.scriptId)) || [];
+        const projectTag = tags.find((tag: string) => tag.startsWith('project:'));
+        const projectId = projectTag ? projectTag.replace('project:', '') : undefined;
+
+        if (projectId) {
+          const existing = await db.query.userGlobalVariables.findFirst({
+            where: (fields, { and: andFn, eq: eqFn }) =>
+              andFn(eqFn(fields.userId, session.userId), eqFn(fields.projectId, projectId)),
+          });
+
+          const merged = {
+            ...((existing?.variables as Record<string, unknown>) || {}),
+            [variableName]: value,
+          };
+
+          if (existing) {
+            await db
+              .update(userGlobalVariables)
+              .set({ variables: merged, updatedAt: new Date() })
+              .where(
+                and(
+                  eq(userGlobalVariables.userId, session.userId),
+                  eq(userGlobalVariables.projectId, projectId)
+                )
+              );
+          } else {
+            await db.insert(userGlobalVariables).values({
+              userId: session.userId,
+              projectId,
+              variables: { [variableName]: value },
+            });
+          }
+          logger.info(
+            `💾 [updateVariable] Persisted global "${variableName}" to user_global_variables`
+          );
+        }
+      } catch (err: any) {
+        logger.error(
+          `[updateVariable] Failed to persist global variable "${variableName}":`,
+          err.message
+        );
+      }
+    }
+
+    // 更新 sessions 表
+    await db
+      .update(sessions)
+      .set({
+        variables: flatVariables,
+        metadata: { ...metadata, variableStore },
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, session.id));
+
+    return { variableName, scope, value, updatedAt: now };
+  }
+
+  private async getScriptTags(scriptId: string): Promise<string[]> {
+    const script = await db.query.scripts.findFirst({
+      where: eq(scripts.id, scriptId),
+    });
+    return (script?.tags as string[]) || [];
   }
 }

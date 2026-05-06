@@ -1,11 +1,11 @@
 /**
  * Session Application Service Implementation
- * 
+ *
  * @remarks
  * DDD 六边形架构：应用服务实现（Use Case）
  * 基于 ScriptExecutor 的标准实现，封装核心引擎的执行逻辑
  * 作为防腐层（Anti-Corruption Layer）隔离核心引擎与 API 层
- * 
+ *
  * @see ../ports/inbound/session-application.port.ts 接口定义
  */
 
@@ -19,7 +19,7 @@ import type {
 
 /**
  * 默认会话应用服务实现
- * 
+ *
  * @remarks
  * 基于 ScriptExecutor 的标准实现，封装核心引擎的执行逻辑
  * 作为防腐层（Anti-Corruption Layer）隔离核心引擎与 API 层
@@ -34,23 +34,25 @@ export class DefaultSessionApplicationService implements ISessionApplicationServ
 
   /**
    * 初始化会话
-   * 
+   *
    * @performance 性能关键路径 - 会话启动
    */
   async initializeSession(request: InitializeSessionRequest): Promise<SessionExecutionResponse> {
     const startTime = Date.now();
-    
+
     try {
       // 动态导入避免循环依赖
       if (!this.scriptExecutor) {
-        const { ScriptExecutor } = await import('../../engines/script-execution/script-executor.js');
+        const { ScriptExecutor } =
+          await import('../../engines/script-execution/script-executor.js');
         this.scriptExecutor = new ScriptExecutor();
       }
 
       // 解析脚本内容
-      const scriptContent = typeof request.scriptContent === 'string'
-        ? request.scriptContent
-        : JSON.stringify(request.scriptContent);
+      const scriptContent =
+        typeof request.scriptContent === 'string'
+          ? request.scriptContent
+          : JSON.stringify(request.scriptContent);
 
       // 创建初始执行状态
       const executionState = this.createInitialExecutionState(
@@ -76,13 +78,13 @@ export class DefaultSessionApplicationService implements ISessionApplicationServ
 
       // 构造响应
       const response = this.buildResponse(updatedState);
-      
+
       // 性能日志
       const duration = Date.now() - startTime;
       if (duration > 1000) {
         console.warn(`[Performance] initializeSession took ${duration}ms`);
       }
-      
+
       return response;
     } catch (error: any) {
       console.error('[SessionApplicationService] ❌ Initialization failed:', error);
@@ -92,23 +94,25 @@ export class DefaultSessionApplicationService implements ISessionApplicationServ
 
   /**
    * 处理用户输入
-   * 
+   *
    * @performance 性能关键路径 - 多轮对话
    */
   async processUserInput(request: ProcessUserInputRequest): Promise<SessionExecutionResponse> {
     const startTime = Date.now();
-    
+
     try {
       // 动态导入避免循环依赖
       if (!this.scriptExecutor) {
-        const { ScriptExecutor } = await import('../../engines/script-execution/script-executor.js');
+        const { ScriptExecutor } =
+          await import('../../engines/script-execution/script-executor.js');
         this.scriptExecutor = new ScriptExecutor();
       }
 
       // 解析脚本内容
-      const scriptContent = typeof request.scriptContent === 'string'
-        ? request.scriptContent
-        : JSON.stringify(request.scriptContent);
+      const scriptContent =
+        typeof request.scriptContent === 'string'
+          ? request.scriptContent
+          : JSON.stringify(request.scriptContent);
 
       // 恢复执行状态
       const executionState = this.restoreExecutionState(
@@ -137,13 +141,13 @@ export class DefaultSessionApplicationService implements ISessionApplicationServ
 
       // 构造响应
       const response = this.buildResponse(updatedState);
-      
+
       // 性能日志
       const duration = Date.now() - startTime;
       if (duration > 2000) {
         console.warn(`[Performance] processUserInput took ${duration}ms`);
       }
-      
+
       return response;
     } catch (error: any) {
       console.error('[SessionApplicationService] ❌ Processing failed:', error);
@@ -175,7 +179,7 @@ export class DefaultSessionApplicationService implements ISessionApplicationServ
         phase: {},
         topic: {},
       },
-      conversationHistory: conversationHistory.map(msg => ({
+      conversationHistory: conversationHistory.map((msg) => ({
         role: msg.role,
         content: msg.content,
         actionId: msg.actionId,
@@ -225,7 +229,7 @@ export class DefaultSessionApplicationService implements ISessionApplicationServ
         ...currentState.variables,
       },
       variableStore,
-      conversationHistory: currentState.conversationHistory.map(msg => ({
+      conversationHistory: currentState.conversationHistory.map((msg) => ({
         role: msg.role,
         content: msg.content,
         actionId: msg.actionId,
@@ -257,7 +261,7 @@ export class DefaultSessionApplicationService implements ISessionApplicationServ
    */
   private extractFlatVariables(variableStore: any): Record<string, unknown> {
     const flat: Record<string, unknown> = {};
-    
+
     if (!variableStore) return flat;
 
     // 从各层级提取变量值
@@ -273,7 +277,7 @@ export class DefaultSessionApplicationService implements ISessionApplicationServ
 
     extractFromScope(variableStore.global || {});
     extractFromScope(variableStore.session || {});
-    
+
     // Phase和Topic是嵌套的，需要合并所有子作用域
     if (variableStore.phase) {
       for (const phaseVars of Object.values(variableStore.phase)) {
@@ -330,7 +334,7 @@ export class DefaultSessionApplicationService implements ISessionApplicationServ
       };
     }
 
-    if (executionState.lastLLMDebugInfo) {
+    if (executionState.lastLLMDebugInfo && executionState.lastLLMDebugInfo.length > 0) {
       response.debugInfo = executionState.lastLLMDebugInfo;
     }
 
@@ -361,7 +365,7 @@ export class DefaultSessionApplicationService implements ISessionApplicationServ
 
 /**
  * 默认实现工厂函数
- * 
+ *
  * @remarks
  * API 层可以使用此工厂函数创建默认的应用服务实现
  * 也可以根据需要提供自定义实现（例如用于测试或特殊场景）

@@ -66,19 +66,21 @@ describe('Phase 4 重构：ExecutionContext结构简化', () => {
       const runtime: ExecutionRuntime = {
         currentAction: null,
         lastAiMessage: 'Hello, user!',
-        lastLLMDebugInfo: {
-          prompt: 'test prompt',
-          response: 'test response',
-          model: 'deepseek-v3',
-          config: { temperature: 0.7 },
-          timestamp: new Date().toISOString(),
-          tokensUsed: 150,
-        },
+        lastLLMDebugInfo: [
+          {
+            prompt: 'test prompt',
+            response: 'test response',
+            model: 'deepseek-v3',
+            config: { temperature: 0.7 },
+            timestamp: new Date().toISOString(),
+            tokensUsed: 150,
+          },
+        ],
       };
 
       expect(runtime.currentAction).toBeNull();
       expect(runtime.lastAiMessage).toBe('Hello, user!');
-      expect(runtime.lastLLMDebugInfo?.model).toBe('deepseek-v3');
+      expect(runtime.lastLLMDebugInfo?.[0]?.model).toBe('deepseek-v3');
     });
 
     it('ExecutionMetadata应该包含配置和扩展信息', () => {
@@ -148,14 +150,16 @@ describe('Phase 4 重构：ExecutionContext结构简化', () => {
           },
         },
         lastAiMessage: 'Hi there!',
-        lastLLMDebugInfo: {
-          prompt: 'Say hello',
-          response: 'Hi there!',
-          model: 'deepseek-v3',
-          config: { temperature: 0.7 },
-          timestamp: '2024-01-01T00:00:00Z',
-          tokensUsed: 15,
-        },
+        lastLLMDebugInfo: [
+          {
+            prompt: 'Say hello',
+            response: 'Hi there!',
+            model: 'deepseek-v3',
+            config: { temperature: 0.7 },
+            timestamp: '2024-01-01T00:00:00Z',
+            tokensUsed: 15,
+          },
+        ],
       };
 
       const context = ExecutionStateAdapter.fromLegacy(legacy);
@@ -172,7 +176,7 @@ describe('Phase 4 重构：ExecutionContext结构简化', () => {
       // 验证运行时状态
       expect(context.runtime.currentAction).toBeNull();
       expect(context.runtime.lastAiMessage).toBe('Hi there!');
-      expect(context.runtime.lastLLMDebugInfo?.model).toBe('deepseek-v3');
+      expect(context.runtime.lastLLMDebugInfo?.[0]?.model).toBe('deepseek-v3');
 
       // 验证变量存储
       expect(context.variableStore.global.system).toBe('v1');
@@ -253,14 +257,16 @@ describe('Phase 4 重构：ExecutionContext结构简化', () => {
         runtime: {
           currentAction: null,
           lastAiMessage: 'What is your name?',
-          lastLLMDebugInfo: {
-            prompt: 'Ask for name',
-            response: 'What is your name?',
-            model: 'deepseek-v3',
-            config: { temperature: 0.7 },
-            timestamp: '2024-01-01T00:00:00Z',
-            tokensUsed: 23,
-          },
+          lastLLMDebugInfo: [
+            {
+              prompt: 'Ask for name',
+              response: 'What is your name?',
+              model: 'deepseek-v3',
+              config: { temperature: 0.7 },
+              timestamp: '2024-01-01T00:00:00Z',
+              tokensUsed: 23,
+            },
+          ],
         },
         variableStore: {
           global: { version: '2.0' } as any,
@@ -297,7 +303,7 @@ describe('Phase 4 重构：ExecutionContext结构简化', () => {
       // 验证运行时状态展开
       expect(legacy.currentAction).toBeNull();
       expect(legacy.lastAiMessage).toBe('What is your name?');
-      expect(legacy.lastLLMDebugInfo?.model).toBe('deepseek-v3');
+      expect(legacy.lastLLMDebugInfo?.[0]?.model).toBe('deepseek-v3');
 
       // 验证变量存储
       expect(legacy.variables).toEqual({ userId: '123' });

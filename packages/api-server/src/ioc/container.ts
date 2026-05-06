@@ -66,8 +66,9 @@ export class DependencyContainer {
    */
   private createLLMProvider(): ILLMProvider {
     const providerType = process.env.LLM_PROVIDER || 'volcano';
+    const normalizedType = providerType.toLowerCase();
 
-    switch (providerType.toLowerCase()) {
+    switch (normalizedType) {
       case 'openai':
         return this.createOpenAIProvider();
 
@@ -111,7 +112,7 @@ export class DependencyContainer {
 
   /**
    * 创建 DeepSeek Provider
-    */
+   */
   private createOpenAIProvider(): OpenAIProvider {
     const apiKey = process.env.OPENAI_API_KEY || '';
     const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';

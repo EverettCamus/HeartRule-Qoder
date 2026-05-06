@@ -55,6 +55,41 @@ interface FileTreeNode extends DataNode {
   children?: FileTreeNode[];
 }
 
+/** 检查 YAML 内容中是否有重复的 action_id */
+function checkDuplicateActionIds(yamlContent: string): string[] | null {
+  const parsed = yaml.load(yamlContent) as any;
+  const session = parsed?.session;
+  if (!session?.phases) return null;
+
+  const idMap = new Map<string, Array<{ phase: string; topic: string; idx: number }>>();
+
+  for (const phase of session.phases) {
+    for (const topic of phase.topics || []) {
+      for (let i = 0; i < (topic.actions || []).length; i++) {
+        const id = topic.actions[i].action_id;
+        if (!id) continue;
+        if (!idMap.has(id)) idMap.set(id, []);
+        idMap.get(id)!.push({
+          phase: phase.phase_id || '?',
+          topic: topic.topic_id || '?',
+          idx: i + 1,
+        });
+      }
+    }
+  }
+
+  const duplicates: string[] = [];
+  for (const [id, locations] of idMap) {
+    if (locations.length > 1) {
+      duplicates.push(
+        `"${id}" 出现 ${locations.length} 次: ${locations.map((l) => `${l.phase}/${l.topic} 第${l.idx}个action`).join(', ')}`
+      );
+    }
+  }
+
+  return duplicates.length > 0 ? duplicates : null;
+}
+
 const ProjectEditor: React.FC = () => {
   const { projectId, fileId } = useParams<{ projectId: string; fileId?: string }>();
   const navigate = useNavigate();
@@ -678,6 +713,16 @@ const ProjectEditor: React.FC = () => {
           message.error(`验证失败，发现 ${result.errors.length} 个错误，请修复后再保存`);
           return; // 阻止保存
         }
+      }
+
+      // 检查重复 action_id
+      const duplicateIds = checkDuplicateActionIds(fileContent);
+      if (duplicateIds) {
+        message.error({
+          content: `action_id 重复:\n${duplicateIds.join('\n')}`,
+          duration: 5,
+        });
+        return;
       }
 
       setSaving(true);

@@ -254,14 +254,16 @@ describe('variableStore 扁平化回归测试', () => {
           currentRound: 1,
           maxRounds: 5,
         },
-        debugInfo: {
-          prompt: '现时间 2026/1/25 16:35:37，你是 心理咨询师...',
-          response: {},
-          model: 'deepseek-v3-250324',
-          config: {},
-          timestamp: '2026-01-25T08:35:37.914Z',
-          tokensUsed: 823,
-        },
+        debugInfo: [
+          {
+            prompt: '现时间 2026/1/25 16:35:37，你是 心理咨询师...',
+            response: {},
+            model: 'deepseek-v3-250324',
+            config: {},
+            timestamp: '2026-01-25T08:35:37.914Z',
+            tokensUsed: 823,
+          },
+        ],
       };
 
       // 验证响应字段

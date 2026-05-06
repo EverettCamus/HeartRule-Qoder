@@ -11,10 +11,10 @@ import { describe, it, expect } from 'vitest';
  * @see https://www.fastify.io/docs/latest/Reference/Validation-and-Serialization/#serialization
  */
 describe('Fastify Response Schema - debugInfo completeness', () => {
-  it('should include responseTimeMs in debugInfo schema definition', () => {
-    // 这是 sessions.ts 中 debugInfo schema 的镜像
+  it('should include responseTimeMs in debugInfo items schema definition', () => {
+    // 这是 sessions.ts 中 debugInfo schema 的镜像（现在是数组格式）
     // 如果修改了 schema，请同步更新此测试
-    const debugInfoSchema = {
+    const debugInfoItemSchema = {
       type: 'object',
       properties: {
         prompt: { type: 'string' },
@@ -27,8 +27,8 @@ describe('Fastify Response Schema - debugInfo completeness', () => {
       },
     };
 
-    expect(debugInfoSchema.properties).toHaveProperty('responseTimeMs');
-    expect(debugInfoSchema.properties.responseTimeMs).toEqual({ type: 'number' });
+    expect(debugInfoItemSchema.properties).toHaveProperty('responseTimeMs');
+    expect(debugInfoItemSchema.properties.responseTimeMs).toEqual({ type: 'number' });
   });
 
   it('should have all required debugInfo fields for frontend display', () => {
@@ -42,7 +42,7 @@ describe('Fastify Response Schema - debugInfo completeness', () => {
       'responseTimeMs',
     ];
 
-    const debugInfoSchema = {
+    const debugInfoItemSchema = {
       type: 'object',
       properties: {
         prompt: { type: 'string' },
@@ -55,7 +55,7 @@ describe('Fastify Response Schema - debugInfo completeness', () => {
       },
     };
 
-    const schemaFields = Object.keys(debugInfoSchema.properties);
+    const schemaFields = Object.keys(debugInfoItemSchema.properties);
     for (const field of requiredFields) {
       expect(schemaFields).toContain(field);
     }
