@@ -4,8 +4,10 @@ import {
   RocketOutlined,
   HistoryOutlined,
   BugOutlined,
+  CaretDownOutlined,
 } from '@ant-design/icons';
-import { Layout, Typography, Button, Space, Tag, Divider } from 'antd';
+import { Layout, Typography, Button, Space, Tag, Divider, Dropdown } from 'antd';
+import type { MenuProps } from 'antd';
 import React from 'react';
 
 import type { Project, ScriptFile } from '../../api/projects';
@@ -19,10 +21,14 @@ interface ProjectEditorHeaderProps {
   saving: boolean;
   versionPanelVisible: boolean;
   files: ScriptFile[];
+  hasLastSession: boolean;
+  lastSessionUnfinished: boolean;
   onBack: () => void;
   onSave: () => void;
   onPublish: () => void;
   onDebug: () => void;
+  onContinueDebug: () => void;
+  onDebugHistory: () => void;
   onVersionToggle: () => void;
 }
 
@@ -32,12 +38,17 @@ const ProjectEditorHeader: React.FC<ProjectEditorHeaderProps> = ({
   saving,
   versionPanelVisible,
   files,
+  hasLastSession,
+  lastSessionUnfinished,
   onBack,
   onSave,
   onPublish,
   onDebug,
+  onContinueDebug,
+  onDebugHistory,
   onVersionToggle,
 }) => {
+  void hasLastSession;
   return (
     <Header
       className="editor-header"
@@ -86,13 +97,44 @@ const ProjectEditorHeader: React.FC<ProjectEditorHeaderProps> = ({
           >
             版本管理
           </Button>
-          <Button
-            icon={<BugOutlined />}
-            onClick={onDebug}
-            disabled={!project || files.filter((f) => f.fileType === 'session').length === 0}
-          >
-            Debug
-          </Button>
+          {(() => {
+            const sessionFileCount = files.filter((f) => f.fileType === 'session').length;
+            const disabled = !project || sessionFileCount === 0;
+            const mainLabel = lastSessionUnfinished ? '继续调试' : 'Debug';
+            const mainAction = lastSessionUnfinished ? onContinueDebug : onDebug;
+            const buttonType = lastSessionUnfinished ? 'primary' : 'default';
+
+            const menuItems: MenuProps['items'] = [
+              {
+                key: 'new',
+                label: '新建调试',
+                icon: <BugOutlined />,
+                onClick: onDebug,
+              },
+              {
+                key: 'history',
+                label: '调试历史',
+                icon: <HistoryOutlined />,
+                onClick: onDebugHistory,
+              },
+            ];
+
+            return (
+              <Space.Compact>
+                <Button
+                  type={buttonType}
+                  icon={<BugOutlined />}
+                  onClick={mainAction}
+                  disabled={disabled}
+                >
+                  {mainLabel}
+                </Button>
+                <Dropdown menu={{ items: menuItems }} trigger={['click']}>
+                  <Button type={buttonType} icon={<CaretDownOutlined />} disabled={disabled} />
+                </Dropdown>
+              </Space.Compact>
+            );
+          })()}
           <Button
             type="primary"
             icon={<SaveOutlined />}

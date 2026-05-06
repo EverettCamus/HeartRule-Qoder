@@ -1295,10 +1295,14 @@ const ProjectEditor: React.FC = () => {
         saving={saving}
         versionPanelVisible={versionPanelVisible}
         files={files}
+        hasLastSession={false}
+        lastSessionUnfinished={false}
         onBack={() => navigate('/projects')}
         onSave={handleSave}
         onPublish={() => setPublishModalVisible(true)}
         onDebug={() => setDebugConfigVisible(true)}
+        onContinueDebug={() => setDebugConfigVisible(true)}
+        onDebugHistory={() => {}}
         onVersionToggle={() => setVersionPanelVisible(!versionPanelVisible)}
       />
 
