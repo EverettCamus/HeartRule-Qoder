@@ -258,6 +258,36 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     }
   };
 
+  // Validate position compatibility against loaded navigation tree
+  const validatePosition = (
+    tree: NavigationTreeType | null,
+    position: any
+  ): { compatible: boolean; message?: string } => {
+    if (!tree || !position) return { compatible: true };
+    const phases = tree.phases || [];
+    if (position.phaseIndex >= phases.length) {
+      return {
+        compatible: false,
+        message: `Phase ${position.phaseIndex + 1} 不存在（当前脚本只有 ${phases.length} 个 phase）`,
+      };
+    }
+    const topics = phases[position.phaseIndex]?.topics || [];
+    if (position.topicIndex >= topics.length) {
+      return {
+        compatible: false,
+        message: `Topic ${position.topicIndex + 1} 不存在`,
+      };
+    }
+    const actions = topics[position.topicIndex]?.actions || [];
+    if (position.actionIndex >= actions.length) {
+      return {
+        compatible: false,
+        message: `Action ${position.actionIndex + 1} 不存在`,
+      };
+    }
+    return { compatible: true };
+  };
+
   // 气泡操作函数
   const addDebugBubble = (bubble: DebugBubble) => {
     setDebugBubbles((prev) => [...prev, bubble]);
@@ -351,6 +381,17 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           maxRounds: sessionDetail.position.maxRounds,
         };
         console.log('[DebugChat] Setting initial position from session:', pos);
+
+        // Validate position compatibility against current script
+        const positionValidation = validatePosition(tree, pos);
+        if (!positionValidation.compatible) {
+          setError(
+            `脚本结构已变更，原调试位置无法定位：${positionValidation.message}。建议新建调试。`
+          );
+          setInitialLoading(false);
+          return;
+        }
+
         setCurrentPosition(pos);
 
         // 创建初始位置信息气泡
@@ -631,6 +672,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
       if (response.executionStatus && sessionInfo) {
         setSessionInfo({ ...sessionInfo, executionStatus: response.executionStatus });
+        onSessionStatusChange?.(currentSessionId, response.executionStatus);
       }
 
       // 检查响应中是否包含错误信息
