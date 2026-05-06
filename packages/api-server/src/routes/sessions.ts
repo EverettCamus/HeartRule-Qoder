@@ -1,5 +1,5 @@
 import { ExecutionStatus, ErrorCode } from '@heartrule/shared-types';
-import { eq, sql, count } from 'drizzle-orm';
+import { eq, sql, count, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -196,11 +196,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           .select({
             id: sessions.id,
             scriptId: sessions.scriptId,
-            status: sessions.status,
             executionStatus: sessions.executionStatus,
             position: sessions.position,
-            variables: sessions.variables,
-            metadata: sessions.metadata,
             createdAt: sessions.createdAt,
             updatedAt: sessions.updatedAt,
           })
@@ -209,34 +206,42 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           .orderBy(sql`${sessions.updatedAt} DESC`)
           .limit(Math.min(limit, 50));
 
-        // Enrich with script file name and message count
-        const enriched = await Promise.all(
-          projectSessions.map(async (s) => {
-            const script = await db.query.scripts.findFirst({
-              where: eq(scripts.id, s.scriptId),
-            });
-            const msgCountResult = await db
-              .select({ count: count() })
-              .from(messages)
-              .where(eq(messages.sessionId, s.id));
-            const msgCount = msgCountResult[0]?.count ?? 0;
+        // Batch query: all scripts and message counts at once
+        const scriptIds = [...new Set(projectSessions.map((s) => s.scriptId).filter(Boolean))];
+        const sessionIds = projectSessions.map((s) => s.id);
 
-            return {
-              sessionId: s.id,
-              scriptId: s.scriptId,
-              scriptFileName: script?.scriptName || 'unknown.yaml',
-              executionStatus: s.executionStatus,
-              createdAt: s.createdAt.toISOString(),
-              updatedAt: s.updatedAt.toISOString(),
-              position: s.position,
-              messageCount: msgCount,
-            };
-          })
-        );
+        const [scriptRows, msgCountRows] = await Promise.all([
+          scriptIds.length > 0
+            ? db
+                .select({ id: scripts.id, scriptName: scripts.scriptName })
+                .from(scripts)
+                .where(inArray(scripts.id, scriptIds))
+            : [],
+          db
+            .select({ sessionId: messages.sessionId, count: count() })
+            .from(messages)
+            .where(inArray(messages.sessionId, sessionIds))
+            .groupBy(messages.sessionId),
+        ]);
+
+        const scriptNameMap = new Map(scriptRows.map((r) => [r.id, r.scriptName]));
+        const msgCountMap = new Map(msgCountRows.map((r) => [r.sessionId, r.count]));
+
+        // Enrich with script file name and message count (no per-session queries)
+        const enriched = projectSessions.map((s) => ({
+          sessionId: s.id,
+          scriptId: s.scriptId,
+          scriptFileName: scriptNameMap.get(s.scriptId) || 'unknown.yaml',
+          executionStatus: s.executionStatus,
+          createdAt: s.createdAt.toISOString(),
+          updatedAt: s.updatedAt.toISOString(),
+          position: s.position,
+          messageCount: msgCountMap.get(s.id) ?? 0,
+        }));
 
         return { success: true, data: enriched };
       } catch (error) {
-        app.log.error(error);
+        logError(app.log, error, { projectId });
         return reply.status(500).send({
           success: false,
           error: 'Failed to list sessions',
