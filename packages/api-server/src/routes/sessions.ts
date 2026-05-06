@@ -1,3 +1,4 @@
+import { ExecutionStatus, ErrorCode } from '@heartrule/shared-types';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
@@ -38,15 +39,18 @@ export async function registerSessionRoutes(app: FastifyInstance) {
               executionStatus: { type: 'string' },
               position: { type: 'object', additionalProperties: true },
               debugInfo: {
-                type: 'object',
-                properties: {
-                  prompt: { type: 'string' },
-                  response: { type: 'object', additionalProperties: true },
-                  model: { type: 'string' },
-                  config: { type: 'object', additionalProperties: true },
-                  timestamp: { type: 'string' },
-                  tokensUsed: { type: 'number' },
-                  responseTimeMs: { type: 'number' },
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    prompt: { type: 'string' },
+                    response: { type: 'object', additionalProperties: true },
+                    model: { type: 'string' },
+                    config: { type: 'object', additionalProperties: true },
+                    timestamp: { type: 'string' },
+                    tokensUsed: { type: 'number' },
+                    responseTimeMs: { type: 'number' },
+                  },
                 },
               },
               error: {
@@ -222,8 +226,11 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         }
 
         // 从 metadata 中提取 debugInfo（包含 responseTimeMs）
+        // 兼容旧格式（单对象）和新格式（数组）
         if (sessionMetadata.lastLLMDebugInfo) {
-          response.debugInfo = sessionMetadata.lastLLMDebugInfo;
+          response.debugInfo = Array.isArray(sessionMetadata.lastLLMDebugInfo)
+            ? sessionMetadata.lastLLMDebugInfo
+            : [sessionMetadata.lastLLMDebugInfo];
         }
 
         // 构建完整的 position 信息（包含 ID 字段）
@@ -418,17 +425,43 @@ export async function registerSessionRoutes(app: FastifyInstance) {
                 },
               },
               debugInfo: {
-                type: 'object',
-                properties: {
-                  prompt: { type: 'string' },
-                  response: { type: 'object', additionalProperties: true },
-                  model: { type: 'string' },
-                  config: { type: 'object', additionalProperties: true },
-                  timestamp: { type: 'string' },
-                  tokensUsed: { type: 'number' },
-                  responseTimeMs: { type: 'number' },
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    prompt: { type: 'string' },
+                    response: { type: 'object', additionalProperties: true },
+                    model: { type: 'string' },
+                    config: { type: 'object', additionalProperties: true },
+                    timestamp: { type: 'string' },
+                    tokensUsed: { type: 'number' },
+                    responseTimeMs: { type: 'number' },
+                  },
                 },
               },
+              actionStatus: { type: 'string', enum: ['running', 'completed', 'error'] },
+              currentRound: { type: 'number' },
+              maxRounds: { type: 'number' },
+              roundChanges: {
+                type: 'object',
+                properties: {
+                  round: { type: 'number' },
+                  timestamp: { type: 'string' },
+                  changes: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        name: { type: 'string' },
+                        fromValue: {},
+                        toValue: {},
+                        scope: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+              exitReason: { type: 'string' },
               error: {
                 type: 'object',
                 properties: {
@@ -491,6 +524,35 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           });
         }
 
+        if (
+          session.executionStatus === ExecutionStatus.COMPLETED ||
+          session.executionStatus === ExecutionStatus.ERROR
+        ) {
+          reply.code(400);
+          return {
+            success: false,
+            error: {
+              code: ErrorCode.SESSION_ENDED,
+              type: 'session',
+              message: `会话已结束 (${session.executionStatus})，无法继续发送消息`,
+              details: `Session execution status is "${session.executionStatus}"`,
+              context: {
+                sessionId: id,
+                executionStatus: session.executionStatus,
+                timestamp: new Date().toISOString(),
+              },
+              recovery: {
+                canRetry: false,
+                retryAction: 'Create a new debugging session',
+                suggestions: ['该会话的脚本已执行完毕，请重新开始调试'],
+              },
+            },
+            aiMessage: '',
+            executionStatus: session.executionStatus,
+            sessionStatus: session.status,
+          };
+        }
+
         // 获取脚本信息
         script = await db.query.scripts.findFirst({
           where: eq(scripts.id, session.scriptId),
@@ -520,6 +582,12 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           position: result.position,
           // debugInfo 完整返回给前端
           debugInfo: result.debugInfo,
+          // 变量编辑所需字段
+          actionStatus: (result as any).actionStatus,
+          currentRound: (result as any).currentRound,
+          maxRounds: (result as any).maxRounds,
+          roundChanges: (result as any).roundChanges,
+          exitReason: (result as any).exitReason,
         };
 
         // 记录完整响应（特别是position字段）
@@ -592,6 +660,84 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         return reply.status(500).send({
           error: 'Failed to get variables',
         });
+      }
+    }
+  );
+
+  // 更新会话变量（手动编辑）
+  app.patch(
+    '/api/sessions/:id/variables',
+    {
+      schema: {
+        tags: ['sessions'],
+        description: '手动更新会话变量值',
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['variableName', 'scope', 'value'],
+          properties: {
+            variableName: { type: 'string' },
+            scope: { type: 'string', enum: ['global', 'session', 'phase', 'topic'] },
+            value: {},
+            phaseId: { type: 'string' },
+            topicId: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { variableName, scope, value, phaseId, topicId } = request.body as {
+        variableName: string;
+        scope: string;
+        value: unknown;
+        phaseId?: string;
+        topicId?: string;
+      };
+
+      try {
+        const session = await db.query.sessions.findFirst({
+          where: eq(sessions.id, id),
+        });
+
+        if (!session) {
+          return reply.status(404).send({ success: false, error: 'Session not found' });
+        }
+
+        if (
+          session.executionStatus === ExecutionStatus.COMPLETED ||
+          session.executionStatus === ExecutionStatus.ERROR
+        ) {
+          reply.code(400);
+          return {
+            success: false,
+            error: {
+              code: ErrorCode.SESSION_ENDED,
+              type: 'session',
+              message: `会话已结束 (${session.executionStatus})，无法修改变量`,
+            },
+          };
+        }
+
+        const sessionManager = new SessionManager();
+        const result = await sessionManager.updateVariable(session as any, {
+          variableName,
+          scope,
+          value,
+          phaseId,
+          topicId,
+        });
+
+        return { success: true, ...result };
+      } catch (error) {
+        app.log.error(error);
+        return reply.status(500).send({ success: false, error: 'Failed to update variable' });
       }
     }
   );
