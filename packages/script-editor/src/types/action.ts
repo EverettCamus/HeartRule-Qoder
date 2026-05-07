@@ -141,11 +141,3 @@ export interface Step {
   topic?: string; // 目标（Topic）
   actions?: Action[]; // 动作列表
 }
-
-// Action 节点的 UI 状态
-export interface ActionNodeState {
-  id: string; // 节点唯一ID
-  action: Action; // Action 数据
-  selected: boolean; // 是否选中
-  expanded: boolean; // 是否展开详情
-}
