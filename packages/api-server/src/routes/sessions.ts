@@ -943,4 +943,123 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       }
     }
   );
+
+  // Rerun action
+  app.post(
+    '/api/sessions/:sessionId/rerun',
+    {
+      schema: {
+        tags: ['sessions'],
+        description: '回退到指定 action 起点并重新执行',
+        params: {
+          type: 'object',
+          required: ['sessionId'],
+          properties: {
+            sessionId: { type: 'string', format: 'uuid' },
+          },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            targetActionId: { type: 'string' },
+            config: {
+              type: 'object',
+              properties: {
+                content: { type: 'string' },
+                tone: { type: 'string' },
+                max_rounds: { type: 'number' },
+                output: { type: 'array' },
+              },
+            },
+            llmConfig: {
+              type: 'object',
+              properties: {
+                provider: { type: 'string' },
+                model: { type: 'string' },
+                temperature: { type: 'number' },
+                maxTokens: { type: 'number' },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { sessionId } = request.params as { sessionId: string };
+        const body =
+          (request.body as {
+            targetActionId?: string;
+            config?: Record<string, any>;
+            llmConfig?: Record<string, any>;
+          }) || {};
+
+        const sessionManager = new SessionManager();
+
+        const result = await sessionManager.rerunAction(
+          sessionId,
+          body.targetActionId,
+          body.config,
+          body.llmConfig
+        );
+
+        // Record version in rerunHistory
+        const session = await db.query.sessions.findFirst({
+          where: eq(sessions.id, sessionId),
+        });
+        if (session) {
+          const metadata = (session.metadata as Record<string, any>) || {};
+          const rerunHistory = (metadata.rerunHistory || []) as any[];
+          const actionId =
+            body.targetActionId ||
+            (session.position as Record<string, any>)?.actionId ||
+            metadata.currentActionId;
+
+          const newVersion: any = {
+            versionId: uuidv4(),
+            actionId,
+            timestamp: new Date().toISOString(),
+            config: body.config ?? {},
+            llmConfig: body.llmConfig ?? undefined,
+            debugInfo: result.debugInfo,
+            result: {
+              roundsUsed: (result as any).currentRound ?? 0,
+              exitReason: (result as any).exitReason || undefined,
+              variableCount: result.variables ? Object.keys(result.variables).length : 0,
+            },
+          };
+
+          // Per-action limit: max 20 versions, remove oldest (except v1) if exceeded
+          const actionVersions = rerunHistory.filter((e: any) => e.actionId === actionId);
+          while (actionVersions.length >= 20) {
+            const oldestNonV1 = actionVersions.find(
+              (e: any) => e.versionId !== actionVersions[0]?.versionId
+            );
+            if (!oldestNonV1) break;
+            const idx = rerunHistory.indexOf(oldestNonV1);
+            rerunHistory.splice(idx, 1);
+            actionVersions.splice(actionVersions.indexOf(oldestNonV1), 1);
+          }
+
+          rerunHistory.push(newVersion);
+          metadata.rerunHistory = rerunHistory;
+
+          await db
+            .update(sessions)
+            .set({ metadata, updatedAt: new Date() })
+            .where(eq(sessions.id, sessionId));
+        }
+
+        return result;
+      } catch (error: any) {
+        if (error.statusCode === 400) {
+          return reply.status(400).send({ error: error.message });
+        }
+        logError(app.log, error, {
+          sessionId: (request.params as any)?.sessionId,
+        });
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
 }
