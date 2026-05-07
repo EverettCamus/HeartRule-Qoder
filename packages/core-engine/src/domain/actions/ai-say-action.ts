@@ -189,11 +189,16 @@ export class AiSayAction extends BaseAction {
     console.log(`[AiSayAction] 📝 Prompt prepared (${prompt.length} chars)`);
 
     // 4. 调用 LLM
-    const llmResult = await this.llmOrchestrator!.generateText(prompt, {
-      temperature: 0.7,
-      maxTokens: 1000,
-      responseFormat: { type: 'json_object' },
-    });
+    const llmConfig = context?.llmConfig;
+    const llmResult = await this.llmOrchestrator!.generateText(
+      prompt,
+      {
+        temperature: llmConfig?.temperature ?? 0.7,
+        maxTokens: llmConfig?.maxTokens ?? 1000,
+        responseFormat: { type: 'json_object' },
+      },
+      llmConfig?.provider
+    );
 
     // 5. 安全边界检测
     const safetyCheckResult = this.checkSafetyBoundary(llmResult.text);
@@ -379,11 +384,16 @@ export class AiSayAction extends BaseAction {
       const userPrompt = `请改写：${content}`;
 
       try {
-        const result = await this.llmOrchestrator.generateText(`${systemPrompt}\n\n${userPrompt}`, {
-          temperature: 0.7,
-          maxTokens: 500,
-          responseFormat: { type: 'json_object' },
-        });
+        const llmConfig = context?.llmConfig;
+        const result = await this.llmOrchestrator.generateText(
+          `${systemPrompt}\n\n${userPrompt}`,
+          {
+            temperature: llmConfig?.temperature ?? 0.7,
+            maxTokens: llmConfig?.maxTokens ?? 500,
+            responseFormat: { type: 'json_object' },
+          },
+          llmConfig?.provider
+        );
 
         content = result.text;
         debugInfo = result.debugInfo;

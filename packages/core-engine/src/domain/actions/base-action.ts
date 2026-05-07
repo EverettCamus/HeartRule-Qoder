@@ -60,6 +60,12 @@ export interface ActionContext {
     metadata?: Record<string, any>;
   }>;
   metadata: Record<string, any>;
+  llmConfig?: {
+    provider?: string;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  };
 }
 
 /**

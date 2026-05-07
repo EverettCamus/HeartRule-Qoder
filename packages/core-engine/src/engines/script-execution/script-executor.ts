@@ -1164,6 +1164,7 @@ export class ScriptExecutor {
       scopeResolver,
       conversationHistory: [...executionState.conversationHistory],
       metadata: { ...executionState.metadata },
+      llmConfig: executionState.metadata.llmConfig || undefined,
     };
 
     // Execute Action
@@ -1202,6 +1203,7 @@ export class ScriptExecutor {
       scopeResolver,
       conversationHistory: [...executionState.conversationHistory],
       metadata: { ...executionState.metadata },
+      llmConfig: executionState.metadata.llmConfig || undefined,
     };
 
     // Continue execution
