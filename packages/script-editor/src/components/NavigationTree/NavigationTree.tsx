@@ -20,7 +20,12 @@ interface NavigationTreeProps {
   actionSnapshots?: Record<string, any>;
 }
 
-const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentPosition }) => {
+const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({
+  tree,
+  currentPosition,
+  onRollback,
+  actionSnapshots,
+}) => {
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
   const [executedActions, setExecutedActions] = useState<Set<string>>(new Set());
@@ -194,11 +199,26 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentP
         style={{
           ...getActionStyle(action),
           transition: 'all 0.3s ease',
+          display: 'flex',
+          alignItems: 'center',
         }}
         title={getActionTooltip(action)}
       >
         <span style={{ marginRight: '8px' }}>{getActionIcon(action)}</span>
         Action: {action.actionId}
+        {onRollback &&
+          actionSnapshots?.[action.actionId] &&
+          action.actionId !== currentPosition?.actionId && (
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                onRollback(action.actionId);
+              }}
+              style={{ marginLeft: 8, fontSize: 12, color: '#1677ff', cursor: 'pointer' }}
+            >
+              回退到此
+            </span>
+          )}
       </div>
     );
   };
