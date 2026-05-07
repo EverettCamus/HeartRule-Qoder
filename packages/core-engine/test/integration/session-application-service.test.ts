@@ -1,12 +1,12 @@
 import { ExecutionStatus } from '@heartrule/shared-types';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { DefaultSessionApplicationService } from '../../src/application/session-application-service.js';
 import type {
   ISessionApplicationService,
   InitializeSessionRequest,
   ProcessUserInputRequest,
-} from '../../src/application/session-application-service.js';
+} from '../../src/application/ports/inbound/session-application.port.js';
+import { DefaultSessionApplicationService } from '../../src/application/usecases/session-application-service.js';
 
 /**
  * Session Application Service 测试套件

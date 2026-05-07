@@ -125,7 +125,7 @@ export * from './domain/actions/ai-ask-action.js'; // AI 追问/提问动作执�
 // 作为防腐层（Anti-Corruption Layer），隔离核心引擎内部实现与外部调用关系
 
 // SessionApplicationService: 会话应用服务接口，提供会话初始化与用户输入处理的标准接口
-export * from './application/session-application-service.js';
+export * from './application/usecases/session-application-service.js';
 
 // =============================================================================
 // Application Layer - Engines (应用层 - 引擎)
