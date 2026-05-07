@@ -875,6 +875,28 @@ export class ScriptExecutor {
         executionState.currentAction = action;
         executionState.currentActionId = actionConfig.action_id;
         executionState.currentActionType = actionConfig.action_type;
+
+        // Create action snapshot on first entry
+        if (!executionState.metadata.actionSnapshots) {
+          executionState.metadata.actionSnapshots = {};
+        }
+        const snapshots = executionState.metadata.actionSnapshots as Record<string, any>;
+        if (!snapshots[actionConfig.action_id]) {
+          snapshots[actionConfig.action_id] = {
+            phaseIndex: executionState.currentPhaseIdx,
+            topicIndex: executionState.currentTopicIdx,
+            actionIndex: executionState.currentActionIdx,
+            actionId: actionConfig.action_id,
+            actionType: actionConfig.action_type,
+            variableStore: executionState.variableStore
+              ? JSON.parse(JSON.stringify(executionState.variableStore))
+              : undefined,
+            conversationHistoryLength: executionState.conversationHistory.length,
+            timestamp: new Date().toISOString(),
+            originalConfig: { ...actionConfig },
+          };
+        }
+
         logger.debug(`✅ Created action instance: ${action.actionId}`);
       }
 
