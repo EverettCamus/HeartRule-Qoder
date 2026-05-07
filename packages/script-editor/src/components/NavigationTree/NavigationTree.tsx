@@ -16,6 +16,8 @@ import type {
 interface NavigationTreeProps {
   tree: NavigationTree | null;
   currentPosition?: CurrentPosition;
+  executionStatus?: string;
+  onRerun?: () => void;
   onRollback?: (actionId: string) => void;
   actionSnapshots?: Record<string, any>;
 }
@@ -23,6 +25,8 @@ interface NavigationTreeProps {
 const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({
   tree,
   currentPosition,
+  executionStatus,
+  onRerun,
   onRollback,
   actionSnapshots,
 }) => {
@@ -206,19 +210,34 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({
       >
         <span style={{ marginRight: '8px' }}>{getActionIcon(action)}</span>
         Action: {action.actionId}
-        {onRollback &&
-          actionSnapshots?.[action.actionId] &&
-          action.actionId !== currentPosition?.actionId && (
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                onRollback(action.actionId);
-              }}
-              style={{ marginLeft: 8, fontSize: 12, color: '#1677ff', cursor: 'pointer' }}
-            >
-              回退到此
-            </span>
-          )}
+        {isCurrentAction && executionStatus === 'waiting_input' && onRerun && (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              onRerun();
+            }}
+            style={{
+              marginLeft: 8,
+              fontSize: 12,
+              color: '#1677ff',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+          >
+            🔄 重运行
+          </span>
+        )}
+        {!isCurrentAction && onRollback && actionSnapshots?.[action.actionId] && (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              onRollback(action.actionId);
+            }}
+            style={{ marginLeft: 8, fontSize: 12, color: '#1677ff', cursor: 'pointer' }}
+          >
+            回退到此
+          </span>
+        )}
       </div>
     );
   };

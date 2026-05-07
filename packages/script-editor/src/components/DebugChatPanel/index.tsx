@@ -1618,6 +1618,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         <NavigationTree
           tree={navigationTree}
           currentPosition={currentPosition}
+          executionStatus={sessionInfo?.executionStatus}
+          onRerun={handleRerunCurrent}
           onRollback={handleRollbackToAction}
           actionSnapshots={actionSnapshots}
         />
@@ -1655,11 +1657,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             >
               🔄 重新开始
             </Button>
-            {sessionInfo?.executionStatus === 'waiting_input' && currentPosition?.actionId && (
-              <Button size="small" onClick={handleRerunCurrent}>
-                重运行
-              </Button>
-            )}
             <Button
               type="text"
               icon={<SettingOutlined />}
