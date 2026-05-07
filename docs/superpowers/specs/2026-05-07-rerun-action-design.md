@@ -189,7 +189,8 @@ YAML action config (未来)          rerun API 请求 (当前)
 ```
 
 - v1 始终为原始版本（session 创建时的 config），不可删除
-- 每个 action 最多 20 个版本，超出删除最旧的（v1 除外）
+- **Per-action 独立计数**：版本数量按 actionId 分组。每个 action 最多 20 个版本，action_1 的版本数和 action_2 的版本数互不影响。超出时删该 action 内最旧的（v1 除外）
+- `rerunHistory` 平铺存储，按 `actionId` + `timestamp` 查询和筛选
 
 ### LLMOrchestrator 改造
 
@@ -250,8 +251,10 @@ interface ActionContext {
       ● action_3 (进行中)         [回退到此] [重运行]
 ```
 
-- **已完成的 action**：显示"回退到此"，点击 → 弹出确认 Modal（仅显示清除后果，不提供 config 编辑）
-- **进行中的 action**：显示"重运行"，点击 → 弹出配置 Modal（可编辑 config 和 LLM）
+- **已完成的 action**：显示"回退到此"，点击 → 弹出确认 Modal（含清除后果 + 可编辑 config 和 LLM）
+- **进行中的 action**：显示"重运行"，点击 → 弹出配置 Modal（可编辑 config 和 LLM，含版本历史）
+
+两种 Modal 结构相同，区别仅在于进行中的 action 多出版本历史列表。
 
 ### 重运行按钮（快捷入口）
 
@@ -306,7 +309,7 @@ interface ActionContext {
 
 ### 回退到历史 action 的 Modal
 
-点击导航树已完成的 action 的"回退到此"，显示简化版确认 Modal（不提供 config 编辑，仅在确认框做二次确认）：
+点击导航树已完成的 action 的"回退到此"，显示回退确认 Modal：
 
 ```
 ┌──────────────────────────────────────────────────────┐
