@@ -170,10 +170,16 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     [sessionInfo]
   );
 
-  const actionSnapshots: Record<string, any> = useMemo(
-    () => (sessionInfo?.metadata?.actionSnapshots as Record<string, any>) || {},
-    [sessionInfo]
-  );
+  const actionSnapshots: Record<string, any> = useMemo(() => {
+    const snapshots = (sessionInfo?.metadata?.actionSnapshots as Record<string, any>) || {};
+    console.log('[DebugChat] actionSnapshots from metadata:', {
+      hasMetadata: !!sessionInfo?.metadata,
+      metadataKeys: sessionInfo?.metadata ? Object.keys(sessionInfo.metadata) : [],
+      snapshotKeys: Object.keys(snapshots),
+      snapshots,
+    });
+    return snapshots;
+  }, [sessionInfo]);
 
   const currentActionConfig = useMemo(() => {
     const actionId = currentPosition?.actionId;

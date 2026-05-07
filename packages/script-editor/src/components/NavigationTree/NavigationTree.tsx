@@ -196,6 +196,16 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({
   const renderAction = (action: ActionNode) => {
     const isCurrentAction = currentPosition && action.actionId === currentPosition.actionId;
 
+    console.log('[NavigationTree] renderAction:', {
+      actionId: action.actionId,
+      isCurrentAction,
+      executionStatus,
+      hasOnRerun: !!onRerun,
+      hasOnRollback: !!onRollback,
+      hasSnapshot: !!actionSnapshots?.[action.actionId],
+      snapshotKeys: actionSnapshots ? Object.keys(actionSnapshots) : [],
+    });
+
     return (
       <div
         key={action.actionId}
