@@ -45,15 +45,6 @@ export enum ExecutionStatus {
 }
 
 /**
- * Execution Position
- */
-export interface ExecutionPosition {
-  phaseIndex: number;
-  topicIndex: number;
-  actionIndex: number;
-}
-
-/**
  * Execution State
  *
  * Temporary structure used to carry state during script execution, not directly persisted.
