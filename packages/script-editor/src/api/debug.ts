@@ -110,6 +110,35 @@ export interface SendDebugMessageRequest {
   content: string;
 }
 
+export interface RerunRequest {
+  targetActionId?: string;
+  config?: {
+    content?: string;
+    tone?: string;
+    max_rounds?: number;
+    output?: any[];
+  };
+  llmConfig?: {
+    provider?: string;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  };
+}
+
+export interface RerunResponse extends DebugMessageResponse {
+  rerunInfo?: {
+    rerunCount: number;
+    versionId: string;
+    previousRounds: number;
+  };
+}
+
+export interface WriteBackConfigRequest {
+  config?: Record<string, any>;
+  llmConfig?: Record<string, any>;
+}
+
 // ========== API方法 ==========
 
 export const debugApi = {
@@ -234,6 +263,30 @@ export const debugApi = {
   async deleteDebugSession(sessionId: string) {
     const response = await axios.delete<{ success: boolean }>(
       `${API_BASE_URL}/sessions/${sessionId}`,
+      { timeout: 10000 }
+    );
+    return response.data;
+  },
+
+  /**
+   * 重运行当前或指定 action
+   */
+  async rerunAction(sessionId: string, data: RerunRequest) {
+    const response = await axios.post<RerunResponse>(
+      `${API_BASE_URL}/sessions/${sessionId}/rerun`,
+      data,
+      { timeout: 60000 }
+    );
+    return response.data;
+  },
+
+  /**
+   * 回写 action config 到 YAML 脚本
+   */
+  async writeBackActionConfig(scriptId: string, actionId: string, data: WriteBackConfigRequest) {
+    const response = await axios.post<{ success: boolean }>(
+      `${API_BASE_URL}/scripts/${scriptId}/actions/${actionId}/config`,
+      data,
       { timeout: 10000 }
     );
     return response.data;
