@@ -6,22 +6,27 @@
 
 ## Feature Summary
 
-- **重运行当前 action**：回退 position 到 action 起点（currentRound=0），清除本 action 产生的消息和变量，重新执行
-- **Prompt 内联编辑**：重运行前可修改 action 的 content、tone、max_rounds 等配置
-- **LLM 动态切换**：每次重运行可指定 provider、model、temperature，不影响其他 action
-- **版本历史**：每次重运行的配置和结果自动记录，可向前追溯和对比
+- **重运行当前 action**：回退 position 到当前 action 起点（currentRound=0），清除本 action 产生的消息和变量，重新执行
+- **回退到历史 action**：回退到 session 中任意已执行过的 action 的起点，清除该 action 及之后的所有消息和变量
+- **Prompt 内联编辑**：回退/重运行前可修改目标 action 的 content、tone、max_rounds 等配置
+- **LLM 动态切换**：每次回退/重运行可指定 provider、model、temperature，不影响其他 action
+- **版本历史**：每次操作的配置和结果自动记录，可向前追溯和对比
 - **回归历史版本**：选中任一历史版本，其配置自动回填编辑区
 - **回写到脚本**：将选定版本的配置写入原 YAML 文件
 
 ## Architecture
 
 ```
-DebugChatPanel (重运行按钮 + 配置 Modal)
+DebugChatPanel
+  ├─ 导航树：已完成的 action → [回退到此]
+  ├─ 当前 action → [重运行]（复用回退逻辑 + 修改 config）
+  │
   └─ POST /api/sessions/:sessionId/rerun
-       ├─ 后端读取 session.metadata.actionSnapshot
+       ├─ 后端读取 session.metadata.actionSnapshots[targetActionId]
        ├─ 回退 DB 状态（variableStore, position, messages）
+       │    └─ 目标 action 之后的所有 action：级联清除
        ├─ 应用 config + llmConfig（内存级别）
-       ├─ 执行 action
+       ├─ 执行目标 action
        └─ 返回响应 + rerunInfo + 更新 rerunHistory
 ```
 
@@ -46,24 +51,49 @@ YAML action config (未来)          rerun API 请求 (当前)
 
 ## Backend
 
-### Action Snapshot
+### Per-Action Snapshots
 
-进入每个新 action 时自动快照，存入 `sessions.metadata.actionSnapshot`：
+每个 action 进入时自动产生独立快照，以 `actionId` 为 key 存入 `sessions.metadata.actionSnapshots`：
 
 ```typescript
+// sessions.metadata.actionSnapshots
 {
-  phaseIndex: number;
-  topicIndex: number;
-  actionIndex: number;
-  actionId: string;
-  actionType: string;
-  variableStore: VariableStore; // 4 层 scope 完整快照
-  messageCount: number; // 进入 action 前 messages 表已有条数
-  conversationHistoryLength: number;
+  [actionId: string]: {
+    phaseIndex: number;
+    topicIndex: number;
+    actionIndex: number;
+    actionId: string;
+    actionType: string;
+    variableStore: VariableStore; // 进入该 action 前的 4 层 scope
+    messageCount: number; // 进入该 action 前 messages 表已有条数
+    conversationHistoryLength: number;
+    timestamp: string; // 快照创建时间
+    originalConfig: Record<string, unknown>; // 当时 action 的原始 config
+  }
 }
 ```
 
-快照覆盖规则：进入新 action → 覆盖；同一 action 的 round 推进 → 不更新。
+快照规则：
+
+- 进入新 action → 追加一条（按 `actionId` 索引）
+- 同一 action 的 round 推进 → 不更新（首次进入的快照保持为 action 起点）
+- `actionId` 在 script 中是唯一的，天然不会冲突
+
+**回退到指定 action 时的级联清除**：
+
+```
+当前: action_1 → action_2 → action_3（进行中）
+回退到 action_2:
+  1. 读取 actionSnapshots[actionId_2]
+  2. 恢复 variableStore（action_2 进入前的状态）
+  3. 恢复 position（指向 action_2 开头，currentRound=0）
+  4. 删除 messages 中 > messageCount 的所有记录
+  5. 删除 actionSnapshots 中 action_3 的条目（路径已变）
+  6. 清理 rerunHistory 中不属于 action_2 的条目
+  7. 执行 action_2
+```
+
+回退后再次执行时，后续 action 的旧快照已被删除。新执行产生的路径会重新创建快照。
 
 ### POST /api/sessions/:sessionId/rerun
 
@@ -71,6 +101,7 @@ YAML action config (未来)          rerun API 请求 (当前)
 
 ```json
 {
+  "targetActionId": "action_2",
   "config": {
     "content": "新 prompt...",
     "tone": "平和，简洁",
@@ -86,22 +117,26 @@ YAML action config (未来)          rerun API 请求 (当前)
 }
 ```
 
-所有字段可选。
+`targetActionId` 不传时默认当前 action。`config` 和 `llmConfig` 可选。
 
 **Backend flow:**
 
-1. 读取 `session.metadata.actionSnapshot`，无快照 → 400
-2. 用快照回退 DB 状态：
+1. 确定目标 snapshots key：`targetActionId || currentActionId`
+2. 读取 `session.metadata.actionSnapshots[targetKey]`，无快照 → 400
+3. 用快照回退 DB 状态：
    - `variableStore` → 写回 `sessions.metadata.variableStore`
    - `position` → 回退到快照（currentRound=0）
    - `executionStatus` → 设为 `running`
-   - 删除本 action 产生的 messages（WHERE sessionId = X AND id > 快照时的 max message id）
-3. 如果传入 `config`，merge 到当前 script 匹配的 action（内存级别，不持久化到 YAML）
-4. 如果传入 `llmConfig`，注入 `ActionContext`（本次调用有效）
-5. 调用 `scriptExecutor.executeSession(restoredState)`
-6. 持久化新状态（同 `processUserInput` 流程）
-7. 追加记录到 `metadata.rerunHistory`
-8. 返回响应
+   - 删除本 action 及之后产生的 messages（WHERE sessionId = X AND id > 快照时的 max message id）
+4. 级联清理：
+   - 删除 `actionSnapshots` 中目标 action 之后的所有条目
+   - 删除 `rerunHistory` 中目标 action 之外的所有条目
+5. 如果传入 `config`，merge 到当前 script 匹配的 action（内存级别，不持久化到 YAML）
+6. 如果传入 `llmConfig`，注入 `ActionContext`（本次调用有效）
+7. 调用 `scriptExecutor.executeSession(restoredState)`
+8. 持久化新状态（同 `processUserInput` 流程）
+9. 追加记录到 `metadata.rerunHistory`
+10. 返回响应
 
 **Response:**
 
@@ -202,9 +237,25 @@ interface ActionContext {
 
 ## Frontend
 
-### 重运行按钮
+### 导航树操作入口
 
-位置：当前 action 的 PositionBubble 旁边。仅对当前正在执行的 action 显示，历史 bubble 不显示。
+导航树中每个 action 节点根据状态显示不同操作：
+
+```
+导航树:
+  ▼ Phase 1
+    ▼ Topic 1
+      ○ action_1 (已完成)         [回退到此]
+      ○ action_2 (已完成)         [回退到此]
+      ● action_3 (进行中)         [回退到此] [重运行]
+```
+
+- **已完成的 action**：显示"回退到此"，点击 → 弹出确认 Modal（仅显示清除后果，不提供 config 编辑）
+- **进行中的 action**：显示"重运行"，点击 → 弹出配置 Modal（可编辑 config 和 LLM）
+
+### 重运行按钮（快捷入口）
+
+同时保留在 PositionBubble 旁显示"重运行"按钮，作为当前 action 的快捷入口。位置：仅对当前正在执行的 action 显示，历史 bubble 不显示。
 
 ```
 ┌────────────────────────────────────────────────┐
@@ -253,6 +304,42 @@ interface ActionContext {
 └────────────────────────────────────────────────┘
 ```
 
+### 回退到历史 action 的 Modal
+
+点击导航树已完成的 action 的"回退到此"，显示简化版确认 Modal（不提供 config 编辑，仅在确认框做二次确认）：
+
+```
+┌──────────────────────────────────────────────────────┐
+│           回退到 action_2                              │
+│                                                      │
+│  ── 回退点信息 ──────────────────────────────────────│
+│  Phase 1 → Topic 1 → action_2                        │
+│  快照时间: 2026-05-07 14:25                          │
+│                                                      │
+│  ⚠️ 将清除以下内容：                                  │
+│  • action_2 及之后的 5 条对话消息                      │
+│  • action_3 的变量和执行状态                          │
+│  • action_3 的调试快照                                │
+│                                                      │
+│  ── 编辑配置（可选）─────────────────────────────────│
+│  Prompt: [预填 action_2 的原始 config]                │
+│  ┌──────────────────────────────────────────────┐    │
+│  │ (可编辑)                                      │    │
+│  └──────────────────────────────────────────────┘    │
+│  Tone: [平缓、亲和                    ]              │
+│                                                      │
+│  ── LLM 设置 ────────────────────────────────────────│
+│  Provider: [DeepSeek ▼]                              │
+│  Model: [deepseek-v4-flash ▼]                        │
+│  Temperature: [0.7]                                 │
+│                                                      │
+│  [取消]  [确认回退]                                    │
+└──────────────────────────────────────────────────────┘
+```
+
+- "编辑配置"和"LLM 设置"区域提供可选修改能力（与当前 action 的重运行 Modal 一致）
+- 不提供版本历史列表（历史版本的起点是回退后的新执行，回溯到该 action 之前没有意义）
+
 ### 交互逻辑
 
 **版本选择**
@@ -280,7 +367,8 @@ interface ActionContext {
 
 | 状态                    | 行为                                     |
 | ----------------------- | ---------------------------------------- |
-| 无快照                  | 不显示重运行按钮                         |
+| 无快照                  | 不显示重运行按钮 / "回退到此"按钮        |
+| 回退到历史 action       | 导航树点击"回退到此" → 弹出确认 Modal    |
 | 进行中                  | 按钮 loading，禁止重复点击               |
 | 完成                    | 按钮恢复可用，更新 round 数              |
 | 失败                    | 显示 error message，保留原有 UI 状态不变 |
@@ -290,13 +378,14 @@ API 调用采用悲观策略：不乐观更新 UI，等待 API 成功响应后�
 
 ## Error Handling
 
-| 场景                    | 处理                                    |
-| ----------------------- | --------------------------------------- |
-| 快照不存在              | 400: "无法定位回退点，请新建调试"       |
-| Action 在新脚本中已删除 | 400: "当前 action 已被删除，无法重运行" |
-| 重运行执行失败          | 500: 保留原有 UI 状态不变，显示错误消息 |
-| 回写时文件冲突          | 409: 提示用户先保存当前编辑             |
-| 版本超限                | 自动删除最旧版本（v1 除外）             |
+| 场景                         | 处理                                    |
+| ---------------------------- | --------------------------------------- |
+| 快照不存在（当前 action）    | 不显示"重运行"按钮                      |
+| 快照不存在（目标 action）    | 导航树上不显示"回退到此"按钮            |
+| 目标 action 在新脚本中已删除 | 400: "目标 action 已被删除，无法回退"   |
+| 重运行执行失败               | 500: 保留原有 UI 状态不变，显示错误消息 |
+| 回写时文件冲突               | 409: 提示用户先保存当前编辑             |
+| 版本超限                     | 自动删除最旧版本（v1 除外）             |
 
 ## Files to Change
 
