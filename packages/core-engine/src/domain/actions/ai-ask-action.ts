@@ -361,7 +361,7 @@ export class AiAskAction extends BaseAction {
 
     // 4. 调用 LLM
     logger.info('🔍 [generateQuestionFromTemplate] Calling LLM...');
-    const llmResult = await this.callLLM(prompt);
+    const llmResult = await this.callLLM(prompt, context);
     logger.info('🔍 [generateQuestionFromTemplate] LLM response received', {
       textLength: llmResult.text?.length,
     });
@@ -521,10 +521,14 @@ export class AiAskAction extends BaseAction {
   ): Promise<any> {
     try {
       const extractPrompt = this.buildExtractionPrompt(context, varName, varDefine);
-      const result = await this.llmOrchestrator!.generateText(extractPrompt, {
-        temperature: 0.3,
-        maxTokens: 500,
-      });
+      const result = await this.llmOrchestrator!.generateText(
+        extractPrompt,
+        {
+          temperature: context.llmConfig?.temperature ?? 0.3,
+          maxTokens: context.llmConfig?.maxTokens ?? 500,
+        },
+        context.llmConfig?.provider
+      );
       return result.text.trim();
     } catch (error: any) {
       logger.error('❌ LLM extraction failed', { varName, error: error.message });
@@ -989,16 +993,21 @@ ${historyText}
   /**
    * 调用 LLM
    */
-  private async callLLM(prompt: string) {
+  private async callLLM(prompt: string, context?: ActionContext) {
     if (!this.llmOrchestrator) {
       throw new Error('[callLLM] LLM Orchestrator is null');
     }
     try {
-      return await this.llmOrchestrator.generateText(prompt, {
-        temperature: 0.7,
-        maxTokens: 4096,
-        responseFormat: { type: 'json_object' },
-      });
+      const llmConfig = context?.llmConfig;
+      return await this.llmOrchestrator.generateText(
+        prompt,
+        {
+          temperature: llmConfig?.temperature ?? 0.7,
+          maxTokens: llmConfig?.maxTokens ?? 4096,
+          responseFormat: { type: 'json_object' },
+        },
+        llmConfig?.provider
+      );
     } catch (e: any) {
       logger.error('❌ [callLLM] LLM call failed:', {
         message: e.message,
