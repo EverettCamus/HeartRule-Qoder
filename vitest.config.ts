@@ -13,6 +13,8 @@ export default defineConfig({
       '**/*.config.*',
       'packages/script-editor/**',
       '.worktrees/**',
+      'scripts/archive/**',
+      '.claude/worktrees/**',
     ],
     coverage: {
       provider: 'v8',
