@@ -12,7 +12,7 @@ import {
 } from '@heartrule/core-engine';
 import type { DetailedApiError } from '@heartrule/shared-types';
 import { VariableScope, ExecutionStatus } from '@heartrule/shared-types';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, count, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
 
@@ -694,6 +694,25 @@ export class SessionManager {
   ): Promise<void> {
     logger.debug('💾 Updating session state in DB');
 
+    // Add messageCount to any new snapshots that don't have it yet
+    if (executionState.metadata.actionSnapshots) {
+      const snapshots = executionState.metadata.actionSnapshots as Record<string, any>;
+      let msgCount: number | null = null;
+      for (const key of Object.keys(snapshots)) {
+        if (snapshots[key].messageCount === undefined) {
+          if (msgCount === null) {
+            // Count messages for this session
+            const result = await db
+              .select({ count: count() })
+              .from(messages)
+              .where(eq(messages.sessionId, sessionId));
+            msgCount = result[0]?.count ?? 0;
+          }
+          snapshots[key].messageCount = msgCount;
+        }
+      }
+    }
+
     await db
       .update(sessions)
       .set({
@@ -1344,6 +1363,153 @@ export class SessionManager {
       .where(eq(sessions.id, session.id));
 
     return { variableName, scope, value, updatedAt: now };
+  }
+
+  /**
+   * Rerun an action from a saved snapshot
+   *
+   * Restores session state to the point when the target action was first executed,
+   * cleans up all state after that point, and re-executes the action.
+   *
+   * @param sessionId - The session ID
+   * @param targetActionId - Optional action ID to rerun (defaults to current action)
+   * @param configOverride - Optional config overrides for the rerun
+   * @param llmConfig - Optional LLM config overrides
+   */
+  async rerunAction(
+    sessionId: string,
+    targetActionId?: string,
+    configOverride?: Record<string, any>,
+    llmConfig?: Record<string, any>
+  ): Promise<SessionResponse> {
+    logger.info('🔵 rerunAction called', { sessionId, targetActionId });
+
+    // 1. Load session and script
+    const session = await this.loadSessionById(sessionId);
+    const script = await this.loadScriptById(session.scriptId);
+
+    const metadata = (session.metadata as Record<string, any>) || {};
+    const actionSnapshots = metadata.actionSnapshots || {};
+
+    // 2. Determine target action
+    const currentActionId = (session.position as Record<string, any>)?.actionId;
+    const targetKey = targetActionId || currentActionId;
+
+    if (!targetKey || !actionSnapshots[targetKey]) {
+      throw Object.assign(new Error(`No snapshot found for action: ${targetKey}`), {
+        statusCode: 400,
+      });
+    }
+
+    const snapshot = actionSnapshots[targetKey];
+
+    // 3. Cascade cleanup — keep only snapshots up to and including target
+    const newSnapshots: Record<string, any> = {};
+    // Collect all action IDs from script to determine ordering
+    const scriptContent = yaml.parse(script.scriptContent) || {};
+    const phases = scriptContent.session?.phases || [];
+    const allActionIds: string[] = [];
+    for (const phase of phases) {
+      for (const topic of phase.topics || []) {
+        for (const action of topic.actions || []) {
+          allActionIds.push(action.action_id);
+        }
+      }
+    }
+    const targetIdx = allActionIds.indexOf(targetKey);
+    for (const id of allActionIds.slice(0, targetIdx + 1)) {
+      if (actionSnapshots[id]) {
+        newSnapshots[id] = actionSnapshots[id];
+      }
+    }
+
+    // 4. Delete messages after snapshot point
+    // Use timestamp-based ordering since message IDs are UUIDs
+    const allMessages = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.sessionId, sessionId))
+      .orderBy(messages.timestamp);
+
+    if (snapshot.messageCount < allMessages.length) {
+      const idsToDelete = allMessages.slice(snapshot.messageCount).map((m) => m.id);
+      if (idsToDelete.length > 0) {
+        await db.delete(messages).where(inArray(messages.id, idsToDelete));
+        logger.debug(`🗑️ Deleted ${idsToDelete.length} messages after snapshot point`);
+      }
+    }
+
+    // 5. Clean rerunHistory — keep only entries up to target
+    let rerunHistory = (metadata.rerunHistory || []) as any[];
+    rerunHistory = rerunHistory.filter((entry: any) => {
+      const entryIdx = allActionIds.indexOf(entry.actionId);
+      return entryIdx >= 0 && entryIdx <= targetIdx;
+    });
+
+    // 6. Restore metadata
+    const restoredMetadata: Record<string, any> = {
+      ...metadata,
+      variableStore: snapshot.variableStore,
+      actionSnapshots: newSnapshots,
+      rerunHistory,
+      llmConfig: llmConfig || metadata.llmConfig,
+      rerunConfigOverride: configOverride || undefined,
+    };
+    // Remove action-level state that will be recreated
+    delete restoredMetadata.actionState;
+    delete restoredMetadata.lastActionRoundInfo;
+    delete restoredMetadata.completedActionContext;
+
+    // 7. Update session in DB
+    await db
+      .update(sessions)
+      .set({
+        position: {
+          phaseIndex: snapshot.phaseIndex,
+          topicIndex: snapshot.topicIndex,
+          actionIndex: snapshot.actionIndex,
+          actionId: snapshot.actionId,
+          actionType: snapshot.actionType,
+          currentRound: 0,
+        } as any,
+        executionStatus: ExecutionStatus.RUNNING,
+        metadata: restoredMetadata,
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, sessionId));
+
+    // 8. Re-execute (same flow as processUserInput but without user input)
+    const { values: globalVariables } = await this.loadGlobalVariables(
+      script.scriptName,
+      session.userId
+    );
+    const conversationHistory = await this.loadConversationHistory(sessionId);
+
+    // Re-read session to get updated state
+    const updatedSession = await this.loadSessionById(sessionId);
+    let executionState = this.restoreExecutionState(
+      updatedSession,
+      globalVariables,
+      conversationHistory
+    );
+
+    // Apply config override to metadata for the action to pick up
+    if (configOverride) {
+      executionState.metadata.rerunConfigOverride = configOverride;
+    }
+
+    const prevHistoryLength = executionState.conversationHistory.length;
+    executionState = await this.executeScript(script, sessionId, executionState, null);
+
+    await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
+    await this.saveVariableSnapshots(
+      sessionId,
+      (updatedSession.variables as Record<string, unknown>) || {},
+      executionState.variables
+    );
+    await this.updateSessionState(sessionId, executionState, globalVariables);
+
+    return this.buildSessionResponse(executionState, updatedSession, script, globalVariables, true);
   }
 
   private async getScriptTags(scriptId: string): Promise<string[]> {
