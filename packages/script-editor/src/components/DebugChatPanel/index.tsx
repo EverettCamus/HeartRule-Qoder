@@ -1525,11 +1525,21 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
   // 确认重运行/回退
   const handleRerunConfirm = async (data: RerunRequest) => {
-    if (!activeSessionId) return;
+    if (!activeSessionId) {
+      message.error('没有活跃的调试会话');
+      throw new Error('没有活跃的调试会话');
+    }
 
     data.targetActionId = rerunMode === 'rollback' ? rerunTargetActionId : undefined;
 
-    const result = await debugApi.rerunAction(activeSessionId, data);
+    let result;
+    try {
+      result = await debugApi.rerunAction(activeSessionId, data);
+    } catch (e: any) {
+      const errMsg = e?.response?.data?.error || e?.message || '重运行失败';
+      message.error(errMsg);
+      throw e;
+    }
 
     // Add separator bubble
     addDebugBubble({

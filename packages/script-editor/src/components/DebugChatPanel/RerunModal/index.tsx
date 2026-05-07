@@ -120,6 +120,8 @@ const RerunModal: React.FC<RerunModalProps> = ({
         },
       };
       await onConfirm(data);
+    } catch (e: any) {
+      message.error(e?.message || '操作失败，请重试');
     } finally {
       setConfirmLoading(false);
     }
