@@ -1,10 +1,10 @@
 import { CloseOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons';
-import { Button, Input, Spin, Alert, Empty, Tag } from 'antd';
-import React, { useState, useEffect, useRef } from 'react';
+import { Button, Input, Spin, Alert, Empty, Tag, message } from 'antd';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 import { debugApi } from '../../api/debug';
-import type { DebugMessage } from '../../api/debug';
+import type { DebugMessage, RerunRequest } from '../../api/debug';
 import type {
   DebugBubble,
   DebugOutputFilter,
@@ -33,6 +33,8 @@ import DebugFilterModal from '../DebugFilterModal/DebugFilterModal';
 import ErrorBanner from '../ErrorBanner/ErrorBanner';
 import ErrorDetailModal from '../ErrorDetailModal/ErrorDetailModal';
 import NavigationTree from '../NavigationTree/NavigationTree';
+
+import RerunModal from './RerunModal';
 import './style.css';
 
 const { TextArea } = Input;
@@ -155,6 +157,35 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       }>;
     }>
   >([]);
+
+  // 重运行/回退相关状态
+  const [rerunModalVisible, setRerunModalVisible] = useState(false);
+  const [rerunMode, setRerunMode] = useState<'rerun' | 'rollback'>('rerun');
+  const [rerunTargetActionId, setRerunTargetActionId] = useState<string>('');
+  const [rerunTargetInfo, setRerunTargetInfo] = useState<any>(null);
+
+  // 从 sessionInfo 推导重运行所需的版本历史和快照
+  const rerunHistory: any[] = useMemo(
+    () => (sessionInfo?.metadata?.rerunHistory as any[]) || [],
+    [sessionInfo]
+  );
+
+  const actionSnapshots: Record<string, any> = useMemo(
+    () => (sessionInfo?.metadata?.actionSnapshots as Record<string, any>) || {},
+    [sessionInfo]
+  );
+
+  const currentActionConfig = useMemo(() => {
+    const actionId = currentPosition?.actionId;
+    if (!actionId || !actionSnapshots[actionId]) return {};
+    return actionSnapshots[actionId].originalConfig || {};
+  }, [currentPosition, actionSnapshots]);
+
+  const currentActionVersions = useMemo(() => {
+    const actionId = currentPosition?.actionId;
+    if (!actionId) return [];
+    return rerunHistory.filter((e: any) => e.actionId === actionId);
+  }, [rerunHistory, currentPosition]);
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -1461,6 +1492,113 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     }
   };
 
+  // 重运行当前 action
+  const handleRerunCurrent = () => {
+    setRerunMode('rerun');
+    setRerunTargetActionId(currentPosition?.actionId || '');
+    setRerunTargetInfo(null);
+    setRerunModalVisible(true);
+  };
+
+  // 回退到指定 action
+  const handleRollbackToAction = (actionId: string) => {
+    const snapshot = actionSnapshots[actionId];
+    if (!snapshot) {
+      message.warning('该 action 没有快照，无法回退');
+      return;
+    }
+
+    const allActionIds = Object.keys(actionSnapshots);
+    const snapshotIdx = allActionIds.indexOf(actionId);
+    const actionsToClear = allActionIds.slice(snapshotIdx);
+
+    setRerunMode('rollback');
+    setRerunTargetActionId(actionId);
+    setRerunTargetInfo({
+      phasePath: `Phase ${snapshot.phaseIndex + 1} → Topic ${snapshot.topicIndex + 1} → ${actionId}`,
+      snapshotTime: new Date(snapshot.timestamp).toLocaleString(),
+      messagesToClear: '?',
+      actionsToClear: actionsToClear.filter((a) => a !== actionId),
+    });
+    setRerunModalVisible(true);
+  };
+
+  // 确认重运行/回退
+  const handleRerunConfirm = async (data: RerunRequest) => {
+    if (!activeSessionId) return;
+
+    data.targetActionId = rerunMode === 'rollback' ? rerunTargetActionId : undefined;
+
+    const result = await debugApi.rerunAction(activeSessionId, data);
+
+    // Add separator bubble
+    addDebugBubble({
+      id: uuidv4(),
+      type: 'system',
+      timestamp: new Date().toISOString(),
+      actionId: rerunTargetActionId || currentPosition?.actionId,
+      actionType: currentPosition?.actionType,
+      content: {
+        type: 'system_message',
+        content: `🔄 ${rerunMode === 'rerun' ? '重运行当前 action' : `回退到 ${rerunTargetActionId} 并重新执行`}`,
+      },
+    } as any);
+
+    // Replace messages with new execution result
+    if (result.aiMessage) {
+      const newAssistantMsg = {
+        id: uuidv4(),
+        role: 'assistant' as const,
+        content: result.aiMessage,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, newAssistantMsg as any]);
+    }
+
+    // Update position and session info
+    if (result.position) {
+      setCurrentPosition({
+        phaseIndex: result.position.phaseIndex,
+        topicIndex: result.position.topicIndex,
+        actionIndex: result.position.actionIndex,
+        phaseId: result.position.phaseId || '',
+        topicId: result.position.topicId || '',
+        actionId: result.position.actionId || '',
+        actionType: result.position.actionType || '',
+        currentRound: result.position.currentRound ?? 0,
+        maxRounds: result.position.maxRounds,
+      });
+    }
+
+    // Refresh session detail
+    if (activeSessionId) {
+      try {
+        const updatedSession = await debugApi.getDebugSession(activeSessionId);
+        setSessionInfo(updatedSession);
+      } catch (_e) {
+        // ignore refresh errors
+      }
+    }
+
+    setRerunModalVisible(false);
+  };
+
+  // 回写配置到 YAML 脚本
+  const handleWriteBack = async (
+    _versionId: string,
+    config: Record<string, any>,
+    llmConfig?: Record<string, any>
+  ) => {
+    if (!sessionInfo?.scriptId || !rerunTargetActionId) return;
+
+    await debugApi.writeBackActionConfig(sessionInfo.scriptId, rerunTargetActionId, {
+      config,
+      llmConfig,
+    });
+
+    message.success(`已将配置写入脚本文件的 action: ${rerunTargetActionId}`);
+  };
+
   // 格式化时间戳
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -1477,7 +1615,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     <div className="debug-chat-panel">
       {/* 左侧导航树 */}
       <div className="debug-navigation-tree">
-        <NavigationTree tree={navigationTree} currentPosition={currentPosition} />
+        <NavigationTree
+          tree={navigationTree}
+          currentPosition={currentPosition}
+          onRollback={handleRollbackToAction}
+          actionSnapshots={actionSnapshots}
+        />
       </div>
 
       {/* 右侧主要内容 */}
@@ -1512,6 +1655,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             >
               🔄 重新开始
             </Button>
+            {sessionInfo?.executionStatus === 'waiting_input' && currentPosition?.actionId && (
+              <Button size="small" onClick={handleRerunCurrent}>
+                重运行
+              </Button>
+            )}
             <Button
               type="text"
               icon={<SettingOutlined />}
@@ -1877,6 +2025,20 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           onClose={() => setFilterModalVisible(false)}
           onExpandAll={handleExpandAll}
           onCollapseAll={handleCollapseAll}
+        />
+
+        <RerunModal
+          visible={rerunModalVisible}
+          actionId={rerunTargetActionId}
+          actionType={currentPosition?.actionType || ''}
+          actionConfig={currentActionConfig}
+          sessionDetail={sessionInfo}
+          versions={currentActionVersions}
+          mode={rerunMode}
+          targetInfo={rerunTargetInfo}
+          onConfirm={handleRerunConfirm}
+          onWriteBack={handleWriteBack}
+          onCancel={() => setRerunModalVisible(false)}
         />
       </div>
     </div>

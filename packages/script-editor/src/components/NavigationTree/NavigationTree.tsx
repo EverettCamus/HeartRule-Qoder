@@ -16,6 +16,8 @@ import type {
 interface NavigationTreeProps {
   tree: NavigationTree | null;
   currentPosition?: CurrentPosition;
+  onRollback?: (actionId: string) => void;
+  actionSnapshots?: Record<string, any>;
 }
 
 const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentPosition }) => {
