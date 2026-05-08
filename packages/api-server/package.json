@@ -14,13 +14,13 @@
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push:pg",
     "typecheck": "tsc --noEmit",
-    "test": "tsx scripts/archive/test-version-switch-sync.js",
-    "test:flow": "tsx scripts/archive/test-full-flow.ts",
-    "test:welcome": "tsx scripts/archive/test-full-welcome.ts",
-    "test:global-vars": "tsx scripts/archive/test-global-vars-persistence.ts",
-    "cleanup-templates:analyze": "tsx scripts/archive/analyze-and-cleanup-templates.ts",
-    "cleanup-templates:execute": "tsx scripts/archive/analyze-and-cleanup-templates.ts --execute",
-    "cleanup-templates:auto": "tsx scripts/archive/analyze-and-cleanup-templates.ts --execute --yes"
+    "test": "tsx ../../scripts/archive/test-version-switch-sync.js",
+    "test:flow": "tsx ../../scripts/archive/test-full-flow.ts",
+    "test:welcome": "tsx ../../scripts/archive/test-full-welcome.ts",
+    "test:global-vars": "tsx ../../scripts/archive/test-global-vars-persistence.ts",
+    "cleanup-templates:analyze": "tsx ../../scripts/archive/analyze-and-cleanup-templates.ts",
+    "cleanup-templates:execute": "tsx ../../scripts/archive/analyze-and-cleanup-templates.ts --execute",
+    "cleanup-templates:auto": "tsx ../../scripts/archive/analyze-and-cleanup-templates.ts --execute --yes"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.0",
