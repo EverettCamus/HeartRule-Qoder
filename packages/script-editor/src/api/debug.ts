@@ -10,12 +10,14 @@ export interface DebugSession {
   createdAt: string;
   aiMessage: string;
   executionStatus: string;
-  variables?: Record<string, unknown>; // 所有变量（已合并）
-  globalVariables?: Record<string, unknown>; // 全局变量
+  variables?: Record<string, unknown>;
+  globalVariables?: Record<string, unknown>;
   position?: ExecutionPosition;
+  /** @deprecated Use debugApi.getDebugEntries() instead. */
   debugInfo?: DebugInfo[];
 }
 
+/** @deprecated Use DebugEntryRecord from GET /sessions/:id/debug-entries instead. */
 export interface DebugInfo {
   prompt: string;
   response: {
@@ -72,9 +74,10 @@ export interface DebugSessionDetail {
   scriptId: string;
   status: string;
   executionStatus: string;
+  currentRunId?: string;
   position: ExecutionPosition;
   variables: Record<string, unknown>;
-  globalVariables?: Record<string, unknown>; // 全局变量
+  globalVariables?: Record<string, unknown>;
   metadata: Record<string, unknown>;
   messages: DebugMessage[];
   createdAt: string;
@@ -85,16 +88,17 @@ export interface DebugMessageResponse {
   aiMessage: string;
   sessionStatus: string;
   executionStatus: string;
+  currentRunId?: string;
   variables?: Record<string, unknown>;
-  globalVariables?: Record<string, unknown>; // 全局变量
+  globalVariables?: Record<string, unknown>;
   variableStore?: {
-    // 分层变量存储
     global: Record<string, unknown>;
     session: Record<string, unknown>;
     phase: Record<string, unknown>;
     topic: Record<string, unknown>;
   };
   position?: ExecutionPosition;
+  /** @deprecated Use debugApi.getDebugEntries() instead. */
   debugInfo?: DebugInfo[];
   error?: any;
 }
@@ -108,6 +112,66 @@ export interface CreateDebugSessionRequest {
 
 export interface SendDebugMessageRequest {
   content: string;
+}
+
+export interface RerunRequest {
+  targetActionId?: string;
+  config?: {
+    content?: string;
+    tone?: string;
+    max_rounds?: number;
+    output?: any[];
+  };
+  llmConfig?: {
+    provider?: string;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  };
+}
+
+export interface RerunResponse extends DebugMessageResponse {
+  rerunInfo?: {
+    rerunCount: number;
+    versionId: string;
+    previousRounds: number;
+  };
+}
+
+export interface WriteBackConfigRequest {
+  config?: Record<string, any>;
+  llmConfig?: Record<string, any>;
+}
+
+/** Raw debug entry row returned by GET /api/sessions/:id/debug-entries */
+export interface DebugEntryRecord {
+  id: string;
+  sessionId: string;
+  runId: string;
+  phaseId: string;
+  topicId: string;
+  actionId: string;
+  actionType: string;
+  round: number;
+  content: {
+    entries: Array<{
+      type: 'llm_call' | 'variable_op';
+      model?: string;
+      tokensUsed?: number;
+      responseTimeMs?: number;
+      finishReason?: string;
+      prompt?: string;
+      response?: string;
+      description?: string;
+    }>;
+  };
+  createdAt: string;
+}
+
+export interface DebugEntriesResponse {
+  success: boolean;
+  data: DebugEntryRecord[];
+  total: number;
 }
 
 // ========== API方法 ==========
@@ -131,6 +195,20 @@ export const debugApi = {
     const response = await axios.get<DebugSessionDetail>(`${API_BASE_URL}/sessions/${sessionId}`, {
       timeout: 30000,
     });
+    return response.data;
+  },
+
+  /**
+   * 获取调试信息条目（v2 统一气泡数据源）
+   */
+  async getDebugEntries(sessionId: string, runId?: string) {
+    const response = await axios.get<DebugEntriesResponse>(
+      `${API_BASE_URL}/sessions/${sessionId}/debug-entries`,
+      {
+        params: runId ? { runId } : undefined,
+        timeout: 30000,
+      }
+    );
     return response.data;
   },
 
@@ -234,6 +312,30 @@ export const debugApi = {
   async deleteDebugSession(sessionId: string) {
     const response = await axios.delete<{ success: boolean }>(
       `${API_BASE_URL}/sessions/${sessionId}`,
+      { timeout: 10000 }
+    );
+    return response.data;
+  },
+
+  /**
+   * 重运行当前或指定 action
+   */
+  async rerunAction(sessionId: string, data: RerunRequest) {
+    const response = await axios.post<RerunResponse>(
+      `${API_BASE_URL}/sessions/${sessionId}/rerun`,
+      data,
+      { timeout: 60000 }
+    );
+    return response.data;
+  },
+
+  /**
+   * 回写 action config 到 YAML 脚本
+   */
+  async writeBackActionConfig(scriptId: string, actionId: string, data: WriteBackConfigRequest) {
+    const response = await axios.post<{ success: boolean }>(
+      `${API_BASE_URL}/scripts/${scriptId}/actions/${actionId}/config`,
+      data,
       { timeout: 10000 }
     );
     return response.data;

@@ -3,32 +3,111 @@
  * 调试信息类型定义
  */
 
-/**
- * 调试信息气泡类型枚举
- */
-export type DebugBubbleType =
-  | 'error' // 错误信息
-  | 'llm_prompt' // LLM 提示词
-  | 'llm_response' // LLM 响应
-  | 'variable' // 变量状态
-  | 'execution_log' // 执行日志
-  | 'position'; // 位置信息
+// ============================================================
+// V2 Types: 统一调试气泡（基于 debug_entries 表）
+// ============================================================
 
 /**
- * 调试信息气泡数据结构
+ * 调试条目内容 — 来自 debug_entries.content.entries[]
  */
-export interface DebugBubble {
-  id: string; // 唯一标识
-  type: DebugBubbleType; // 气泡类型
-  timestamp: string; // 时间戳
-  isExpanded: boolean; // 是否展开
-  actionId?: string; // 关联的 Action ID
-  actionType?: string; // 关联的 Action 类型
-  content: DebugBubbleContent; // 内容数据
+export interface DebugEntryItem {
+  type: 'llm_call' | 'variable_op';
+  model?: string;
+  tokensUsed?: number;
+  responseTimeMs?: number;
+  finishReason?: string;
+  prompt?: string;
+  response?: string;
+  description?: string;
 }
 
 /**
- * 气泡内容联合类型
+ * 统一调试气泡（v2）
+ * 一个 action 的执行产生一个调试气泡，内部可能包含多个 LLM 调用
+ */
+export interface DebugBubbleV2 {
+  id: string;
+  sessionId: string;
+  runId: string;
+  phaseId: string;
+  topicId: string;
+  actionId: string;
+  actionType: string;
+  round: number;
+  phaseName?: string;
+  topicName?: string;
+  actionName?: string;
+  entries: DebugEntryItem[];
+  variableSnapshot?: {
+    global: Record<string, unknown>;
+    session: Record<string, unknown>;
+    phase: Record<string, unknown>;
+    topic: Record<string, unknown>;
+  };
+  /** Full VariableBubbleContent for embedding VariableBubble inside this debug bubble */
+  variableContent?: VariableBubbleContent;
+  timestamp: string;
+  isExpanded: boolean;
+}
+
+/**
+ * 调试输出过滤器配置（v2）
+ * 控制统一调试气泡内部各 section 的可见性
+ */
+export interface DebugOutputFilter {
+  showError: boolean;
+  showLLMPrompt: boolean;
+  showLLMResponse: boolean;
+  showVariable: boolean;
+}
+
+/**
+ * 默认过滤器配置
+ */
+export const DEFAULT_DEBUG_FILTER: DebugOutputFilter = {
+  showError: true,
+  showLLMPrompt: true,
+  showLLMResponse: true,
+  showVariable: true,
+};
+
+/**
+ * 调试面板状态
+ */
+export interface DebugPanelState {
+  filter: DebugOutputFilter;
+}
+
+// ============================================================
+// V1 Types: 保留用于向后兼容，标记 @deprecated
+// ============================================================
+
+/**
+ * @deprecated Use DebugBubbleV2 (unified debug bubble) instead.
+ */
+export type DebugBubbleType =
+  | 'error'
+  | 'llm_prompt'
+  | 'llm_response'
+  | 'variable'
+  | 'execution_log'
+  | 'position';
+
+/**
+ * @deprecated Use DebugBubbleV2 instead.
+ */
+export interface DebugBubble {
+  id: string;
+  type: DebugBubbleType;
+  timestamp: string;
+  isExpanded: boolean;
+  actionId?: string;
+  actionType?: string;
+  content: DebugBubbleContent;
+}
+
+/**
+ * @deprecated Use DebugEntryItem[] instead.
  */
 export type DebugBubbleContent =
   | ErrorBubbleContent
@@ -38,17 +117,13 @@ export type DebugBubbleContent =
   | ExecutionLogBubbleContent
   | PositionBubbleContent;
 
-/**
- * 错误信息气泡内容
- */
 export interface ErrorBubbleContent {
   type: 'error';
-  code: string; // 错误代码
-  errorType: string; // 错误类型
-  message: string; // 简短描述
-  details?: string; // 技术详情
+  code: string;
+  errorType: string;
+  message: string;
+  details?: string;
   position?: {
-    // 执行位置
     phaseIndex: number;
     phaseId: string;
     phaseName: string;
@@ -59,77 +134,58 @@ export interface ErrorBubbleContent {
     actionId: string;
   };
   recovery?: {
-    // 恢复建议
     canRetry: boolean;
     suggestions: string[];
   };
-  stackTrace?: string; // 堆栈跟踪
+  stackTrace?: string;
 }
 
-/**
- * LLM 提示词气泡内容
- */
 export interface LLMPromptBubbleContent {
   type: 'llm_prompt';
-  systemPrompt?: string; // 系统提示词
-  userPrompt: string; // 用户提示词
+  systemPrompt?: string;
+  userPrompt: string;
   conversationHistory?: Array<{
-    // 对话历史
     role: string;
     content: string;
   }>;
-  preview: string; // 预览文本（前 100 字符）
+  preview: string;
 }
 
-/**
- * LLM 响应气泡内容
- */
 export interface LLMResponseBubbleContent {
   type: 'llm_response';
-  model: string; // 模型名称
-  tokens: number; // Token 数量
-  maxTokens: number; // 最大 Token
-  rawResponse: string; // 原始响应
-  processedResponse: string; // 处理后响应
-  preview: string; // 预览文本
-  responseTimeMs?: number; // 响应时间（毫秒）
-  ttftMs?: number; // 首字节时间（未来流式支持）
+  model: string;
+  tokens: number;
+  maxTokens: number;
+  rawResponse: string;
+  processedResponse: string;
+  preview: string;
+  responseTimeMs?: number;
+  ttftMs?: number;
 }
 
-/**
- * 变量状态气泡内容
- */
 export interface VariableBubbleContent {
   type: 'variable';
   sessionId?: string;
   changedVariables: Array<{
-    // 变化的变量
     name: string;
     oldValue?: unknown;
     newValue: unknown;
     scope: 'global' | 'session' | 'phase' | 'topic';
   }>;
   allVariables: {
-    // 所有变量（按作用域分层）
     global: Record<string, unknown>;
     session: Record<string, unknown>;
     phase: Record<string, unknown>;
     topic: Record<string, unknown>;
   };
-  // 与当前 action 相关的变量（用于过滤显示）
   relevantVariables?: {
-    inputVariables: string[]; // action 使用的输入变量
-    outputVariables: string[]; // action 输出的变量
+    inputVariables: string[];
+    outputVariables: string[];
   };
-  summary: string; // 摘要文本
-  // === 新增字段 ===
-  /** 动作状态：running=进行中, completed=已完成, error=出错 */
+  summary: string;
   actionStatus?: 'running' | 'completed' | 'error';
-  /** 当前轮次（仅 actionStatus=running 时有效） */
   currentRound?: number;
-  /** 最大轮次 */
   maxRounds?: number;
-  /** 变量收集历史（仅 actionStatus=completed 时有效） */
   collectionHistory?: Array<{
     round: number;
     timestamp: string;
@@ -140,37 +196,28 @@ export interface VariableBubbleContent {
       scope?: 'global' | 'session' | 'phase' | 'topic';
     }>;
   }>;
-  /** 层级路径信息 */
   scopePath?: {
     phaseId: string;
     phaseName: string;
     topicId: string;
     topicName: string;
   };
-  /** 动作退出原因（仅 actionStatus=completed 时有效） */
   exitReason?: 'collected' | 'resistance' | 'crisis' | 'max_rounds' | 'user_interrupt';
 }
 
-/**
- * 执行日志气泡内容
- */
 export interface ExecutionLogBubbleContent {
   type: 'execution_log';
-  status: 'success' | 'failed'; // 执行状态
-  startTime: string; // 开始时间
-  endTime: string; // 结束时间
-  duration: number; // 耗时（毫秒）
+  status: 'success' | 'failed';
+  startTime: string;
+  endTime: string;
+  duration: number;
   steps: Array<{
-    // 执行步骤
     name: string;
     duration: number;
   }>;
-  summary: string; // 摘要文本
+  summary: string;
 }
 
-/**
- * 位置信息气泡内容
- */
 export interface PositionBubbleContent {
   type: 'position';
   phase: {
@@ -187,40 +234,8 @@ export interface PositionBubbleContent {
     index: number;
     id: string;
     type: string;
-    currentRound?: number; // 当前回合数
-    maxRounds?: number; // 最大回合数
+    currentRound?: number;
+    maxRounds?: number;
   };
-  summary: string; // 摘要文本
-}
-
-/**
- * 调试输出过滤器配置
- */
-export interface DebugOutputFilter {
-  showError: boolean; // 显示错误信息
-  showLLMPrompt: boolean; // 显示LLM提示词
-  showLLMResponse: boolean; // 显示LLM响应
-  showVariable: boolean; // 显示变量状态
-  showExecutionLog: boolean; // 显示执行日志
-  showPosition: boolean; // 显示位置信息
-}
-
-/**
- * 默认过滤器配置
- */
-export const DEFAULT_DEBUG_FILTER: DebugOutputFilter = {
-  showError: true, // 默认显示错误
-  showLLMPrompt: true, // 默认显示提示词
-  showLLMResponse: true, // 默认显示响应
-  showVariable: true, // 默认显示变量
-  showExecutionLog: true, // 默认显示日志
-  showPosition: true, // 默认显示位置
-};
-
-/**
- * 调试面板状态
- */
-export interface DebugPanelState {
-  bubbles: DebugBubble[]; // 所有调试信息气泡
-  filter: DebugOutputFilter; // 过滤器配置
+  summary: string;
 }

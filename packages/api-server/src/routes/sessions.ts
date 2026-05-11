@@ -1,10 +1,10 @@
 import { ExecutionStatus, ErrorCode } from '@heartrule/shared-types';
-import { eq, sql, count, inArray } from 'drizzle-orm';
+import { eq, sql, count, inArray, and } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 
 import { db } from '../db/index.js';
-import { sessions, messages, scripts } from '../db/schema.js';
+import { sessions, messages, scripts, debugEntries } from '../db/schema.js';
 import { SessionManager } from '../services/session-manager.js';
 import { sendErrorResponse, logError } from '../utils/error-handler.js';
 
@@ -39,23 +39,6 @@ export async function registerSessionRoutes(app: FastifyInstance) {
               aiMessage: { type: 'string' },
               executionStatus: { type: 'string' },
               position: { type: 'object', additionalProperties: true },
-              debugInfo: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    prompt: { type: 'string' },
-                    response: { type: 'object', additionalProperties: true },
-                    model: { type: 'string' },
-                    config: { type: 'object', additionalProperties: true },
-                    timestamp: { type: 'string' },
-                    tokensUsed: { type: 'number' },
-                    responseTimeMs: { type: 'number' },
-                    actionId: { type: 'string' },
-                    actionType: { type: 'string' },
-                  },
-                },
-              },
               error: {
                 type: 'object',
                 properties: {
@@ -171,11 +154,10 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           createdAt: now.toISOString(),
           aiMessage: initResult.aiMessage,
           executionStatus: initResult.executionStatus,
+          currentRunId: initResult.currentRunId,
           variables: initResult.variables,
           globalVariables: initResult.globalVariables,
           position: initResult.position,
-          // debugInfo 完整返回给前端（前端需要 prompt 和 response）
-          debugInfo: initResult.debugInfo,
         };
 
         if (initResult.error) {
@@ -390,14 +372,6 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           response.globalVariables = sessionMetadata.globalVariables;
         }
 
-        // 从 metadata 中提取 debugInfo（包含 responseTimeMs）
-        // 兼容旧格式（单对象）和新格式（数组）
-        if (sessionMetadata.lastLLMDebugInfo) {
-          response.debugInfo = Array.isArray(sessionMetadata.lastLLMDebugInfo)
-            ? sessionMetadata.lastLLMDebugInfo
-            : [sessionMetadata.lastLLMDebugInfo];
-        }
-
         // 构建完整的 position 信息（包含 ID 字段）
         if (script?.parsedContent && session.position) {
           const pos = session.position as any;
@@ -512,8 +486,13 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           orderBy: (messages, { asc }) => [asc(messages.timestamp)],
         });
 
+        // Filter out superseded messages (created by rerun/rollback)
+        const activeMessages = sessionMessages.filter(
+          (msg) => !((msg.metadata as Record<string, any>)?.superseded === true)
+        );
+
         // 转换为前端期望的格式
-        const formattedMessages = sessionMessages.map((msg) => ({
+        const formattedMessages = activeMessages.map((msg) => ({
           messageId: msg.id,
           role: msg.role === 'assistant' ? 'ai' : msg.role, // 'assistant' -> 'ai'
           content: msg.content,
@@ -531,6 +510,58 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         return reply.status(500).send({
           success: false,
           error: 'Failed to get messages',
+        });
+      }
+    }
+  );
+
+  // 获取调试信息条目
+  app.get(
+    '/api/sessions/:id/debug-entries',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string' } },
+        },
+        querystring: {
+          type: 'object',
+          properties: { runId: { type: 'string' } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { runId } = request.query as { runId?: string };
+
+      try {
+        const conditions = [eq(debugEntries.sessionId, id)];
+        if (runId) {
+          conditions.push(eq(debugEntries.runId, runId));
+        }
+
+        const entries = await db.query.debugEntries.findMany({
+          where: and(...conditions),
+          orderBy: (debugEntries, { asc }) => [
+            asc(debugEntries.phaseId),
+            asc(debugEntries.topicId),
+            asc(debugEntries.actionId),
+            asc(debugEntries.round),
+            asc(debugEntries.createdAt),
+          ],
+        });
+
+        return {
+          success: true,
+          data: entries,
+          total: entries.length,
+        };
+      } catch (error) {
+        logError(app.log, error, { sessionId: id });
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to get debug entries',
         });
       }
     }
@@ -587,23 +618,6 @@ export async function registerSessionRoutes(app: FastifyInstance) {
                   actionType: { type: 'string' },
                   currentRound: { type: 'number' },
                   maxRounds: { type: 'number' },
-                },
-              },
-              debugInfo: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    prompt: { type: 'string' },
-                    response: { type: 'object', additionalProperties: true },
-                    model: { type: 'string' },
-                    config: { type: 'object', additionalProperties: true },
-                    timestamp: { type: 'string' },
-                    tokensUsed: { type: 'number' },
-                    responseTimeMs: { type: 'number' },
-                    actionId: { type: 'string' },
-                    actionType: { type: 'string' },
-                  },
                 },
               },
               actionStatus: { type: 'string', enum: ['running', 'completed', 'error'] },
@@ -743,12 +757,11 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           aiMessage: result.aiMessage,
           sessionStatus: result.sessionStatus,
           executionStatus: result.executionStatus,
+          currentRunId: result.currentRunId,
           variables: result.variables,
           globalVariables: result.globalVariables,
           variableStore: result.variableStore,
           position: result.position,
-          // debugInfo 完整返回给前端
-          debugInfo: result.debugInfo,
           // 变量编辑所需字段
           actionStatus: (result as any).actionStatus,
           currentRound: (result as any).currentRound,
@@ -940,6 +953,125 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         return reply.status(500).send({
           error: 'Failed to list sessions',
         });
+      }
+    }
+  );
+
+  // Rerun action
+  app.post(
+    '/api/sessions/:sessionId/rerun',
+    {
+      schema: {
+        tags: ['sessions'],
+        description: '回退到指定 action 起点并重新执行',
+        params: {
+          type: 'object',
+          required: ['sessionId'],
+          properties: {
+            sessionId: { type: 'string', format: 'uuid' },
+          },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            targetActionId: { type: 'string' },
+            config: {
+              type: 'object',
+              properties: {
+                content: { type: 'string' },
+                tone: { type: 'string' },
+                max_rounds: { type: 'number' },
+                output: { type: 'array' },
+              },
+            },
+            llmConfig: {
+              type: 'object',
+              properties: {
+                provider: { type: 'string' },
+                model: { type: 'string' },
+                temperature: { type: 'number' },
+                maxTokens: { type: 'number' },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { sessionId } = request.params as { sessionId: string };
+        const body =
+          (request.body as {
+            targetActionId?: string;
+            config?: Record<string, any>;
+            llmConfig?: Record<string, any>;
+          }) || {};
+
+        const sessionManager = new SessionManager();
+
+        const result = await sessionManager.rerunAction(
+          sessionId,
+          body.targetActionId,
+          body.config,
+          body.llmConfig
+        );
+
+        // Record version in rerunHistory
+        const session = await db.query.sessions.findFirst({
+          where: eq(sessions.id, sessionId),
+        });
+        if (session) {
+          const metadata = (session.metadata as Record<string, any>) || {};
+          const rerunHistory = (metadata.rerunHistory || []) as any[];
+          const actionId =
+            body.targetActionId ||
+            (session.position as Record<string, any>)?.actionId ||
+            metadata.currentActionId;
+
+          const newVersion: any = {
+            versionId: uuidv4(),
+            actionId,
+            runId: result.currentRunId,
+            timestamp: new Date().toISOString(),
+            config: body.config ?? {},
+            llmConfig: body.llmConfig ?? undefined,
+            result: {
+              roundsUsed: (result as any).currentRound ?? 0,
+              exitReason: (result as any).exitReason || undefined,
+              variableCount: result.variables ? Object.keys(result.variables).length : 0,
+            },
+          };
+
+          // Per-action limit: max 20 versions, remove oldest (except v1) if exceeded
+          const actionVersions = rerunHistory.filter((e: any) => e.actionId === actionId);
+          while (actionVersions.length >= 20) {
+            const oldestNonV1 = actionVersions.find(
+              (e: any) => e.versionId !== actionVersions[0]?.versionId
+            );
+            if (!oldestNonV1) break;
+            const idx = rerunHistory.indexOf(oldestNonV1);
+            rerunHistory.splice(idx, 1);
+            actionVersions.splice(actionVersions.indexOf(oldestNonV1), 1);
+          }
+
+          rerunHistory.push(newVersion);
+          metadata.rerunHistory = rerunHistory;
+
+          await db
+            .update(sessions)
+            .set({ metadata, updatedAt: new Date() })
+            .where(eq(sessions.id, sessionId));
+        }
+
+        return result;
+      } catch (error: any) {
+        if (error.statusCode === 400) {
+          return reply.status(400).send({ error: error.message });
+        }
+        logError(app.log, error, {
+          sessionId: (request.params as any)?.sessionId,
+        });
+        return reply.status(500).send({ error: 'Internal server error' });
       }
     }
   );

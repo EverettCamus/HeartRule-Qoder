@@ -16,9 +16,20 @@ import type {
 interface NavigationTreeProps {
   tree: NavigationTree | null;
   currentPosition?: CurrentPosition;
+  executionStatus?: string;
+  onRerun?: () => void;
+  onRollback?: (actionId: string) => void;
+  actionSnapshots?: Record<string, any>;
 }
 
-const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentPosition }) => {
+const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({
+  tree,
+  currentPosition,
+  executionStatus,
+  onRerun,
+  onRollback,
+  actionSnapshots,
+}) => {
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
   const [executedActions, setExecutedActions] = useState<Set<string>>(new Set());
@@ -27,8 +38,6 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentP
   // 智能展开/折叠：当 currentPosition 变化时，自动展开当前执行路径
   useEffect(() => {
     if (!currentPosition || !tree) return;
-
-    console.log('[NavigationTree] Current position changed:', currentPosition);
 
     // 找到当前执行的 Phase 和 Topic
     let targetPhaseId: string | null = null;
@@ -46,11 +55,6 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentP
             targetPhaseId = phase.phaseId;
             targetTopicId = topic.topicId;
             foundCurrentAction = true;
-            console.log('[NavigationTree] Found target path:', {
-              phase: phase.phaseName,
-              topic: topic.topicName,
-              action: action.actionId,
-            });
             break;
           }
           // 当前 Action 之前的所有 Action 都标记为已执行
@@ -65,7 +69,6 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentP
 
     // 更新已执行 Action 集合
     setExecutedActions(newExecutedActions);
-    console.log('[NavigationTree] Updated executed actions:', Array.from(newExecutedActions));
 
     // 如果找到了目标路径，更新展开状态
     if (targetPhaseId && targetTopicId) {
@@ -79,7 +82,6 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentP
             behavior: 'smooth',
             block: 'center',
           });
-          console.log('[NavigationTree] Scrolled to current action');
         }
       }, 300);
     }
@@ -192,11 +194,41 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({ tree, currentP
         style={{
           ...getActionStyle(action),
           transition: 'all 0.3s ease',
+          display: 'flex',
+          alignItems: 'center',
         }}
         title={getActionTooltip(action)}
       >
         <span style={{ marginRight: '8px' }}>{getActionIcon(action)}</span>
         Action: {action.actionId}
+        {isCurrentAction && executionStatus === 'waiting_input' && onRerun && (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              onRerun();
+            }}
+            style={{
+              marginLeft: 8,
+              fontSize: 12,
+              color: '#1677ff',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+          >
+            🔄 重运行
+          </span>
+        )}
+        {!isCurrentAction && onRollback && actionSnapshots?.[action.actionId] && (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              onRollback(action.actionId);
+            }}
+            style={{ marginLeft: 8, fontSize: 12, color: '#1677ff', cursor: 'pointer' }}
+          >
+            回退到此
+          </span>
+        )}
       </div>
     );
   };

@@ -1,0 +1,40 @@
+.rerun-modal__section {
+  margin-bottom: 16px;
+}
+
+.rerun-modal__section-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.rerun-modal__warning {
+  background: #fff7e6;
+  border: 1px solid #ffd591;
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.rerun-modal__warning-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.rerun-modal__version-item {
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.rerun-modal__version-item:hover {
+  background: #f5f5f5;
+}
+
+.rerun-modal__version-item--selected {
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+}

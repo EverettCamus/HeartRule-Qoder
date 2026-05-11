@@ -272,7 +272,7 @@ export async function registerScriptRoutes(app: FastifyInstance) {
         if (existingScript) {
           // 脚本已存在，更新内容
           scriptId = existingScript.id;
-          
+
           // 构建更新数据
           const updateData: any = {
             scriptContent: yamlContent,
@@ -280,16 +280,13 @@ export async function registerScriptRoutes(app: FastifyInstance) {
             description: description || existingScript.description,
             updatedAt: now,
           };
-          
+
           // 如果提供了 projectId，更新 tags
           if (projectId) {
             updateData.tags = ['debug', `project:${projectId}`];
           }
-          
-          await db
-            .update(scripts)
-            .set(updateData)
-            .where(eq(scripts.id, scriptId));
+
+          await db.update(scripts).set(updateData).where(eq(scripts.id, scriptId));
 
           app.log.info({ scriptId, scriptName, projectId }, 'Script updated successfully');
         } else {
@@ -380,6 +377,95 @@ export async function registerScriptRoutes(app: FastifyInstance) {
         return reply.status(500).send({
           error: 'Failed to validate script',
         });
+      }
+    }
+  );
+
+  // Write back action config to YAML script
+  app.post(
+    '/api/scripts/:scriptId/actions/:actionId/config',
+    {
+      schema: {
+        tags: ['scripts'],
+        description: '将调试后的 action config 回写到 YAML 脚本文件',
+        params: {
+          type: 'object',
+          required: ['scriptId', 'actionId'],
+          properties: {
+            scriptId: { type: 'string', format: 'uuid' },
+            actionId: { type: 'string' },
+          },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            config: { type: 'object' },
+            llmConfig: { type: 'object' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { scriptId, actionId } = request.params as {
+          scriptId: string;
+          actionId: string;
+        };
+        const body = request.body as {
+          config?: Record<string, any>;
+          llmConfig?: Record<string, any>;
+        };
+
+        // Load script
+        const script = await db.query.scripts.findFirst({
+          where: eq(scripts.id, scriptId),
+        });
+        if (!script) {
+          return reply.status(404).send({ error: 'Script not found' });
+        }
+
+        // Parse YAML
+        const scriptContent = yaml.parse(script.scriptContent) || {};
+        const phases = scriptContent.session?.phases || [];
+
+        // Find and update the target action
+        let found = false;
+        for (const phase of phases) {
+          for (const topic of phase.topics || []) {
+            for (const action of topic.actions || []) {
+              if (action.action_id === actionId) {
+                if (body.config) {
+                  Object.assign(action, body.config);
+                }
+                if (body.llmConfig) {
+                  action.llm_config = body.llmConfig;
+                }
+                found = true;
+                break;
+              }
+            }
+            if (found) break;
+          }
+          if (found) break;
+        }
+
+        if (!found) {
+          return reply.status(400).send({
+            error: '目标 action 已被删除，无法回写',
+          });
+        }
+
+        // Serialize back to YAML and update DB
+        const updatedYaml = yaml.stringify(scriptContent);
+        await db
+          .update(scripts)
+          .set({ scriptContent: updatedYaml, updatedAt: new Date() })
+          .where(eq(scripts.id, scriptId));
+
+        return { success: true };
+      } catch (error: any) {
+        app.log.error(error);
+        return reply.status(500).send({ error: 'Internal server error' });
       }
     }
   );

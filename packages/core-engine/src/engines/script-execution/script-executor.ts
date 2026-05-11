@@ -76,7 +76,10 @@ export interface ExecutionState {
   currentTopicId?: string;
   currentActionId?: string;
   currentActionType?: string;
-  // LLM debug info (accumulated from all LLM calls in current request)
+  /**
+   * LLM debug info (accumulated from all LLM calls in current request)
+   * @deprecated Use debug_entries table for persistence; this field is only a transient carrier during execution.
+   */
   lastLLMDebugInfo?: LLMDebugInfo[];
 
   /**
@@ -866,7 +869,45 @@ export class ScriptExecutor {
         executionState.currentAction = action;
         executionState.currentActionId = actionConfig.action_id;
         executionState.currentActionType = actionConfig.action_type;
+
+        // Create action snapshot on first entry
+        if (!executionState.metadata.actionSnapshots) {
+          executionState.metadata.actionSnapshots = {};
+        }
+        const snapshots = executionState.metadata.actionSnapshots as Record<string, any>;
+        if (!snapshots[actionConfig.action_id]) {
+          snapshots[actionConfig.action_id] = {
+            phaseIndex: executionState.currentPhaseIdx,
+            topicIndex: executionState.currentTopicIdx,
+            actionIndex: executionState.currentActionIdx,
+            actionId: actionConfig.action_id,
+            actionType: actionConfig.action_type,
+            variableStore: executionState.variableStore
+              ? JSON.parse(JSON.stringify(executionState.variableStore))
+              : undefined,
+            conversationHistoryLength: executionState.conversationHistory.length,
+            messageCount: executionState.conversationHistory.length,
+            timestamp: new Date().toISOString(),
+            originalConfig: { ...actionConfig },
+          };
+          logger.info(`[DEBUG-SNAPSHOT] Created snapshot for action: ${actionConfig.action_id}`, {
+            snapshotKeys: Object.keys(snapshots),
+            conversationHistoryLength: executionState.conversationHistory.length,
+          });
+        } else {
+          logger.info(
+            `[DEBUG-SNAPSHOT] Snapshot already exists for action: ${actionConfig.action_id}`,
+            {
+              snapshotKeys: Object.keys(snapshots),
+            }
+          );
+        }
+
         logger.debug(`✅ Created action instance: ${action.actionId}`);
+      } else {
+        logger.info(
+          `[DEBUG-SNAPSHOT] currentAction already set: ${executionState.currentAction?.actionId}, skipping creation`
+        );
       }
 
       const action = executionState.currentAction;
