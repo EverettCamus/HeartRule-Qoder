@@ -38,7 +38,20 @@ export class DependencyContainer {
     this.llmProvider = this.createLLMProvider();
 
     // 2. 创建 LLM Orchestrator（核心引擎端口）
-    this.llmOrchestrator = new LLMOrchestrator(this.llmProvider);
+    // Register with the canonical provider name so llmConfig.provider from
+    // rerun/rollback requests can resolve the correct provider.
+    const providerName = process.env.LLM_PROVIDER || 'volcano';
+    this.llmOrchestrator = new LLMOrchestrator(this.llmProvider, providerName.toLowerCase());
+
+    // Also register alias names for the frontend provider selector
+    if (providerName.toLowerCase() === 'volcano' || providerName.toLowerCase() === 'volcengine') {
+      this.llmOrchestrator.registerProvider('volcano', this.llmProvider);
+      this.llmOrchestrator.registerProvider('deepseek', this.llmProvider);
+    } else if (providerName.toLowerCase() === 'deepseek') {
+      this.llmOrchestrator.registerProvider('deepseek', this.llmProvider);
+    } else if (providerName.toLowerCase() === 'openai') {
+      this.llmOrchestrator.registerProvider('openai', this.llmProvider);
+    }
 
     // 3. 创建 ScriptExecutor（注入依赖）
     this.scriptExecutor = new ScriptExecutor(

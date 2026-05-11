@@ -8,6 +8,7 @@ import {
   index,
   pgEnum,
   uniqueIndex,
+  integer,
 } from 'drizzle-orm/pg-core';
 
 /**
@@ -61,6 +62,7 @@ export const sessions = pgTable(
     scriptId: uuid('script_id').notNull(),
     status: sessionStatusEnum('status').notNull().default('active'),
     executionStatus: executionStatusEnum('execution_status').notNull().default('running'),
+    currentRunId: varchar('current_run_id', { length: 50 }),
     position: jsonb('position')
       .notNull()
       .$type<{ phaseIndex: number; topicIndex: number; actionIndex: number }>(),
@@ -251,6 +253,10 @@ export const variables = pgTable(
     scope: variableScopeEnum('scope').notNull(),
     valueType: varchar('value_type', { length: 50 }).notNull(),
     source: varchar('source', { length: 255 }).notNull(),
+    actionId: varchar('action_id', { length: 255 }),
+    phaseId: varchar('phase_id', { length: 255 }),
+    topicId: varchar('topic_id', { length: 255 }),
+    round: integer('round').default(1),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
@@ -284,6 +290,40 @@ export const memories = pgTable(
       sessionIdIdx: index('memories_session_id_idx').on(table.sessionId),
       typeIdx: index('memories_type_idx').on(table.memoryType),
       importanceIdx: index('memories_importance_idx').on(table.importance),
+    };
+  }
+);
+
+/**
+ * 调试信息表（持久化 LLM 输入输出、执行日志等）
+ * 按 phase-topic-action-round 定位，支持多 run 分支
+ */
+export const debugEntries = pgTable(
+  'debug_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    runId: varchar('run_id', { length: 50 }).notNull(),
+    phaseId: varchar('phase_id', { length: 255 }).notNull(),
+    topicId: varchar('topic_id', { length: 255 }).notNull(),
+    actionId: varchar('action_id', { length: 255 }).notNull(),
+    actionType: varchar('action_type', { length: 50 }).notNull(),
+    round: integer('round').notNull().default(1),
+    content: jsonb('content').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => {
+    return {
+      lookupIdx: index('debug_entries_lookup_idx').on(
+        table.sessionId,
+        table.runId,
+        table.phaseId,
+        table.topicId,
+        table.actionId,
+        table.round
+      ),
     };
   }
 );
@@ -334,3 +374,5 @@ export type ProjectVersion = typeof projectVersions.$inferSelect;
 export type NewProjectVersion = typeof projectVersions.$inferInsert;
 export type UserGlobalVariable = typeof userGlobalVariables.$inferSelect;
 export type NewUserGlobalVariable = typeof userGlobalVariables.$inferInsert;
+export type DebugEntry = typeof debugEntries.$inferSelect;
+export type NewDebugEntry = typeof debugEntries.$inferInsert;

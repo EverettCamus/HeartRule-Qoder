@@ -28,8 +28,6 @@ export const loadDebugFilter = (): DebugOutputFilter => {
         showLLMPrompt: parsed.showLLMPrompt ?? DEFAULT_DEBUG_FILTER.showLLMPrompt,
         showLLMResponse: parsed.showLLMResponse ?? DEFAULT_DEBUG_FILTER.showLLMResponse,
         showVariable: parsed.showVariable ?? DEFAULT_DEBUG_FILTER.showVariable,
-        showExecutionLog: parsed.showExecutionLog ?? DEFAULT_DEBUG_FILTER.showExecutionLog,
-        showPosition: parsed.showPosition ?? DEFAULT_DEBUG_FILTER.showPosition,
       };
     }
   } catch (error) {

@@ -46,8 +46,6 @@ const DebugFilterModal: React.FC<DebugFilterModalProps> = ({
       showLLMPrompt: false,
       showLLMResponse: false,
       showVariable: false,
-      showExecutionLog: false,
-      showPosition: false,
     });
   };
 
@@ -57,8 +55,6 @@ const DebugFilterModal: React.FC<DebugFilterModalProps> = ({
       showLLMPrompt: true,
       showLLMResponse: true,
       showVariable: true,
-      showExecutionLog: true,
-      showPosition: true,
     });
   };
 
@@ -110,23 +106,6 @@ const DebugFilterModal: React.FC<DebugFilterModalProps> = ({
           <strong>📊 变量状态</strong>
           <div style={{ fontSize: '12px', color: '#666', marginLeft: '24px' }}>
             显示当前会话变量值
-          </div>
-        </Checkbox>
-
-        <Checkbox
-          checked={filter.showExecutionLog}
-          onChange={handleCheckboxChange('showExecutionLog')}
-        >
-          <strong>📝 执行日志</strong>
-          <div style={{ fontSize: '12px', color: '#666', marginLeft: '24px' }}>
-            显示Action执行的详细日志
-          </div>
-        </Checkbox>
-
-        <Checkbox checked={filter.showPosition} onChange={handleCheckboxChange('showPosition')}>
-          <strong>🧭 位置信息</strong>
-          <div style={{ fontSize: '12px', color: '#666', marginLeft: '24px' }}>
-            显示当前执行位置路径
           </div>
         </Checkbox>
 

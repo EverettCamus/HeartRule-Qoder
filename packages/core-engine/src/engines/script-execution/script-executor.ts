@@ -85,7 +85,10 @@ export interface ExecutionState {
   currentTopicId?: string;
   currentActionId?: string;
   currentActionType?: string;
-  // LLM debug info (accumulated from all LLM calls in current request)
+  /**
+   * LLM debug info (accumulated from all LLM calls in current request)
+   * @deprecated Use debug_entries table for persistence; this field is only a transient carrier during execution.
+   */
   lastLLMDebugInfo?: LLMDebugInfo[];
 
   /**
@@ -892,12 +895,28 @@ export class ScriptExecutor {
               ? JSON.parse(JSON.stringify(executionState.variableStore))
               : undefined,
             conversationHistoryLength: executionState.conversationHistory.length,
+            messageCount: executionState.conversationHistory.length,
             timestamp: new Date().toISOString(),
             originalConfig: { ...actionConfig },
           };
+          logger.info(`[DEBUG-SNAPSHOT] Created snapshot for action: ${actionConfig.action_id}`, {
+            snapshotKeys: Object.keys(snapshots),
+            conversationHistoryLength: executionState.conversationHistory.length,
+          });
+        } else {
+          logger.info(
+            `[DEBUG-SNAPSHOT] Snapshot already exists for action: ${actionConfig.action_id}`,
+            {
+              snapshotKeys: Object.keys(snapshots),
+            }
+          );
         }
 
         logger.debug(`✅ Created action instance: ${action.actionId}`);
+      } else {
+        logger.info(
+          `[DEBUG-SNAPSHOT] currentAction already set: ${executionState.currentAction?.actionId}, skipping creation`
+        );
       }
 
       const action = executionState.currentAction;

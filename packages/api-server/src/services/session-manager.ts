@@ -12,7 +12,7 @@ import {
 } from '@heartrule/core-engine';
 import type { DetailedApiError } from '@heartrule/shared-types';
 import { VariableScope, ExecutionStatus } from '@heartrule/shared-types';
-import { and, eq, count, inArray } from 'drizzle-orm';
+import { and, eq, count } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
 
@@ -24,7 +24,9 @@ import {
   variables,
   scriptFiles,
   userGlobalVariables,
+  debugEntries,
   type NewVariable,
+  type NewDebugEntry,
 } from '../db/schema.js';
 import { container } from '../ioc/container.js';
 import { buildDetailedError } from '../utils/error-handler.js';
@@ -57,6 +59,7 @@ interface SessionResponse {
   aiMessage: string;
   sessionStatus: string;
   executionStatus: string;
+  currentRunId?: string;
   variables?: Record<string, unknown>;
   globalVariables?: Record<string, unknown>;
   variableStore?: {
@@ -76,8 +79,9 @@ interface SessionResponse {
     currentRound?: number;
     maxRounds?: number;
   };
-  debugInfo?: any;
   error?: DetailedApiError;
+  actionSnapshots?: Record<string, any>;
+  rerunHistory?: any[];
 }
 
 /**
@@ -323,45 +327,44 @@ export class SessionManager {
   }
 
   /**
-   * 推断变量的类型字符串，用于写入 value_type
+   * 构建全量变量快照（每次 action 执行完存完整四层变量状态）
    */
-  private inferValueType(value: unknown): string {
-    if (value === null || value === undefined) return 'unknown';
-    if (Array.isArray(value)) return 'array';
-    const t = typeof value;
-    if (t === 'string' || t === 'number' || t === 'boolean') {
-      return t;
-    }
-    return 'object';
-  }
+  private buildVariableSnapshots(sessionId: string, executionState: ExecutionState): NewVariable[] {
+    const variableStore = executionState.variableStore || {};
+    const fullSnapshot: Record<string, unknown> = {};
 
-  /**
-   * 根据旧值和新值，构造需要写入 variables 表的快照
-   */
-  private buildVariableSnapshots(
-    sessionId: string,
-    oldVars: Record<string, unknown> | null,
-    newVars: Record<string, unknown>
-  ): NewVariable[] {
-    const rows: NewVariable[] = [];
-
-    for (const [name, value] of Object.entries(newVars)) {
-      const prev = oldVars ? oldVars[name] : undefined;
-
-      // 简单对比：不同才记录快照
-      if (prev !== value) {
-        rows.push({
-          sessionId,
-          variableName: name,
-          value,
-          scope: 'session', // 先全部按会话级变量处理
-          valueType: this.inferValueType(value),
-          source: 'script_executor', // 后续可以细化来源
-        });
+    for (const scope of ['global', 'session', 'phase', 'topic'] as const) {
+      const scopeData = (variableStore as any)[scope] || {};
+      // 展平作用域内的变量（去除 Drizzle 包装的 value/type/source 元数据）
+      const flatScope: Record<string, unknown> = {};
+      for (const [key, entry] of Object.entries(scopeData)) {
+        flatScope[key] = (entry as any)?.value ?? entry;
       }
+      fullSnapshot[scope] = flatScope;
     }
 
-    return rows;
+    const actionId = executionState.currentActionId || `action_${executionState.currentActionIdx}`;
+    const phaseId = executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`;
+    const topicId = executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`;
+    const round =
+      (executionState.metadata.actionRoundInfo as any)?.[actionId]?.currentRound ||
+      (executionState.metadata.lastActionRoundInfo as any)?.currentRound ||
+      1;
+
+    return [
+      {
+        sessionId,
+        variableName: actionId,
+        value: fullSnapshot,
+        scope: 'session',
+        valueType: 'object',
+        source: 'script_executor',
+        actionId,
+        phaseId,
+        topicId,
+        round,
+      },
+    ];
   }
 
   /**
@@ -429,12 +432,21 @@ export class SessionManager {
       orderBy: (fields, { asc }) => [asc(fields.timestamp)],
     });
 
-    logger.debug(`📋 Loaded ${history.length} messages from database:`, {
-      aiMessages: history.filter((m) => m.role === 'assistant').length,
-      userMessages: history.filter((m) => m.role === 'user').length,
-    });
+    // Filter out superseded messages so the LLM only sees the current timeline
+    const activeMessages = history.filter(
+      (m) => !((m.metadata as Record<string, any>)?.superseded === true)
+    );
 
-    return history.map((m) => ({
+    logger.debug(
+      `📋 Loaded ${activeMessages.length}/${history.length} active messages from database:`,
+      {
+        aiMessages: activeMessages.filter((m) => m.role === 'assistant').length,
+        userMessages: activeMessages.filter((m) => m.role === 'user').length,
+        supersededCount: history.length - activeMessages.length,
+      }
+    );
+
+    return activeMessages.map((m) => ({
       role: m.role,
       content: m.content,
       actionId: m.actionId || undefined,
@@ -507,6 +519,18 @@ export class SessionManager {
     conversationHistory: any[]
   ): ExecutionState {
     const metadata = (session.metadata as Record<string, any>) || {};
+
+    // 注入 currentRunId 到 metadata（从 sessions.current_run_id 读取）
+    if ((session as any).currentRunId) {
+      metadata.currentRunId = (session as any).currentRunId;
+    }
+
+    logger.info('[DEBUG-RESTORE] restoreExecutionState metadata from session', {
+      metadataKeys: Object.keys(metadata),
+      hasActionSnapshots: !!metadata.actionSnapshots,
+      snapshotKeys: metadata.actionSnapshots ? Object.keys(metadata.actionSnapshots) : [],
+    });
+
     const executionState: ExecutionState = {
       status: (session.executionStatus as ExecutionStatus) || ExecutionStatus.RUNNING,
       currentPhaseIdx: ((session.position as Record<string, unknown>)?.phaseIndex as number) || 0,
@@ -674,13 +698,60 @@ export class SessionManager {
    */
   private async saveVariableSnapshots(
     sessionId: string,
-    previousVars: Record<string, unknown> | null,
-    newVars: Record<string, unknown>
+    executionState: ExecutionState
   ): Promise<void> {
-    const snapshots = this.buildVariableSnapshots(sessionId, previousVars, newVars);
+    const snapshots = this.buildVariableSnapshots(sessionId, executionState);
     if (snapshots.length > 0) {
       logger.debug('💾 Saving variable snapshots:', snapshots.length);
       await db.insert(variables).values(snapshots);
+    }
+  }
+
+  /**
+   * 保存调试信息到 debug_entries 表
+   */
+  private async saveDebugEntry(sessionId: string, executionState: ExecutionState): Promise<void> {
+    const debugInfos = executionState.lastLLMDebugInfo;
+    if (!debugInfos || debugInfos.length === 0) return;
+
+    const runId = (executionState.metadata.currentRunId as string) || 'unknown';
+    const phaseId = executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`;
+    const topicId = executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`;
+    const actionId = executionState.currentActionId || `action_${executionState.currentActionIdx}`;
+    const actionType = executionState.currentActionType || 'unknown';
+
+    // Determine current round from metadata
+    const round =
+      (executionState.metadata.actionRoundInfo as any)?.[actionId]?.currentRound ||
+      (executionState.metadata.lastActionRoundInfo as any)?.currentRound ||
+      1;
+
+    const entries: Array<Record<string, unknown>> = debugInfos.map((info: any) => ({
+      type: 'llm_call',
+      model: info.model,
+      tokensUsed: info.tokensUsed,
+      responseTimeMs: info.responseTimeMs,
+      finishReason: info.response?.finishReason,
+      prompt: info.prompt,
+      response: typeof info.response === 'string' ? info.response : info.response?.text || '',
+    }));
+
+    const content = { entries };
+
+    try {
+      await db.insert(debugEntries).values({
+        sessionId,
+        runId,
+        phaseId,
+        topicId,
+        actionId,
+        actionType,
+        round,
+        content,
+      } as NewDebugEntry);
+      logger.info('💾 Debug entry saved', { actionId, runId, round, entryCount: entries.length });
+    } catch (err: any) {
+      logger.error('Failed to save debug entry:', err.message);
     }
   }
 
@@ -695,6 +766,14 @@ export class SessionManager {
     logger.debug('💾 Updating session state in DB');
 
     // Add messageCount to any new snapshots that don't have it yet
+    logger.info('[DEBUG-UPDATESTATE] updateSessionState called', {
+      hasActionSnapshots: !!executionState.metadata.actionSnapshots,
+      snapshotKeys: executionState.metadata.actionSnapshots
+        ? Object.keys(executionState.metadata.actionSnapshots as Record<string, any>)
+        : [],
+      metadataKeys: Object.keys(executionState.metadata),
+    });
+
     if (executionState.metadata.actionSnapshots) {
       const snapshots = executionState.metadata.actionSnapshots as Record<string, any>;
       let msgCount: number | null = null;
@@ -713,25 +792,31 @@ export class SessionManager {
       }
     }
 
-    await db
-      .update(sessions)
-      .set({
-        position: {
-          phaseIndex: executionState.currentPhaseIdx,
-          topicIndex: executionState.currentTopicIdx,
-          actionIndex: executionState.currentActionIdx,
-        },
-        variables: executionState.variables,
-        executionStatus: executionState.status,
-        metadata: {
-          ...executionState.metadata,
-          globalVariables,
-          variableStore: executionState.variableStore,
-          lastLLMDebugInfo: executionState.lastLLMDebugInfo,
-        },
-        updatedAt: new Date(),
-      })
-      .where(eq(sessions.id, sessionId));
+    const runId = executionState.metadata.currentRunId as string | undefined;
+
+    const updateData: Record<string, any> = {
+      position: {
+        phaseIndex: executionState.currentPhaseIdx,
+        topicIndex: executionState.currentTopicIdx,
+        actionIndex: executionState.currentActionIdx,
+      },
+      variables: executionState.variables,
+      executionStatus: executionState.status,
+      metadata: {
+        ...executionState.metadata,
+        globalVariables,
+        variableStore: executionState.variableStore,
+      },
+      updatedAt: new Date(),
+    };
+
+    if (runId) {
+      updateData.currentRunId = runId;
+    }
+
+    await this.saveDebugEntry(sessionId, executionState);
+
+    await db.update(sessions).set(updateData).where(eq(sessions.id, sessionId));
   }
 
   /**
@@ -744,13 +829,15 @@ export class SessionManager {
     globalVariables: Record<string, any>,
     includeVariableStore: boolean = false
   ): SessionResponse {
+    const runId =
+      executionState.metadata.currentRunId || (session as any).currentRunId || undefined;
     const result: SessionResponse = {
       aiMessage: executionState.lastAiMessage || '',
       sessionStatus: session.status,
       executionStatus: executionState.status,
+      currentRunId: runId,
       variables: executionState.variables,
       globalVariables,
-      debugInfo: executionState.lastLLMDebugInfo,
       position: {
         phaseIndex: executionState.currentPhaseIdx,
         phaseId: executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`,
@@ -862,6 +949,14 @@ export class SessionManager {
     }
     if (actionStatus === 'completed') {
       (result as any).exitReason = this.extractExitReason(executionState);
+    }
+
+    // Include actionSnapshots and rerunHistory for frontend
+    if (executionState.metadata.actionSnapshots) {
+      result.actionSnapshots = executionState.metadata.actionSnapshots as Record<string, any>;
+    }
+    if (executionState.metadata.rerunHistory) {
+      result.rerunHistory = executionState.metadata.rerunHistory as any[];
     }
 
     return result;
@@ -1015,12 +1110,19 @@ export class SessionManager {
     const script = await this.loadScriptById(session.scriptId);
 
     try {
-      // 2. 加载全局变量和对话历史
+      // 2. 生成首个 runId 并写入 DB
+      const runId = uuidv4();
+      await db
+        .update(sessions)
+        .set({ currentRunId: runId, updatedAt: new Date() })
+        .where(eq(sessions.id, sessionId));
+
+      // 3. 加载全局变量和对话历史
       const { values: globalVariables, definitions: globalVariableDefinitions } =
         await this.loadGlobalVariables(script.scriptName, session.userId);
       const conversationHistory = await this.loadConversationHistory(sessionId);
 
-      // 3. 创建初始执行状态，将projectId传递给metadata
+      // 4. 创建初始执行状态，将projectId传递给metadata
       let executionState = this.createInitialExecutionState(
         globalVariables,
         session.variables,
@@ -1030,6 +1132,9 @@ export class SessionManager {
           projectId: script.projectId, // 传递projectId用于模板加载
         }
       );
+
+      // 注入 currentRunId 到 metadata，使 saveDebugEntry 能使用正确的 runId
+      executionState.metadata.currentRunId = runId;
 
       // 4. Inject global variable persistence callback and definitions into metadata
       executionState.metadata.globalVariableDefinitions = globalVariableDefinitions;
@@ -1099,7 +1204,7 @@ export class SessionManager {
 
       // 6. 保存执行结果
       await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
-      await this.saveVariableSnapshots(sessionId, session.variables, executionState.variables);
+      await this.saveVariableSnapshots(sessionId, executionState);
       await this.updateSessionState(sessionId, executionState, globalVariables);
 
       // 7. 构建并返回响应
@@ -1111,8 +1216,7 @@ export class SessionManager {
         false
       );
       logger.info('🏁 initializeSession completed:', {
-        responseTimeMs: result.debugInfo?.responseTimeMs,
-        model: result.debugInfo?.model,
+        runId: result.currentRunId,
       });
       return result;
     } catch (error) {
@@ -1201,7 +1305,7 @@ export class SessionManager {
 
       // 7. 保存执行结果
       await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
-      await this.saveVariableSnapshots(sessionId, session.variables, executionState.variables);
+      await this.saveVariableSnapshots(sessionId, executionState);
       await this.updateSessionState(sessionId, executionState, globalVariables);
 
       // 8. 构建并返回响应
@@ -1214,15 +1318,6 @@ export class SessionManager {
       );
       logger.debug('🏁 processUserInput completed:', {
         aiMessageLength: result.aiMessage?.length || 0,
-        hasDebugInfo: !!result.debugInfo,
-        debugInfo: result.debugInfo
-          ? {
-              tokensUsed: result.debugInfo.tokensUsed,
-              model: result.debugInfo.model,
-              finishReason: result.debugInfo.response?.finishReason,
-              responseTimeMs: result.debugInfo.responseTimeMs,
-            }
-          : undefined,
         executionStatus: result.executionStatus,
         position: result.position,
         hasGlobalVariables: !!result.globalVariables,
@@ -1391,9 +1486,51 @@ export class SessionManager {
     const metadata = (session.metadata as Record<string, any>) || {};
     const actionSnapshots = metadata.actionSnapshots || {};
 
-    // 2. Determine target action
-    const currentActionId = (session.position as Record<string, any>)?.actionId;
-    const targetKey = targetActionId || currentActionId;
+    logger.info('[DEBUG-RERUN] Session metadata loaded from DB', {
+      metadataKeys: Object.keys(metadata),
+      hasActionSnapshots: !!metadata.actionSnapshots,
+      snapshotKeys: Object.keys(actionSnapshots),
+      snapshotContent: JSON.stringify(actionSnapshots).substring(0, 500),
+    });
+
+    // 2. Parse script to extract all action IDs and their positions
+    const scriptContent = yaml.parse(script.scriptContent) || {};
+    const phases = scriptContent.session?.phases || [];
+    const allActionIds: string[] = [];
+    const actionPositionMap: Record<
+      string,
+      { phaseIdx: number; topicIdx: number; actionIdx: number }
+    > = {};
+    for (let pIdx = 0; pIdx < phases.length; pIdx++) {
+      const phase = phases[pIdx];
+      for (let tIdx = 0; tIdx < (phase.topics || []).length; tIdx++) {
+        const topic = phase.topics[tIdx];
+        for (let aIdx = 0; aIdx < (topic.actions || []).length; aIdx++) {
+          const action = topic.actions[aIdx];
+          allActionIds.push(action.action_id);
+          actionPositionMap[action.action_id] = { phaseIdx: pIdx, topicIdx: tIdx, actionIdx: aIdx };
+        }
+      }
+    }
+
+    // 3. Determine target action
+    let targetKey: string | undefined = targetActionId;
+    if (!targetKey) {
+      // Fallback 1: position.actionId (may be set from previous rerun)
+      const posActionId = (session.position as Record<string, any>)?.actionId;
+      if (posActionId) {
+        targetKey = posActionId;
+      } else {
+        // Fallback 2: lookup from position indices
+        const pos = session.position as Record<string, any>;
+        const pIdx = pos?.phaseIndex ?? 0;
+        const tIdx = pos?.topicIndex ?? 0;
+        const aIdx = pos?.actionIndex ?? 0;
+        if (phases[pIdx]?.topics?.[tIdx]?.actions?.[aIdx]) {
+          targetKey = phases[pIdx].topics[tIdx].actions[aIdx].action_id;
+        }
+      }
+    }
 
     if (!targetKey || !actionSnapshots[targetKey]) {
       throw Object.assign(new Error(`No snapshot found for action: ${targetKey}`), {
@@ -1403,19 +1540,8 @@ export class SessionManager {
 
     const snapshot = actionSnapshots[targetKey];
 
-    // 3. Cascade cleanup — keep only snapshots up to and including target
+    // 4. Cascade cleanup — keep only snapshots up to and including target
     const newSnapshots: Record<string, any> = {};
-    // Collect all action IDs from script to determine ordering
-    const scriptContent = yaml.parse(script.scriptContent) || {};
-    const phases = scriptContent.session?.phases || [];
-    const allActionIds: string[] = [];
-    for (const phase of phases) {
-      for (const topic of phase.topics || []) {
-        for (const action of topic.actions || []) {
-          allActionIds.push(action.action_id);
-        }
-      }
-    }
     const targetIdx = allActionIds.indexOf(targetKey);
     for (const id of allActionIds.slice(0, targetIdx + 1)) {
       if (actionSnapshots[id]) {
@@ -1423,30 +1549,51 @@ export class SessionManager {
       }
     }
 
-    // 4. Delete messages after snapshot point
-    // Use timestamp-based ordering since message IDs are UUIDs
+    // 5. Flag messages after snapshot point as superseded (instead of hard-delete)
+    // This preserves them in the debug panel for comparison while excluding them from LLM context.
     const allMessages = await db
       .select({ id: messages.id })
       .from(messages)
       .where(eq(messages.sessionId, sessionId))
       .orderBy(messages.timestamp);
 
-    if (snapshot.messageCount < allMessages.length) {
-      const idsToDelete = allMessages.slice(snapshot.messageCount).map((m) => m.id);
-      if (idsToDelete.length > 0) {
-        await db.delete(messages).where(inArray(messages.id, idsToDelete));
-        logger.debug(`🗑️ Deleted ${idsToDelete.length} messages after snapshot point`);
+    // snapshot uses conversationHistoryLength; also accept messageCount for forward compat
+    const msgCount: number =
+      (snapshot.messageCount as number) ?? (snapshot.conversationHistoryLength as number) ?? 0;
+    if (msgCount < allMessages.length) {
+      const idsToFlag = allMessages.slice(msgCount).map((m) => m.id);
+      if (idsToFlag.length > 0) {
+        const supersededMeta = { superseded: true, supersededAt: new Date().toISOString() };
+        // Update each message's metadata individually (Drizzle does not support bulk JSONB merge)
+        for (const msgId of idsToFlag) {
+          const msg = await db.query.messages.findFirst({
+            where: eq(messages.id, msgId),
+          });
+          if (msg) {
+            const existingMeta = (msg.metadata as Record<string, any>) || {};
+            await db
+              .update(messages)
+              .set({
+                metadata: { ...existingMeta, ...supersededMeta },
+              })
+              .where(eq(messages.id, msgId));
+          }
+        }
+        logger.debug(`🏷️ Flagged ${idsToFlag.length} messages as superseded after snapshot point`);
       }
     }
 
-    // 5. Clean rerunHistory — keep only entries up to target
+    // 6. Clean rerunHistory — keep only entries up to target
     let rerunHistory = (metadata.rerunHistory || []) as any[];
     rerunHistory = rerunHistory.filter((entry: any) => {
       const entryIdx = allActionIds.indexOf(entry.actionId);
       return entryIdx >= 0 && entryIdx <= targetIdx;
     });
 
-    // 6. Restore metadata
+    // 7. Generate new runId for this rerun/rollback
+    const newRunId = uuidv4();
+
+    // 8. Restore metadata
     const restoredMetadata: Record<string, any> = {
       ...metadata,
       variableStore: snapshot.variableStore,
@@ -1454,13 +1601,14 @@ export class SessionManager {
       rerunHistory,
       llmConfig: llmConfig || metadata.llmConfig,
       rerunConfigOverride: configOverride || undefined,
+      currentRunId: newRunId,
     };
     // Remove action-level state that will be recreated
     delete restoredMetadata.actionState;
     delete restoredMetadata.lastActionRoundInfo;
     delete restoredMetadata.completedActionContext;
 
-    // 7. Update session in DB
+    // 9. Update session in DB
     await db
       .update(sessions)
       .set({
@@ -1473,12 +1621,13 @@ export class SessionManager {
           currentRound: 0,
         } as any,
         executionStatus: ExecutionStatus.RUNNING,
+        currentRunId: newRunId,
         metadata: restoredMetadata,
         updatedAt: new Date(),
       })
       .where(eq(sessions.id, sessionId));
 
-    // 8. Re-execute (same flow as processUserInput but without user input)
+    // 9. Re-execute (same flow as processUserInput but without user input)
     const { values: globalVariables } = await this.loadGlobalVariables(
       script.scriptName,
       session.userId
@@ -1502,11 +1651,7 @@ export class SessionManager {
     executionState = await this.executeScript(script, sessionId, executionState, null);
 
     await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
-    await this.saveVariableSnapshots(
-      sessionId,
-      (updatedSession.variables as Record<string, unknown>) || {},
-      executionState.variables
-    );
+    await this.saveVariableSnapshots(sessionId, executionState);
     await this.updateSessionState(sessionId, executionState, globalVariables);
 
     return this.buildSessionResponse(executionState, updatedSession, script, globalVariables, true);

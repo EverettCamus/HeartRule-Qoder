@@ -39,8 +39,6 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({
   useEffect(() => {
     if (!currentPosition || !tree) return;
 
-    console.log('[NavigationTree] Current position changed:', currentPosition);
-
     // 找到当前执行的 Phase 和 Topic
     let targetPhaseId: string | null = null;
     let targetTopicId: string | null = null;
@@ -57,11 +55,6 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({
             targetPhaseId = phase.phaseId;
             targetTopicId = topic.topicId;
             foundCurrentAction = true;
-            console.log('[NavigationTree] Found target path:', {
-              phase: phase.phaseName,
-              topic: topic.topicName,
-              action: action.actionId,
-            });
             break;
           }
           // 当前 Action 之前的所有 Action 都标记为已执行
@@ -76,7 +69,6 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({
 
     // 更新已执行 Action 集合
     setExecutedActions(newExecutedActions);
-    console.log('[NavigationTree] Updated executed actions:', Array.from(newExecutedActions));
 
     // 如果找到了目标路径，更新展开状态
     if (targetPhaseId && targetTopicId) {
@@ -90,7 +82,6 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({
             behavior: 'smooth',
             block: 'center',
           });
-          console.log('[NavigationTree] Scrolled to current action');
         }
       }, 300);
     }
@@ -195,16 +186,6 @@ const NavigationTreeComponent: React.FC<NavigationTreeProps> = ({
 
   const renderAction = (action: ActionNode) => {
     const isCurrentAction = currentPosition && action.actionId === currentPosition.actionId;
-
-    console.log('[NavigationTree] renderAction:', {
-      actionId: action.actionId,
-      isCurrentAction,
-      executionStatus,
-      hasOnRerun: !!onRerun,
-      hasOnRollback: !!onRollback,
-      hasSnapshot: !!actionSnapshots?.[action.actionId],
-      snapshotKeys: actionSnapshots ? Object.keys(actionSnapshots) : [],
-    });
 
     return (
       <div

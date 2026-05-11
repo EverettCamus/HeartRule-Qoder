@@ -1,18 +1,18 @@
 import { CloseOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons';
-import { Button, Input, Spin, Alert, Empty, Tag, message } from 'antd';
+import { Button, Input, Select, Spin, Alert, Empty, Tag, message } from 'antd';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 import { debugApi } from '../../api/debug';
-import type { DebugMessage, RerunRequest } from '../../api/debug';
+import type { DebugMessage, RerunRequest, RerunResponse, DebugEntryRecord } from '../../api/debug';
 import type {
   DebugBubble,
+  DebugBubbleV2,
   DebugOutputFilter,
   ErrorBubbleContent,
   VariableBubbleContent,
   LLMPromptBubbleContent,
   LLMResponseBubbleContent,
-  PositionBubbleContent,
 } from '../../types/debug';
 import type { DetailedError } from '../../types/error';
 import type {
@@ -24,11 +24,10 @@ import type {
 } from '../../types/navigation';
 import { loadDebugFilter, saveDebugFilter } from '../../utils/debug-filter-storage';
 import { analyzeActionVariables, categorizeVariablesByScope } from '../../utils/variableAnalyzer';
+import DebugEntryBubble from '../DebugBubbles/DebugEntryBubble';
 import ErrorBubble from '../DebugBubbles/ErrorBubble';
 import LLMPromptBubble from '../DebugBubbles/LLMPromptBubble';
 import LLMResponseBubble from '../DebugBubbles/LLMResponseBubble';
-import { PositionBubble } from '../DebugBubbles/PositionBubble';
-import VariableBubble from '../DebugBubbles/VariableBubble';
 import DebugFilterModal from '../DebugFilterModal/DebugFilterModal';
 import ErrorBanner from '../ErrorBanner/ErrorBanner';
 import ErrorDetailModal from '../ErrorDetailModal/ErrorDetailModal';
@@ -144,25 +143,43 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   });
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
-  // 累积的变量收集历史（用于显示动作完成时的完整历史）
-  const [accumulatedCollectionHistory, setAccumulatedCollectionHistory] = useState<
-    Array<{
-      round: number;
-      timestamp: string;
-      changes: Array<{
-        name: string;
-        fromValue?: unknown;
-        toValue: unknown;
-        scope?: string;
-      }>;
-    }>
-  >([]);
-
   // 重运行/回退相关状态
   const [rerunModalVisible, setRerunModalVisible] = useState(false);
   const [rerunMode, setRerunMode] = useState<'rerun' | 'rollback'>('rerun');
   const [rerunTargetActionId, setRerunTargetActionId] = useState<string>('');
   const [rerunTargetInfo, setRerunTargetInfo] = useState<any>(null);
+
+  // Guard against concurrent loadSessionData calls (prevents duplicate bubbles)
+  const loadGenRef = useRef(0);
+
+  // V2 unified debug bubbles (from debug_entries API)
+  const [debugBubblesV2, setDebugBubblesV2] = useState<DebugBubbleV2[]>([]);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+  const [availableRunIds, setAvailableRunIds] = useState<string[]>([]);
+
+  // Timeline history snapshots (client-side only)
+  interface TimelineSnapshot {
+    snapshotId: string;
+    actionId: string;
+    mode: 'initial' | 'rerun' | 'rollback';
+    timestamp: string;
+    label: string;
+    messages: DebugMessage[];
+    debugBubbles: DebugBubble[];
+  }
+  const [timelineSnapshots, setTimelineSnapshots] = useState<TimelineSnapshot[]>([]);
+  const [viewingSnapshotId, setViewingSnapshotId] = useState<string | null>(null);
+
+  // Refs for accessing latest messages/bubbles in snapshot callbacks
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const bubblesRef = useRef(debugBubbles);
+  bubblesRef.current = debugBubbles;
+
+  // Refs for accessing latest state in fetchDebugEntriesV2
+  const navigationTreeRef = useRef(navigationTree);
+  navigationTreeRef.current = navigationTree;
+  const latestVariableStoreRef = useRef<VariableBubbleContent | null>(null);
 
   // 从 sessionInfo 推导重运行所需的版本历史和快照
   const rerunHistory: any[] = useMemo(
@@ -172,12 +189,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
   const actionSnapshots: Record<string, any> = useMemo(() => {
     const snapshots = (sessionInfo?.metadata?.actionSnapshots as Record<string, any>) || {};
-    console.log('[DebugChat] actionSnapshots from metadata:', {
-      hasMetadata: !!sessionInfo?.metadata,
-      metadataKeys: sessionInfo?.metadata ? Object.keys(sessionInfo.metadata) : [],
-      snapshotKeys: Object.keys(snapshots),
-      snapshots,
-    });
     return snapshots;
   }, [sessionInfo]);
 
@@ -192,6 +203,17 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     if (!actionId) return [];
     return rerunHistory.filter((e: any) => e.actionId === actionId);
   }, [rerunHistory, currentPosition]);
+
+  // Derived display data — when viewing a history snapshot, use its data instead of live state
+  const viewingSnapshot = useMemo(
+    () =>
+      viewingSnapshotId
+        ? (timelineSnapshots.find((s) => s.snapshotId === viewingSnapshotId) ?? null)
+        : null,
+    [viewingSnapshotId, timelineSnapshots]
+  );
+  const displayMessages = viewingSnapshot ? viewingSnapshot.messages : messages;
+  const displayBubbles = viewingSnapshot ? viewingSnapshot.debugBubbles : debugBubbles;
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -349,6 +371,125 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     setDebugBubbles((prev) => prev.map((b) => ({ ...b, isExpanded: false })));
   };
 
+  // V2: Fetch debug entries from new API and build DebugBubbleV2[]
+  const fetchDebugEntriesV2 = async (runId?: string) => {
+    const currentSessionId = activeSessionId || sessionId;
+    if (!currentSessionId) return;
+
+    try {
+      console.log('[DebugChat] 📡 Fetching V2 debug entries', {
+        sessionId: currentSessionId,
+        runId,
+      });
+      const result = await debugApi.getDebugEntries(currentSessionId, runId);
+      if (!result.success) {
+        console.warn('[DebugChat] ⚠️ V2 debug entries API returned success=false');
+        return;
+      }
+
+      console.log('[DebugChat] ✅ V2 debug entries received:', {
+        total: result.total,
+        entryCount: result.data.length,
+      });
+
+      // Collect unique runIds for the selector
+      const runIds = new Set<string>();
+      result.data.forEach((entry) => runIds.add(entry.runId));
+      setAvailableRunIds(Array.from(runIds));
+
+      // Group entries by position (phaseId-topicId-actionId-round) to build unified bubbles
+      const groupKey = (e: DebugEntryRecord) =>
+        `${e.phaseId}|${e.topicId}|${e.actionId}|${e.round}|${e.runId}`;
+
+      const grouped = new Map<string, DebugEntryRecord[]>();
+      result.data.forEach((entry) => {
+        const key = groupKey(entry);
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key)!.push(entry);
+      });
+
+      // Look up position names from navigation tree
+      const tree = navigationTreeRef.current;
+
+      // Build DebugBubbleV2 from each group
+      const bubbles: DebugBubbleV2[] = [];
+      for (const [, entries] of grouped) {
+        const first = entries[0];
+        // Merge all entries' content.entries into one array
+        const allEntries = entries.flatMap((e) => e.content.entries || []);
+
+        // Look up phase/topic/action names from navigation tree
+        let phaseName: string | undefined;
+        let topicName: string | undefined;
+        let actionName: string | undefined;
+        if (tree?.phases) {
+          for (const phase of tree.phases) {
+            if (phase.phaseId === first.phaseId) {
+              phaseName = phase.phaseName;
+              if (phase.topics) {
+                for (const topic of phase.topics) {
+                  if (topic.topicId === first.topicId) {
+                    topicName = topic.topicName;
+                    if (topic.actions) {
+                      for (const action of topic.actions) {
+                        if (action.actionId === first.actionId) {
+                          actionName = action.displayName;
+                          break;
+                        }
+                      }
+                    }
+                    break;
+                  }
+                }
+              }
+              break;
+            }
+          }
+        }
+
+        bubbles.push({
+          id: first.id,
+          sessionId: first.sessionId,
+          runId: first.runId,
+          phaseId: first.phaseId,
+          topicId: first.topicId,
+          actionId: first.actionId,
+          actionType: first.actionType,
+          round: first.round,
+          phaseName,
+          topicName,
+          actionName,
+          entries: allEntries,
+          timestamp: first.createdAt,
+          isExpanded: false,
+        });
+      }
+
+      // Sort by position then round
+      bubbles.sort((a, b) => {
+        const byPhase = a.phaseId.localeCompare(b.phaseId);
+        if (byPhase !== 0) return byPhase;
+        const byTopic = a.topicId.localeCompare(b.topicId);
+        if (byTopic !== 0) return byTopic;
+        const byAction = a.actionId.localeCompare(b.actionId);
+        if (byAction !== 0) return byAction;
+        return a.round - b.round;
+      });
+
+      // Attach latest variable snapshot and full variable content to the most recent bubble
+      const varContent = latestVariableStoreRef.current;
+      if (varContent && bubbles.length > 0) {
+        bubbles[bubbles.length - 1].variableSnapshot = varContent.allVariables;
+        bubbles[bubbles.length - 1].variableContent = varContent;
+      }
+
+      console.log('[DebugChat] 🫧 Built V2 debug bubbles:', bubbles.length);
+      setDebugBubblesV2(bubbles);
+    } catch (err) {
+      console.warn('[DebugChat] ⚠️ Failed to fetch V2 debug entries:', err);
+    }
+  };
+
   // 同步 props.sessionId 到 activeSessionId（仅当 props 更新且不为 null 时）
   // 注意：不能双向同步，否则 handleRestartDebug 设置的 activeSessionId 会被覆盖
   useEffect(() => {
@@ -365,9 +506,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
   // 加载会话数据
   const loadSessionData = async () => {
+    // Bump generation to cancel any in-flight loadSessionData calls
+    const loadGen = ++loadGenRef.current;
     console.log('[DebugChat] 🔵 loadSessionData called', {
       sessionId,
       initialMessage,
+      loadGen,
       timestamp: new Date().toISOString(),
     });
 
@@ -389,6 +533,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       // 获取会话详情
       console.log('[DebugChat] 📡 Fetching session detail:', sessionId);
       const sessionDetail = await debugApi.getDebugSession(sessionId);
+      // Abort if a newer loadSessionData has started (prevents duplicate bubbles)
+      if (loadGenRef.current !== loadGen) return;
       console.log('[DebugChat] ✅ Session detail received:', {
         sessionId: sessionDetail.sessionId,
         userId: sessionDetail.userId,
@@ -430,57 +576,13 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         }
 
         setCurrentPosition(pos);
-
-        // 创建初始位置信息气泡
-        let phaseName = `Phase ${pos.phaseIndex + 1}`;
-        let topicName = `Topic ${pos.topicIndex + 1}`;
-
-        if (tree && tree.phases && tree.phases[pos.phaseIndex]) {
-          const phase = tree.phases[pos.phaseIndex];
-          phaseName = phase.phaseName || phaseName;
-
-          if (phase.topics && phase.topics[pos.topicIndex]) {
-            const topic = phase.topics[pos.topicIndex];
-            topicName = topic.topicName || topicName;
-          }
-        }
-
-        const positionBubble: DebugBubble = {
-          id: uuidv4(),
-          type: 'position',
-          timestamp: new Date().toISOString(),
-          isExpanded: false,
-          actionId: pos.actionId,
-          actionType: pos.actionType,
-          content: {
-            type: 'position',
-            phase: {
-              index: pos.phaseIndex,
-              id: pos.phaseId,
-              name: phaseName,
-            },
-            topic: {
-              index: pos.topicIndex,
-              id: pos.topicId,
-              name: topicName,
-            },
-            action: {
-              index: pos.actionIndex,
-              id: pos.actionId,
-              type: pos.actionType,
-              currentRound: sessionDetail.position.currentRound,
-              maxRounds: sessionDetail.position.maxRounds,
-            },
-            summary: `${phaseName} → ${topicName} → ${pos.actionId}`,
-          } as PositionBubbleContent,
-        };
-        addDebugBubble(positionBubble);
-        console.log('[DebugChat] ✅ Created initial position bubble');
       }
 
       // 获取消息历史
       console.log('[DebugChat] 📡 Fetching message history:', sessionId);
       const messagesResult = await debugApi.getDebugSessionMessages(sessionId);
+      // Abort if a newer loadSessionData has started
+      if (loadGenRef.current !== loadGen) return;
       console.log('[DebugChat] 📨 Messages result:', {
         success: messagesResult.success,
         messageCount: messagesResult.data?.length || 0,
@@ -525,24 +627,17 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         });
       }
 
-      // 创建初始变量气泡（如果会话有变量）
+      // Store variable snapshot for V2 debug bubbles
       if (sessionDetail.variables && Object.keys(sessionDetail.variables).length > 0) {
-        console.log('[DebugChat] 📊 Creating initial variable bubble:', sessionDetail.variables);
-
-        // 获取全局变量（优先从直接字段读取，否则从 metadata 读取）
         const globalVariables =
           sessionDetail.globalVariables ||
           (sessionDetail.metadata?.globalVariables as Record<string, unknown>) ||
           {};
-        console.log('[DebugChat] 🌐 Using globalVariables for categorization:', globalVariables);
-
-        // 按作用域分层变量
         const categorizedVars = categorizeVariablesByScope(
           sessionDetail.variables,
           globalVariables
         );
 
-        // 分析当前 action 的相关变量
         let relevantVariables: { inputVariables: string[]; outputVariables: string[] } | undefined;
         if (sessionDetail.position && tree) {
           const analysis = analyzeActionVariables(
@@ -555,42 +650,32 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             inputVariables: analysis.inputVariables,
             outputVariables: analysis.outputVariables,
           };
-
-          console.log('[DebugChat] 🔍 Initial variable analysis:', {
-            actionId: sessionDetail.position.actionId,
-            inputVariables: analysis.inputVariables,
-            outputVariables: analysis.outputVariables,
-          });
         }
 
-        const sessionActionStatus: 'running' | 'completed' | 'error' =
+        const actionStatus: 'running' | 'completed' | 'error' =
           sessionDetail.executionStatus === 'completed' || sessionDetail.executionStatus === 'error'
             ? (sessionDetail.executionStatus as 'completed' | 'error')
             : 'running';
 
-        const variableBubble: DebugBubble = {
-          id: uuidv4(),
+        latestVariableStoreRef.current = {
           type: 'variable',
-          timestamp: new Date().toISOString(),
-          isExpanded: false,
-          actionId: sessionDetail.position?.actionId,
-          actionType: sessionDetail.position?.actionType,
-          content: {
-            type: 'variable',
-            changedVariables: [],
-            allVariables: categorizedVars,
-            relevantVariables,
-            summary: '初始变量状态',
-            actionStatus: sessionActionStatus,
-          } as VariableBubbleContent,
+          changedVariables: [],
+          allVariables: categorizedVars,
+          relevantVariables,
+          summary: '初始变量状态',
+          actionStatus,
         };
-        addDebugBubble(variableBubble);
-        console.log('[DebugChat] ✅ Created initial variable bubble');
       }
 
       // 滚动到底部
       setTimeout(scrollToBottom, 100);
       console.log('[DebugChat] ✅ Session data loaded successfully');
+
+      // V2: Fetch debug entries from the new API
+      if (sessionDetail.currentRunId) {
+        setCurrentRunId(sessionDetail.currentRunId);
+        fetchDebugEntriesV2(sessionDetail.currentRunId);
+      }
     } catch (err: any) {
       console.error('[DebugChat] ❌ Failed to load session data:', {
         error: err,
@@ -636,6 +721,34 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       onSessionStatusChange(currentSessionId, sessionInfo.executionStatus);
     }
   }, [sessionInfo?.executionStatus, activeSessionId, sessionId]);
+
+  // 初始快照：会话数据加载完成后自动创建
+  const hasInitialSnapshotRef = useRef(false);
+  const prevSessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      !initialLoading &&
+      sessionId &&
+      messages.length > 0 &&
+      !hasInitialSnapshotRef.current &&
+      prevSessionIdRef.current !== sessionId
+    ) {
+      hasInitialSnapshotRef.current = true;
+      prevSessionIdRef.current = sessionId;
+      setTimelineSnapshots([
+        {
+          snapshotId: uuidv4(),
+          actionId: currentPosition?.actionId || '',
+          mode: 'initial',
+          timestamp: new Date().toISOString(),
+          label: 'Session 创建',
+          messages: messagesRef.current.map((m) => ({ ...m })),
+          debugBubbles: bubblesRef.current.map((b) => ({ ...b })),
+        },
+      ]);
+    }
+  }, [initialLoading, sessionId, messages.length]);
 
   // 发送消息
   // 处理发送消息
@@ -707,8 +820,25 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         debugInfo: response.debugInfo,
       });
 
-      if (response.executionStatus && sessionInfo) {
-        setSessionInfo({ ...sessionInfo, executionStatus: response.executionStatus });
+      if (sessionInfo) {
+        // Merge all updatable fields from response into sessionInfo
+        const updates: any = {};
+        if (response.executionStatus) updates.executionStatus = response.executionStatus;
+        if ((response as any).actionSnapshots) {
+          updates.metadata = {
+            ...(sessionInfo.metadata || {}),
+            actionSnapshots: (response as any).actionSnapshots,
+          };
+        }
+        if ((response as any).rerunHistory) {
+          updates.metadata = {
+            ...(updates.metadata || sessionInfo.metadata || {}),
+            rerunHistory: (response as any).rerunHistory,
+          };
+        }
+        if (Object.keys(updates).length > 0) {
+          setSessionInfo({ ...sessionInfo, ...updates });
+        }
       }
 
       // 检查响应中是否包含错误信息
@@ -779,27 +909,14 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         addDebugBubble(fallbackError);
       }
 
-      // 检查变量变化并创建变量气泡
+      // Store variable snapshot for V2 debug bubbles
       if (response.variables) {
-        const newVariables = response.variables;
-        const globalVariables = response.globalVariables || {};
-
-        console.log('[DebugChat] 📦 Creating variable bubble with:', {
-          hasVariables: !!response.variables,
-          variablesKeys: Object.keys(newVariables),
-          hasGlobalVariables: !!response.globalVariables,
-          globalVariablesKeys: Object.keys(globalVariables),
-          hasVariableStore: !!response.variableStore,
-        });
-
-        // 优先使用 variableStore，否则退回到旧的分层逻辑
         const categorizedVars = response.variableStore
           ? response.variableStore
-          : categorizeVariablesByScope(newVariables, globalVariables);
+          : categorizeVariablesByScope(response.variables, response.globalVariables || {});
 
-        // 分析当前 action 的相关变量
         let relevantVariables: { inputVariables: string[]; outputVariables: string[] } | undefined;
-        if (response.position) {
+        if (response.position && navigationTree) {
           const analysis = analyzeActionVariables(
             navigationTree,
             response.position.phaseIndex || 0,
@@ -810,35 +927,10 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             inputVariables: analysis.inputVariables,
             outputVariables: analysis.outputVariables,
           };
-
-          console.log('[DebugChat] 🔍 Variable analysis for action:', {
-            actionId: response.position.actionId,
-            inputVariables: analysis.inputVariables,
-            outputVariables: analysis.outputVariables,
-          });
         }
 
-        // 获取动作状态
         const actionStatus = (response as any).actionStatus;
-
-        // 累积变量收集历史
         const roundChanges = (response as any).roundChanges;
-        let newAccumulatedHistory = accumulatedCollectionHistory;
-        if (actionStatus === 'running' && roundChanges) {
-          // 动作进行中，累积每轮的变化
-          newAccumulatedHistory = [...accumulatedCollectionHistory, roundChanges];
-          setAccumulatedCollectionHistory(newAccumulatedHistory);
-        } else if (actionStatus === 'completed') {
-          // 动作完成时，如果有新的变化也要添加
-          if (roundChanges) {
-            newAccumulatedHistory = [...accumulatedCollectionHistory, roundChanges];
-            setAccumulatedCollectionHistory(newAccumulatedHistory);
-          }
-          // 动作完成后重置累积历史
-          setAccumulatedCollectionHistory([]);
-        }
-
-        // 计算 changedVariables（从最新轮次变化）
         const changedVariables = roundChanges
           ? roundChanges.changes.map((c: any) => ({
               name: c.name,
@@ -848,43 +940,33 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             }))
           : [];
 
-        const variableBubble: DebugBubble = {
-          id: uuidv4(),
+        latestVariableStoreRef.current = {
           type: 'variable',
-          timestamp: new Date().toISOString(),
-          isExpanded: false,
-          actionId: response.position?.actionId,
-          actionType: response.position?.actionType,
-          content: {
-            type: 'variable',
-            changedVariables,
-            allVariables: categorizedVars,
-            relevantVariables,
-            summary: '变量更新',
-            actionStatus,
-            currentRound: (response as any).currentRound,
-            maxRounds: (response as any).maxRounds,
-            collectionHistory: newAccumulatedHistory.length > 0 ? newAccumulatedHistory : undefined,
-            scopePath: {
-              phaseId:
-                actionStatus === 'completed' && (response as any).completedActionContext
-                  ? (response as any).completedActionContext.phaseId ||
-                    response.position?.phaseId ||
-                    ''
-                  : response.position?.phaseId || '',
-              phaseName: '',
-              topicId:
-                actionStatus === 'completed' && (response as any).completedActionContext
-                  ? (response as any).completedActionContext.topicId ||
-                    response.position?.topicId ||
-                    ''
-                  : response.position?.topicId || '',
-              topicName: '',
-            },
-            exitReason: (response as any).exitReason,
-          } as VariableBubbleContent,
+          changedVariables,
+          allVariables: categorizedVars,
+          relevantVariables,
+          summary: '变量更新',
+          actionStatus,
+          currentRound: (response as any).currentRound,
+          maxRounds: (response as any).maxRounds,
+          scopePath: {
+            phaseId:
+              actionStatus === 'completed' && (response as any).completedActionContext
+                ? (response as any).completedActionContext.phaseId ||
+                  response.position?.phaseId ||
+                  ''
+                : response.position?.phaseId || '',
+            phaseName: '',
+            topicId:
+              actionStatus === 'completed' && (response as any).completedActionContext
+                ? (response as any).completedActionContext.topicId ||
+                  response.position?.topicId ||
+                  ''
+                : response.position?.topicId || '',
+            topicName: '',
+          },
+          exitReason: (response as any).exitReason,
         };
-        addDebugBubble(variableBubble);
       }
 
       // 检查 LLM 调试信息并创建 LLM 气泡（支持多个 action 的 debugInfo）
@@ -924,53 +1006,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           maxRounds: response.position.maxRounds,
         });
         setCurrentPosition(pos);
-
-        // 创建位置信息气泡
-        // 从导航树中获取 Phase/Topic/Action 的名称
-        let phaseName = `Phase ${pos.phaseIndex + 1}`;
-        let topicName = `Topic ${pos.topicIndex + 1}`;
-
-        if (navigationTree && navigationTree.phases && navigationTree.phases[pos.phaseIndex]) {
-          const phase = navigationTree.phases[pos.phaseIndex];
-          phaseName = phase.phaseName || phaseName;
-
-          if (phase.topics && phase.topics[pos.topicIndex]) {
-            const topic = phase.topics[pos.topicIndex];
-            topicName = topic.topicName || topicName;
-          }
-        }
-
-        const positionBubble: DebugBubble = {
-          id: uuidv4(),
-          type: 'position',
-          timestamp: new Date().toISOString(),
-          isExpanded: false, // 位置信息默认折叠
-          actionId: pos.actionId,
-          actionType: pos.actionType,
-          content: {
-            type: 'position',
-            phase: {
-              index: pos.phaseIndex,
-              id: pos.phaseId,
-              name: phaseName,
-            },
-            topic: {
-              index: pos.topicIndex,
-              id: pos.topicId,
-              name: topicName,
-            },
-            action: {
-              index: pos.actionIndex,
-              id: pos.actionId,
-              type: pos.actionType,
-              currentRound: response.position.currentRound,
-              maxRounds: response.position.maxRounds,
-            },
-            summary: `${phaseName} → ${topicName} → ${pos.actionId}`,
-          } as PositionBubbleContent,
-        };
-        addDebugBubble(positionBubble);
-        console.log('[DebugChat] ✅ Created position bubble');
       }
 
       // 添加AI回复到消息列表（仅当有非空内容时）
@@ -990,6 +1025,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           response.executionStatus
         );
       }
+
+      // V2: Update runId from response and refresh debug entries
+      if (response.currentRunId) {
+        setCurrentRunId(response.currentRunId);
+      }
+      fetchDebugEntriesV2(response.currentRunId || currentRunId || undefined);
     } catch (err: any) {
       console.error('[DebugChat] ❌ Failed to send message:', {
         error: err,
@@ -1105,16 +1146,14 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         addDebugBubble(errorBubble);
       }
 
-      // 检查变量变化并创建变量气泡
+      // Store variable snapshot for V2 debug bubbles
       if (response.variables) {
-        const newVariables = response.variables;
-        const globalVariables = response.globalVariables || {};
         const categorizedVars = response.variableStore
           ? response.variableStore
-          : categorizeVariablesByScope(newVariables, globalVariables);
+          : categorizeVariablesByScope(response.variables, response.globalVariables || {});
 
         let relevantVariables: { inputVariables: string[]; outputVariables: string[] } | undefined;
-        if (response.position) {
+        if (response.position && navigationTree) {
           const analysis = analyzeActionVariables(
             navigationTree,
             response.position.phaseIndex || 0,
@@ -1132,23 +1171,14 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             ? (response.executionStatus as 'completed' | 'error')
             : 'running';
 
-        const variableBubble: DebugBubble = {
-          id: uuidv4(),
+        latestVariableStoreRef.current = {
           type: 'variable',
-          timestamp: new Date().toISOString(),
-          isExpanded: false,
-          actionId: response.position?.actionId,
-          actionType: response.position?.actionType,
-          content: {
-            type: 'variable',
-            changedVariables: [],
-            allVariables: categorizedVars,
-            relevantVariables,
-            summary: '变量更新',
-            actionStatus: ackActionStatus,
-          } as VariableBubbleContent,
+          changedVariables: [],
+          allVariables: categorizedVars,
+          relevantVariables,
+          summary: '变量更新',
+          actionStatus: ackActionStatus,
         };
-        addDebugBubble(variableBubble);
       }
 
       // 检查 LLM 调试信息并创建 LLM 气泡（支持多个 action 的 debugInfo）
@@ -1181,49 +1211,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           maxRounds: response.position.maxRounds,
         };
         setCurrentPosition(pos);
-
-        let phaseName = `Phase ${pos.phaseIndex + 1}`;
-        let topicName = `Topic ${pos.topicIndex + 1}`;
-
-        if (navigationTree && navigationTree.phases && navigationTree.phases[pos.phaseIndex]) {
-          const phase = navigationTree.phases[pos.phaseIndex];
-          phaseName = phase.phaseName || phaseName;
-          if (phase.topics && phase.topics[pos.topicIndex]) {
-            const topic = phase.topics[pos.topicIndex];
-            topicName = topic.topicName || topicName;
-          }
-        }
-
-        const positionBubble: DebugBubble = {
-          id: uuidv4(),
-          type: 'position',
-          timestamp: new Date().toISOString(),
-          isExpanded: false,
-          actionId: pos.actionId,
-          actionType: pos.actionType,
-          content: {
-            type: 'position',
-            phase: {
-              index: pos.phaseIndex,
-              id: pos.phaseId,
-              name: phaseName,
-            },
-            topic: {
-              index: pos.topicIndex,
-              id: pos.topicId,
-              name: topicName,
-            },
-            action: {
-              index: pos.actionIndex,
-              id: pos.actionId,
-              type: pos.actionType,
-              currentRound: response.position.currentRound,
-              maxRounds: response.position.maxRounds,
-            },
-            summary: `${phaseName} → ${topicName} → ${pos.actionId}`,
-          } as PositionBubbleContent,
-        };
-        addDebugBubble(positionBubble);
       }
 
       // 添加AI回复到消息列表
@@ -1236,6 +1223,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         };
         setMessages((prev) => [...prev, aiMsg]);
       }
+
+      // V2: Fetch debug entries
+      if (response.currentRunId) {
+        setCurrentRunId(response.currentRunId);
+      }
+      fetchDebugEntriesV2(response.currentRunId || currentRunId || undefined);
     } catch (err: any) {
       console.error('[DebugChat] ❌ Failed to send acknowledgment:', err);
       if (err.response?.data?.error && typeof err.response.data.error === 'object') {
@@ -1282,8 +1275,15 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       // 清空所有状态
       setMessages([]);
       setDebugBubbles([]);
+      setDebugBubblesV2([]);
+      setCurrentRunId(null);
+      setAvailableRunIds([]);
       setNavigationTree(null);
       setCurrentPosition(undefined); // 使用 undefined 而不是 null
+      hasInitialSnapshotRef.current = false;
+      setTimelineSnapshots([]);
+      setViewingSnapshotId(null);
+      latestVariableStoreRef.current = null;
 
       // 如果有初始消息，添加它
       if (newSession.aiMessage) {
@@ -1339,82 +1339,14 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           };
           setCurrentPosition(pos);
           console.log('[DebugChat] ✅ Position updated:', pos);
-          console.log('[DebugChat] 🔄 Position round info:', {
-            currentRound: sessionDetail.position.currentRound,
-            maxRounds: sessionDetail.position.maxRounds,
-          });
-
-          // 创建初始位置信息气泡
-          let phaseName = `Phase ${pos.phaseIndex + 1}`;
-          let topicName = `Topic ${pos.topicIndex + 1}`;
-
-          if (tree && tree.phases && tree.phases[pos.phaseIndex]) {
-            const phase = tree.phases[pos.phaseIndex];
-            phaseName = phase.phaseName || phaseName;
-
-            if (phase.topics && phase.topics[pos.topicIndex]) {
-              const topic = phase.topics[pos.topicIndex];
-              topicName = topic.topicName || topicName;
-            }
-          }
-
-          const positionBubble: DebugBubble = {
-            id: uuidv4(),
-            type: 'position',
-            timestamp: new Date().toISOString(),
-            isExpanded: false,
-            actionId: pos.actionId,
-            actionType: pos.actionType,
-            content: {
-              type: 'position',
-              phase: {
-                index: pos.phaseIndex,
-                id: pos.phaseId,
-                name: phaseName,
-              },
-              topic: {
-                index: pos.topicIndex,
-                id: pos.topicId,
-                name: topicName,
-              },
-              action: {
-                index: pos.actionIndex,
-                id: pos.actionId,
-                type: pos.actionType,
-                currentRound: sessionDetail.position.currentRound,
-                maxRounds: sessionDetail.position.maxRounds,
-              },
-              summary: `${phaseName} → ${topicName} → ${pos.actionId}`,
-            } as PositionBubbleContent,
-          };
-          addDebugBubble(positionBubble);
-          console.log('[DebugChat] ✅ Created initial position bubble');
-
-          // 创建初始变量气泡（如果会话有变量）
+          // Store variable snapshot for V2 debug bubbles
           if (newSession.variables && Object.keys(newSession.variables).length > 0) {
-            console.log(
-              '[DebugChat] 📊 Creating initial variable bubble on restart:',
-              newSession.variables
-            );
-            console.log(
-              '[DebugChat] 🔍 globalVariables from newSession:',
-              newSession.globalVariables
-            );
-
-            // 获取全局变量
             const globalVariables = newSession.globalVariables || {};
-            console.log(
-              '[DebugChat] 🌐 Using globalVariables for categorization:',
-              globalVariables
-            );
-
-            // 按作用域分层变量
             const categorizedVars = categorizeVariablesByScope(
               newSession.variables,
               globalVariables
             );
 
-            // 分析当前 action 的相关变量
             let relevantVariables:
               | { inputVariables: string[]; outputVariables: string[] }
               | undefined;
@@ -1429,12 +1361,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                 inputVariables: analysis.inputVariables,
                 outputVariables: analysis.outputVariables,
               };
-
-              console.log('[DebugChat] 🔍 Initial variable analysis on restart:', {
-                actionId: pos.actionId,
-                inputVariables: analysis.inputVariables,
-                outputVariables: analysis.outputVariables,
-              });
             }
 
             const restartActionStatus: 'running' | 'completed' | 'error' =
@@ -1443,24 +1369,14 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                 ? (sessionDetail.executionStatus as 'completed' | 'error')
                 : 'running';
 
-            const variableBubble: DebugBubble = {
-              id: uuidv4(),
+            latestVariableStoreRef.current = {
               type: 'variable',
-              timestamp: new Date().toISOString(),
-              isExpanded: false,
-              actionId: pos.actionId,
-              actionType: pos.actionType,
-              content: {
-                type: 'variable',
-                changedVariables: [],
-                allVariables: categorizedVars,
-                relevantVariables,
-                summary: '初始变量状态',
-                actionStatus: restartActionStatus,
-              } as VariableBubbleContent,
+              changedVariables: [],
+              allVariables: categorizedVars,
+              relevantVariables,
+              summary: '初始变量状态',
+              actionStatus: restartActionStatus,
             };
-            addDebugBubble(variableBubble);
-            console.log('[DebugChat] ✅ Created initial variable bubble on restart');
           }
 
           // 处理初始的 debugInfo（来自会话创建时的第一个 action，支持数组格式）
@@ -1481,6 +1397,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               addDebugBubble,
             });
           }
+        }
+
+        // V2: Fetch debug entries from new session
+        if (sessionDetail.currentRunId) {
+          setCurrentRunId(sessionDetail.currentRunId);
+          fetchDebugEntriesV2(sessionDetail.currentRunId);
         }
 
         console.log('[DebugChat] ✅ Internal activeSessionId updated to:', newSession.sessionId);
@@ -1516,15 +1438,20 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
     const allActionIds = Object.keys(actionSnapshots);
     const snapshotIdx = allActionIds.indexOf(actionId);
-    const actionsToClear = allActionIds.slice(snapshotIdx);
+    const actionsToClear = allActionIds.slice(snapshotIdx).filter((a) => a !== actionId);
+
+    // Calculate messages to clear based on snapshot.messageCount
+    const snapshotMsgCount = snapshot.messageCount ?? snapshot.conversationHistoryLength ?? 0;
+    const currentMsgCount = messages.length;
+    const toClear = Math.max(0, currentMsgCount - snapshotMsgCount);
 
     setRerunMode('rollback');
     setRerunTargetActionId(actionId);
     setRerunTargetInfo({
       phasePath: `Phase ${snapshot.phaseIndex + 1} → Topic ${snapshot.topicIndex + 1} → ${actionId}`,
       snapshotTime: new Date(snapshot.timestamp).toLocaleString(),
-      messagesToClear: '?',
-      actionsToClear: actionsToClear.filter((a) => a !== actionId),
+      messagesToClear: toClear,
+      actionsToClear: actionsToClear,
     });
     setRerunModalVisible(true);
   };
@@ -1538,7 +1465,25 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
     data.targetActionId = rerunMode === 'rollback' ? rerunTargetActionId : undefined;
 
-    let result;
+    // 在执行 rerun/rollback 之前创建快照
+    const snapshotLabel =
+      rerunMode === 'rerun'
+        ? `🔄 重运行 ${currentPosition?.actionId || ''}`
+        : `↩️ 回退到 ${rerunTargetActionId}`;
+    setTimelineSnapshots((prev) => [
+      ...prev,
+      {
+        snapshotId: uuidv4(),
+        actionId: rerunTargetActionId || currentPosition?.actionId || '',
+        mode: rerunMode === 'rerun' ? 'rerun' : 'rollback',
+        timestamp: new Date().toISOString(),
+        label: snapshotLabel,
+        messages: messagesRef.current.map((m) => ({ ...m })),
+        debugBubbles: bubblesRef.current.map((b) => ({ ...b })),
+      },
+    ]);
+
+    let result: RerunResponse;
     try {
       result = await debugApi.rerunAction(activeSessionId, data);
     } catch (e: any) {
@@ -1547,31 +1492,115 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       throw e;
     }
 
-    // Add separator bubble
-    addDebugBubble({
-      id: uuidv4(),
-      type: 'system',
-      timestamp: new Date().toISOString(),
-      actionId: rerunTargetActionId || currentPosition?.actionId,
-      actionType: currentPosition?.actionType,
-      content: {
-        type: 'system_message',
-        content: `🔄 ${rerunMode === 'rerun' ? '重运行当前 action' : `回退到 ${rerunTargetActionId} 并重新执行`}`,
-      },
-    } as any);
+    // === Clean up old state for rollback/rerun ===
+    // Clear all old debug bubbles — the rerun response will rebuild them
+    setDebugBubbles([]);
 
-    // Replace messages with new execution result
-    if (result.aiMessage) {
-      const newAssistantMsg = {
-        id: uuidv4(),
-        role: 'assistant' as const,
-        content: result.aiMessage,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, newAssistantMsg as any]);
+    // Reload messages from server and filter out superseded ones
+    // (The messages endpoint returns all messages; superseded ones must be filtered client-side)
+    try {
+      const msgsResult = await debugApi.getDebugSessionMessages(activeSessionId);
+      if (msgsResult.success && msgsResult.data) {
+        const activeMessages = msgsResult.data.filter(
+          (m) => !((m.metadata as Record<string, any>)?.superseded === true)
+        );
+        setMessages(activeMessages);
+      }
+    } catch (_e) {
+      // ignore reload errors
     }
 
-    // Update position and session info
+    // Update sessionInfo with new metadata
+    if (sessionInfo) {
+      const updates: any = {};
+      if (result.executionStatus) updates.executionStatus = result.executionStatus;
+      if ((result as any).actionSnapshots) {
+        updates.metadata = {
+          ...(sessionInfo.metadata || {}),
+          actionSnapshots: (result as any).actionSnapshots,
+        };
+      }
+      if ((result as any).rerunHistory) {
+        updates.metadata = {
+          ...(updates.metadata || sessionInfo.metadata || {}),
+          rerunHistory: (result as any).rerunHistory,
+        };
+      }
+      if (Object.keys(updates).length > 0) {
+        setSessionInfo({ ...sessionInfo, ...updates });
+      }
+    }
+
+    // Add separator SYSTEM MESSAGE (renders in chat, not as debug bubble)
+    setMessages((prev) => [
+      ...prev,
+      {
+        messageId: `separator-${Date.now()}`,
+        role: 'system' as const,
+        content:
+          rerunMode === 'rerun'
+            ? `--- 🔄 重运行当前 action ---`
+            : `--- ↩️ 回退到 ${rerunTargetActionId} 并重新执行 ---`,
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+
+    // Add new AI message from rerun response
+    if (result.aiMessage && result.aiMessage.trim() !== '') {
+      setMessages((prev) => [
+        ...prev,
+        {
+          messageId: `ai-${Date.now()}`,
+          role: 'ai' as const,
+          content: result.aiMessage,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    }
+
+    // Process LLM debug info (create new LLM prompt/response bubbles)
+    if (result.debugInfo) {
+      const debugInfos = Array.isArray(result.debugInfo) ? result.debugInfo : [result.debugInfo];
+      createLLMBubblesFromDebugInfos({
+        debugInfos,
+        fallbackActionId: rerunTargetActionId || currentPosition?.actionId,
+        fallbackActionType: currentPosition?.actionType,
+        addDebugBubble,
+        aiMessageFallback: result.aiMessage,
+      });
+    }
+
+    // Store variable snapshot for V2 debug bubbles
+    if (result.variables && Object.keys(result.variables).length > 0) {
+      const categorizedVars = result.variableStore
+        ? result.variableStore
+        : categorizeVariablesByScope(result.variables, result.globalVariables || {});
+
+      let relevantVariables: { inputVariables: string[]; outputVariables: string[] } | undefined;
+      if (result.position && navigationTree) {
+        const analysis = analyzeActionVariables(
+          navigationTree,
+          result.position.phaseIndex || 0,
+          result.position.topicIndex || 0,
+          result.position.actionIndex || 0
+        );
+        relevantVariables = {
+          inputVariables: analysis.inputVariables,
+          outputVariables: analysis.outputVariables,
+        };
+      }
+
+      latestVariableStoreRef.current = {
+        type: 'variable',
+        changedVariables: [],
+        allVariables: categorizedVars,
+        relevantVariables,
+        summary: rerunMode === 'rollback' ? '回退后变量状态' : '重运行后变量状态',
+        actionStatus: 'running',
+      };
+    }
+
+    // Update position
     if (result.position) {
       setCurrentPosition({
         phaseIndex: result.position.phaseIndex,
@@ -1591,6 +1620,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       try {
         const updatedSession = await debugApi.getDebugSession(activeSessionId);
         setSessionInfo(updatedSession);
+
+        // V2: Update runId from new session and refresh debug entries
+        if (updatedSession.currentRunId) {
+          setCurrentRunId(updatedSession.currentRunId);
+          fetchDebugEntriesV2(updatedSession.currentRunId);
+        }
       } catch (_e) {
         // ignore refresh errors
       }
@@ -1662,6 +1697,40 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                 Session: {sessionId?.substring(0, 8)}...
               </span>
             )}
+            {availableRunIds.length > 1 && (
+              <Select
+                value={currentRunId || undefined}
+                onChange={(val) => {
+                  setCurrentRunId(val);
+                  fetchDebugEntriesV2(val);
+                }}
+                style={{ width: 200, marginLeft: 12 }}
+                size="small"
+                placeholder="Select run"
+                options={availableRunIds.map((id, i) => ({
+                  value: id,
+                  label: `Run ${i + 1}: ${id.substring(0, 8)}...`,
+                }))}
+              />
+            )}
+            {timelineSnapshots.length > 1 && (
+              <Select
+                value={viewingSnapshotId || '__current__'}
+                onChange={(val) => setViewingSnapshotId(val === '__current__' ? null : val)}
+                style={{ width: 160, marginLeft: 12 }}
+                size="small"
+                options={[
+                  { value: '__current__', label: `v${timelineSnapshots.length} (当前)` },
+                  ...timelineSnapshots
+                    .slice()
+                    .reverse()
+                    .map((s, i) => ({
+                      value: s.snapshotId,
+                      label: `v${timelineSnapshots.length - 1 - i}`,
+                    })),
+                ]}
+              />
+            )}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <Button
@@ -1717,17 +1786,20 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             <div className="debug-chat-loading">
               <Spin tip="Loading conversation history..." />
             </div>
-          ) : messages.length === 0 && debugBubbles.length === 0 ? (
+          ) : displayMessages.length === 0 && displayBubbles.length === 0 ? (
             <Empty description="No messages yet" style={{ marginTop: 50 }} />
           ) : (
             <>
               {(() => {
                 // 合并消息和气泡，按时间顺序排列
-                const items: Array<{ type: 'message' | 'bubble'; data: any; timestamp: string }> =
-                  [];
+                const items: Array<{
+                  type: 'message' | 'bubble' | 'bubble-v2';
+                  data: any;
+                  timestamp: string;
+                }> = [];
 
                 // 添加消息
-                messages.forEach((msg) => {
+                displayMessages.forEach((msg) => {
                   items.push({
                     type: 'message',
                     data: msg,
@@ -1737,12 +1809,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
                 // 添加气泡（并记录过滤统计）
                 const bubbleStats = {
-                  total: debugBubbles.length,
+                  total: displayBubbles.length,
                   filtered: 0,
                   byType: {} as Record<string, { total: number; filtered: number }>,
                 };
 
-                debugBubbles.forEach((bubble) => {
+                displayBubbles.forEach((bubble) => {
                   // 初始化类型统计
                   if (!bubbleStats.byType[bubble.type]) {
                     bubbleStats.byType[bubble.type] = { total: 0, filtered: 0 };
@@ -1770,19 +1842,18 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                     bubbleStats.byType[bubble.type].filtered++;
                     return;
                   }
-                  if (bubble.type === 'execution_log' && !debugFilter.showExecutionLog) {
-                    bubbleStats.filtered++;
-                    bubbleStats.byType[bubble.type].filtered++;
-                    return;
-                  }
-                  if (bubble.type === 'position' && !debugFilter.showPosition) {
-                    bubbleStats.filtered++;
-                    bubbleStats.byType[bubble.type].filtered++;
-                    return;
-                  }
 
                   items.push({
                     type: 'bubble',
+                    data: bubble,
+                    timestamp: bubble.timestamp,
+                  });
+                });
+
+                // 添加 V2 统一调试气泡
+                debugBubblesV2.forEach((bubble) => {
+                  items.push({
+                    type: 'bubble-v2' as any,
                     data: bubble,
                     timestamp: bubble.timestamp,
                   });
@@ -1799,15 +1870,15 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                   );
                 }
 
-                // 按时间排序
-                items.sort(
-                  (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-                );
-
-                // 计算最新 variable 气泡 ID（仅最新气泡可编辑）
-                const latestVarBubbleId = debugBubbles
-                  .filter((b) => b.type === 'variable')
-                  .pop()?.id;
+                // 按时间排序；2s 窗口内消息优先于气泡（处理客户端/服务器时钟偏差）
+                const typeOrder = { message: 0, bubble: 1, 'bubble-v2': 2 };
+                const WINDOW_MS = 2000;
+                items.sort((a, b) => {
+                  const ta = new Date(a.timestamp).getTime();
+                  const tb = new Date(b.timestamp).getTime();
+                  if (Math.abs(ta - tb) > WINDOW_MS) return ta - tb;
+                  return typeOrder[a.type] - typeOrder[b.type] || ta - tb;
+                });
 
                 // 渲染
                 return items.map((item, index) => (
@@ -1840,38 +1911,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                             onRestart={handleRestartDebug}
                           />
                         )}
-                        {item.data.type === 'variable' && (
-                          <VariableBubble
-                            content={item.data.content as VariableBubbleContent}
-                            isExpanded={item.data.isExpanded}
-                            timestamp={item.data.timestamp}
-                            actionId={item.data.actionId}
-                            onToggleExpand={() => toggleBubbleExpand(item.data.id)}
-                            sessionId={activeSessionId || sessionId || undefined}
-                            isLatest={item.data.id === latestVarBubbleId}
-                            onVariableEdit={(scope, name, newValue) => {
-                              setDebugBubbles((prev) =>
-                                prev.map((b) => {
-                                  if (b.type !== 'variable') return b;
-                                  const content = b.content as VariableBubbleContent;
-                                  const updatedAllVars = {
-                                    ...content.allVariables,
-                                    [scope]: {
-                                      ...(content.allVariables[
-                                        scope as keyof typeof content.allVariables
-                                      ] || {}),
-                                      [name]: newValue,
-                                    },
-                                  };
-                                  return {
-                                    ...b,
-                                    content: { ...content, allVariables: updatedAllVars },
-                                  };
-                                })
-                              );
-                            }}
-                          />
-                        )}
                         {item.data.type === 'llm_prompt' && (
                           <LLMPromptBubble
                             content={item.data.content as LLMPromptBubbleContent}
@@ -1890,15 +1929,38 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                             onToggleExpand={() => toggleBubbleExpand(item.data.id)}
                           />
                         )}
-                        {item.data.type === 'position' && (
-                          <PositionBubble
-                            content={item.data.content as PositionBubbleContent}
-                            isExpanded={item.data.isExpanded}
-                            timestamp={item.data.timestamp}
-                            onToggleExpand={() => toggleBubbleExpand(item.data.id)}
+                        {item.type === 'bubble-v2' && (
+                          <DebugEntryBubble
+                            bubble={item.data as DebugBubbleV2}
+                            filter={debugFilter}
+                            onToggleExpand={() => {
+                              setDebugBubblesV2((prev) =>
+                                prev.map((b) =>
+                                  b.id === item.data.id ? { ...b, isExpanded: !b.isExpanded } : b
+                                )
+                              );
+                            }}
+                            sessionId={activeSessionId || sessionId || undefined}
+                            isLatest={!!(item.data as DebugBubbleV2).variableContent}
+                            onVariableEdit={(scope, name, newValue) => {
+                              setDebugBubblesV2((prev) =>
+                                prev.map((b) => {
+                                  if (!b.variableContent) return b;
+                                  const vc = { ...b.variableContent };
+                                  const scopeKey = scope as keyof typeof vc.allVariables;
+                                  vc.allVariables = {
+                                    ...vc.allVariables,
+                                    [scopeKey]: {
+                                      ...(vc.allVariables[scopeKey] || {}),
+                                      [name]: newValue,
+                                    },
+                                  };
+                                  return { ...b, variableContent: vc };
+                                })
+                              );
+                            }}
                           />
                         )}
-                        {/* TODO: 添加其他类型气泡 (ExecutionLog) */}
                       </div>
                     )}
                   </React.Fragment>
@@ -1926,6 +1988,22 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           }}
         >
           {(() => {
+            // 查看历史快照模式：隐藏输入区域
+            if (viewingSnapshot) {
+              return (
+                <div style={{ textAlign: 'center', padding: '16px' }}>
+                  <Tag color="blue">📜 查看历史: {viewingSnapshot.label}</Tag>
+                  <Button
+                    type="link"
+                    onClick={() => setViewingSnapshotId(null)}
+                    style={{ marginLeft: 12 }}
+                  >
+                    ← 返回当前
+                  </Button>
+                </div>
+              );
+            }
+
             // 检查会话是否已结束
             const isSessionEnded =
               sessionInfo?.executionStatus === 'completed' ||
