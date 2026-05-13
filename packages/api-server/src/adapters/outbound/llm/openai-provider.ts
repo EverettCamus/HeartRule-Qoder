@@ -15,12 +15,12 @@ export class OpenAIProvider extends BaseLLMProvider {
     this.baseURL = baseURL;
   }
 
-  getModel(): LanguageModel {
+  getModel(modelName?: string): LanguageModel {
     const openai = createOpenAI({
       apiKey: this.apiKey,
       baseURL: this.baseURL,
     });
 
-    return openai(this.config.model) as LanguageModel;
+    return openai(modelName || this.config.model) as LanguageModel;
   }
 }

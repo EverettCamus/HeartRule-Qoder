@@ -524,6 +524,7 @@ export class AiAskAction extends BaseAction {
       const result = await this.llmOrchestrator!.generateText(
         extractPrompt,
         {
+          ...(context.llmConfig?.model ? { model: context.llmConfig.model } : {}),
           temperature: context.llmConfig?.temperature ?? 0.3,
           maxTokens: context.llmConfig?.maxTokens ?? 500,
         },
@@ -622,12 +623,20 @@ export class AiAskAction extends BaseAction {
       return '';
     }
 
+    const position = {
+      phaseId: context.phaseId,
+      topicId: context.topicId,
+      actionId: context.actionId,
+    };
+
     const lines: string[] = ['已收集变量：'];
     for (const varConfig of outputConfig) {
       const varName = varConfig.get;
       if (!varName) continue;
 
-      const value = context.variables[varName];
+      const value =
+        context.scopeResolver?.resolveVariable(varName, position)?.value ??
+        context.variables[varName];
       if (value !== undefined && value !== null && value !== '') {
         lines.push(`- ${varName}: ${String(value).substring(0, 50)}`);
       } else {
@@ -1002,6 +1011,7 @@ ${historyText}
       return await this.llmOrchestrator.generateText(
         prompt,
         {
+          ...(llmConfig?.model ? { model: llmConfig.model } : {}),
           temperature: llmConfig?.temperature ?? 0.7,
           maxTokens: llmConfig?.maxTokens ?? 4096,
           responseFormat: { type: 'json_object' },

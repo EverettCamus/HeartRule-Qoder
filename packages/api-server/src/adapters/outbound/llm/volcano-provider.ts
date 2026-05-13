@@ -12,6 +12,7 @@ export class VolcanoDeepSeekProvider extends BaseLLMProvider {
   private endpointId: string;
   private baseUrl: string;
   private model: any; // 使用any类型避免ai包版本不匹配问题
+  private openaiInstance: ReturnType<typeof createOpenAI>;
 
   constructor(
     config: LLMConfig,
@@ -25,16 +26,19 @@ export class VolcanoDeepSeekProvider extends BaseLLMProvider {
     this.baseUrl = baseUrl;
 
     // 创建OpenAI兼容客户端，指向火山引擎 Ark API
-    const openai = createOpenAI({
+    this.openaiInstance = createOpenAI({
       apiKey: this.apiKey,
       baseURL: this.baseUrl,
     });
 
     // 使用endpoint ID作为model名称
-    this.model = openai(this.endpointId);
+    this.model = this.openaiInstance(this.endpointId);
   }
 
-  getModel(): LanguageModel {
+  getModel(modelName?: string): LanguageModel {
+    if (modelName) {
+      return this.openaiInstance(modelName) as LanguageModel;
+    }
     return this.model as LanguageModel;
   }
 }

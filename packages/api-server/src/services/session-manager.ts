@@ -721,10 +721,7 @@ export class SessionManager {
     const actionType = executionState.currentActionType || 'unknown';
 
     // Determine current round from metadata
-    const round =
-      (executionState.metadata.actionRoundInfo as any)?.[actionId]?.currentRound ||
-      (executionState.metadata.lastActionRoundInfo as any)?.currentRound ||
-      1;
+    const round = determineDebugEntryRound(executionState.metadata, actionId);
 
     const entries: Array<Record<string, unknown>> = debugInfos.map((info: any) => ({
       type: 'llm_call',
@@ -790,6 +787,34 @@ export class SessionManager {
           snapshots[key].messageCount = msgCount;
         }
       }
+    }
+
+    // Auto-create v1 entries in rerunHistory for actions that don't have one yet
+    const actionSnapshotsForV1 = executionState.metadata.actionSnapshots as
+      | Record<string, any>
+      | undefined;
+    if (actionSnapshotsForV1) {
+      const rerunHistory = (executionState.metadata.rerunHistory || []) as any[];
+      for (const [actionId, snapshot] of Object.entries(actionSnapshotsForV1)) {
+        const alreadyExists = rerunHistory.some((e: any) => e.actionId === actionId);
+        if (!alreadyExists) {
+          const originalConfig = (snapshot as any).originalConfig || {};
+          rerunHistory.push({
+            versionId: uuidv4(),
+            actionId,
+            runId: executionState.metadata.currentRunId,
+            timestamp: new Date().toISOString(),
+            config: originalConfig.config || {},
+            llmConfig: originalConfig.llm_config || undefined,
+            result: {
+              roundsUsed:
+                (executionState.metadata.actionRoundInfo as any)?.[actionId]?.currentRound ?? 1,
+              variableCount: Object.keys(executionState.variables || {}).length,
+            },
+          });
+        }
+      }
+      executionState.metadata.rerunHistory = rerunHistory;
     }
 
     const runId = executionState.metadata.currentRunId as string | undefined;
@@ -1607,6 +1632,7 @@ export class SessionManager {
     delete restoredMetadata.actionState;
     delete restoredMetadata.lastActionRoundInfo;
     delete restoredMetadata.completedActionContext;
+    delete restoredMetadata.actionRoundInfo;
 
     // 9. Update session in DB
     await db
@@ -1621,6 +1647,7 @@ export class SessionManager {
           currentRound: 0,
         } as any,
         executionStatus: ExecutionStatus.RUNNING,
+        variables: {},
         currentRunId: newRunId,
         metadata: restoredMetadata,
         updatedAt: new Date(),
@@ -1663,4 +1690,27 @@ export class SessionManager {
     });
     return (script?.tags as string[]) || [];
   }
+}
+
+/**
+ * Determine round number for a debug entry.
+ *
+ * Priority:
+ *   1. actionRoundInfo[actionId]?.currentRound — per-action round tracking
+ *   2. lastActionRoundInfo?.currentRound — fallback from last action
+ *   3. 1 — default for first entry
+ *
+ * Extracted for testability. After rerun/rollback, actionRoundInfo must be cleared
+ * (see rerunAction) so that re-executed actions start at round 1 instead of stale values.
+ */
+export function determineDebugEntryRound(
+  metadata: Record<string, any> | undefined,
+  actionId: string
+): number {
+  if (!metadata) return 1;
+  return (
+    (metadata.actionRoundInfo as any)?.[actionId]?.currentRound ||
+    (metadata.lastActionRoundInfo as any)?.currentRound ||
+    1
+  );
 }

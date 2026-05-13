@@ -193,6 +193,7 @@ export class AiSayAction extends BaseAction {
     const llmResult = await this.llmOrchestrator!.generateText(
       prompt,
       {
+        ...(llmConfig?.model ? { model: llmConfig.model } : {}),
         temperature: llmConfig?.temperature ?? 0.7,
         maxTokens: llmConfig?.maxTokens ?? 1000,
         responseFormat: { type: 'json_object' },
@@ -388,6 +389,7 @@ export class AiSayAction extends BaseAction {
         const result = await this.llmOrchestrator.generateText(
           `${systemPrompt}\n\n${userPrompt}`,
           {
+            ...(llmConfig?.model ? { model: llmConfig.model } : {}),
             temperature: llmConfig?.temperature ?? 0.7,
             maxTokens: llmConfig?.maxTokens ?? 500,
             responseFormat: { type: 'json_object' },

@@ -39,6 +39,12 @@ export async function registerSessionRoutes(app: FastifyInstance) {
               aiMessage: { type: 'string' },
               executionStatus: { type: 'string' },
               position: { type: 'object', additionalProperties: true },
+              actionSnapshots: { type: 'object', additionalProperties: true },
+              rerunHistory: {
+                type: 'array',
+                items: { type: 'object', additionalProperties: true },
+              },
+              currentRunId: { type: 'string' },
               error: {
                 type: 'object',
                 properties: {
@@ -158,6 +164,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           variables: initResult.variables,
           globalVariables: initResult.globalVariables,
           position: initResult.position,
+          actionSnapshots: (initResult as any).actionSnapshots,
+          rerunHistory: (initResult as any).rerunHistory,
         };
 
         if (initResult.error) {
@@ -643,6 +651,12 @@ export async function registerSessionRoutes(app: FastifyInstance) {
                 },
               },
               exitReason: { type: 'string' },
+              actionSnapshots: { type: 'object', additionalProperties: true },
+              rerunHistory: {
+                type: 'array',
+                items: { type: 'object', additionalProperties: true },
+              },
+              currentRunId: { type: 'string' },
               error: {
                 type: 'object',
                 properties: {
@@ -768,6 +782,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           maxRounds: (result as any).maxRounds,
           roundChanges: (result as any).roundChanges,
           exitReason: (result as any).exitReason,
+          // 回退/重运行所需字段
+          actionSnapshots: (result as any).actionSnapshots,
+          rerunHistory: (result as any).rerunHistory,
         };
 
         // 记录完整响应（特别是position字段）

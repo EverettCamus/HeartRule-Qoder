@@ -150,10 +150,10 @@ export abstract class BaseLLMProvider implements ILLMProvider {
     };
   }
 
-  abstract getModel(): LanguageModel;
+  abstract getModel(modelName?: string): LanguageModel;
 
   async generateText(prompt: string, config?: Partial<LLMConfig>): Promise<LLMGenerateResult> {
-    const model = this.getModel();
+    const model = this.getModel(config?.model);
     const mergedConfig = { ...this.config, ...config };
     const timestamp = new Date().toISOString();
     const startTime = Date.now();
@@ -239,7 +239,7 @@ export abstract class BaseLLMProvider implements ILLMProvider {
   }
 
   async *streamText(prompt: string, config?: Partial<LLMConfig>): AsyncIterable<string> {
-    const model = this.getModel();
+    const model = this.getModel(config?.model);
     const mergedConfig = { ...this.config, ...config };
 
     const result = await streamText({

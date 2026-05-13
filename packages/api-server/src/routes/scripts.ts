@@ -424,21 +424,30 @@ export async function registerScriptRoutes(app: FastifyInstance) {
           return reply.status(404).send({ error: 'Script not found' });
         }
 
-        // Parse YAML
-        const scriptContent = yaml.parse(script.scriptContent) || {};
-        const phases = scriptContent.session?.phases || [];
+        // Parse YAML with Document API to preserve formatting
+        const doc = yaml.parseDocument(script.scriptContent);
+        const phases = doc.getIn(['session', 'phases'], true) as yaml.YAMLSeq | null;
+        if (!phases) {
+          return reply.status(400).send({ error: '脚本格式异常，缺少 phases 节点' });
+        }
 
-        // Find and update the target action
+        // Find and update the target action within the YAML node tree
         let found = false;
-        for (const phase of phases) {
-          for (const topic of phase.topics || []) {
-            for (const action of topic.actions || []) {
-              if (action.action_id === actionId) {
+        for (const phaseNode of phases.items as yaml.YAMLMap[]) {
+          const topics = phaseNode.get('topics') as yaml.YAMLSeq | undefined;
+          if (!topics) continue;
+          for (const topicNode of topics.items as yaml.YAMLMap[]) {
+            const actions = topicNode.get('actions') as yaml.YAMLSeq | undefined;
+            if (!actions) continue;
+            for (const actionNode of actions.items as yaml.YAMLMap[]) {
+              if (actionNode.get('action_id') === actionId) {
                 if (body.config) {
-                  Object.assign(action, body.config);
+                  for (const [key, val] of Object.entries(body.config)) {
+                    actionNode.set(key, val);
+                  }
                 }
                 if (body.llmConfig) {
-                  action.llm_config = body.llmConfig;
+                  actionNode.set('llm_config', doc.createNode(body.llmConfig));
                 }
                 found = true;
                 break;
@@ -455,8 +464,8 @@ export async function registerScriptRoutes(app: FastifyInstance) {
           });
         }
 
-        // Serialize back to YAML and update DB
-        const updatedYaml = yaml.stringify(scriptContent);
+        // Serialize back to YAML preserving original formatting
+        const updatedYaml = doc.toString();
         await db
           .update(scripts)
           .set({ scriptContent: updatedYaml, updatedAt: new Date() })

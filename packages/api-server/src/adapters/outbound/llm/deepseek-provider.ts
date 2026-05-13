@@ -9,6 +9,7 @@ import type { LanguageModel } from 'ai';
  */
 export class DeepSeekProvider extends BaseLLMProvider {
   private model: LanguageModel;
+  private openaiInstance: ReturnType<typeof createOpenAI>;
 
   constructor(
     config: LLMConfig,
@@ -18,15 +19,18 @@ export class DeepSeekProvider extends BaseLLMProvider {
   ) {
     super(config);
 
-    const openai = createOpenAI({
+    this.openaiInstance = createOpenAI({
       apiKey,
       baseURL: baseUrl,
     });
 
-    this.model = openai(model) as LanguageModel;
+    this.model = this.openaiInstance(model) as LanguageModel;
   }
 
-  getModel(): LanguageModel {
+  getModel(modelName?: string): LanguageModel {
+    if (modelName && modelName !== this.config.model) {
+      return this.openaiInstance(modelName) as LanguageModel;
+    }
     return this.model;
   }
 }

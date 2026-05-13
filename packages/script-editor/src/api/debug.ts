@@ -101,6 +101,8 @@ export interface DebugMessageResponse {
   /** @deprecated Use debugApi.getDebugEntries() instead. */
   debugInfo?: DebugInfo[];
   error?: any;
+  actionSnapshots?: Record<string, any>;
+  rerunHistory?: any[];
 }
 
 export interface CreateDebugSessionRequest {

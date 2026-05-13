@@ -34,6 +34,7 @@ import ErrorDetailModal from '../ErrorDetailModal/ErrorDetailModal';
 import NavigationTree from '../NavigationTree/NavigationTree';
 
 import RerunModal from './RerunModal';
+import { determineSnapshotMsgCount, insertSeparator } from './separatorUtils';
 import './style.css';
 
 const { TextArea } = Input;
@@ -107,6 +108,28 @@ function createLLMBubblesFromDebugInfos(options: {
   });
 }
 
+/**
+ * Extract ordered action IDs from the navigation tree (execution order).
+ * Used to determine which actions come before/after a rollback target.
+ */
+function getOrderedActionIds(tree: NavigationTreeType | null): string[] {
+  const ids: string[] = [];
+  if (tree?.phases) {
+    for (const phase of tree.phases) {
+      if (phase.topics) {
+        for (const topic of phase.topics) {
+          if (topic.actions) {
+            for (const action of topic.actions) {
+              ids.push(action.actionId);
+            }
+          }
+        }
+      }
+    }
+  }
+  return ids;
+}
+
 const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   visible,
   sessionId,
@@ -166,6 +189,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     label: string;
     messages: DebugMessage[];
     debugBubbles: DebugBubble[];
+    debugBubblesV2: DebugBubbleV2[];
   }
   const [timelineSnapshots, setTimelineSnapshots] = useState<TimelineSnapshot[]>([]);
   const [viewingSnapshotId, setViewingSnapshotId] = useState<string | null>(null);
@@ -175,11 +199,30 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   messagesRef.current = messages;
   const bubblesRef = useRef(debugBubbles);
   bubblesRef.current = debugBubbles;
+  const debugBubblesV2Ref = useRef(debugBubblesV2);
+  // Pre-rerun message count for reliable separator insertion
+  const preRerunMsgCountRef = useRef<number | undefined>(undefined);
+  debugBubblesV2Ref.current = debugBubblesV2;
 
   // Refs for accessing latest state in fetchDebugEntriesV2
   const navigationTreeRef = useRef(navigationTree);
   navigationTreeRef.current = navigationTree;
   const latestVariableStoreRef = useRef<VariableBubbleContent | null>(null);
+  // Per-position variable store map: key = "phaseId|topicId|actionId|round"
+  const variableStoreByPositionRef = useRef<
+    Map<string, { allVariables: any; variableContent: VariableBubbleContent }>
+  >(new Map());
+
+  // Helper: index the latest variable store by position for per-bubble lookup
+  const indexVariableStoreByPosition = (position: any, varContent: VariableBubbleContent) => {
+    if (!position) return;
+    const round = position.currentRound ?? 0;
+    const key = `${position.phaseId || ''}|${position.topicId || ''}|${position.actionId || ''}|${round}`;
+    variableStoreByPositionRef.current.set(key, {
+      allVariables: varContent.allVariables,
+      variableContent: varContent,
+    });
+  };
 
   // 从 sessionInfo 推导重运行所需的版本历史和快照
   const rerunHistory: any[] = useMemo(
@@ -214,6 +257,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   );
   const displayMessages = viewingSnapshot ? viewingSnapshot.messages : messages;
   const displayBubbles = viewingSnapshot ? viewingSnapshot.debugBubbles : debugBubbles;
+  const displayDebugBubblesV2 = viewingSnapshot ? viewingSnapshot.debugBubblesV2 : debugBubblesV2;
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -356,6 +400,21 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     setDebugBubbles((prev) =>
       prev.map((b) => (b.id === bubbleId ? { ...b, isExpanded: !b.isExpanded } : b))
     );
+    // When viewing a historical snapshot, also update its copy
+    if (viewingSnapshotId) {
+      setTimelineSnapshots((prev) =>
+        prev.map((s) =>
+          s.snapshotId === viewingSnapshotId
+            ? {
+                ...s,
+                debugBubbles: s.debugBubbles.map((b) =>
+                  b.id === bubbleId ? { ...b, isExpanded: !b.isExpanded } : b
+                ),
+              }
+            : s
+        )
+      );
+    }
   };
 
   const handleFilterChange = (newFilter: DebugOutputFilter) => {
@@ -372,7 +431,10 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   };
 
   // V2: Fetch debug entries from new API and build DebugBubbleV2[]
-  const fetchDebugEntriesV2 = async (runId?: string) => {
+  const fetchDebugEntriesV2 = async (
+    runId?: string,
+    rollbackFilter?: { excludeStaleForTarget: string; currentRunId: string }
+  ) => {
     const currentSessionId = activeSessionId || sessionId;
     if (!currentSessionId) return;
 
@@ -392,9 +454,33 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         entryCount: result.data.length,
       });
 
+      // Filter out stale entries for rollback: entries for actions at or after
+      // the rollback target that have an old runId should be excluded.
+      // Entries for actions BEFORE the target (any runId) are preserved.
+      let entries = result.data;
+      if (rollbackFilter) {
+        const orderedActionIds = getOrderedActionIds(navigationTreeRef.current);
+        const targetIdx = orderedActionIds.indexOf(rollbackFilter.excludeStaleForTarget);
+        if (targetIdx >= 0) {
+          const actionsBeforeTarget = new Set(orderedActionIds.slice(0, targetIdx));
+          const before = entries.filter((e) => actionsBeforeTarget.has(e.actionId));
+          const atOrAfter = entries.filter(
+            (e) => !actionsBeforeTarget.has(e.actionId) && e.runId === rollbackFilter.currentRunId
+          );
+          entries = [...before, ...atOrAfter];
+          console.log('[DebugChat] 🔍 Stale entry filter:', {
+            targetActionId: rollbackFilter.excludeStaleForTarget,
+            totalBefore: result.data.length,
+            afterFilter: entries.length,
+            keptBefore: before.length,
+            keptAtOrAfter: atOrAfter.length,
+          });
+        }
+      }
+
       // Collect unique runIds for the selector
       const runIds = new Set<string>();
-      result.data.forEach((entry) => runIds.add(entry.runId));
+      entries.forEach((entry) => runIds.add(entry.runId));
       setAvailableRunIds(Array.from(runIds));
 
       // Group entries by position (phaseId-topicId-actionId-round) to build unified bubbles
@@ -402,7 +488,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         `${e.phaseId}|${e.topicId}|${e.actionId}|${e.round}|${e.runId}`;
 
       const grouped = new Map<string, DebugEntryRecord[]>();
-      result.data.forEach((entry) => {
+      entries.forEach((entry) => {
         const key = groupKey(entry);
         if (!grouped.has(key)) grouped.set(key, []);
         grouped.get(key)!.push(entry);
@@ -476,14 +562,35 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         return a.round - b.round;
       });
 
-      // Attach latest variable snapshot and full variable content to the most recent bubble
-      const varContent = latestVariableStoreRef.current;
-      if (varContent && bubbles.length > 0) {
-        bubbles[bubbles.length - 1].variableSnapshot = varContent.allVariables;
-        bubbles[bubbles.length - 1].variableContent = varContent;
+      // Attach per-position variable state to each bubble
+      const varStoreMap = variableStoreByPositionRef.current;
+      for (const bubble of bubbles) {
+        const posKey = `${bubble.phaseId}|${bubble.topicId}|${bubble.actionId}|${bubble.round}`;
+        const stored = varStoreMap.get(posKey);
+        if (stored) {
+          bubble.variableSnapshot = stored.allVariables;
+          bubble.variableContent = stored.variableContent;
+        }
+      }
+      // Fallback: attach latest variable state to the most recent bubble if no per-position match
+      if (!bubbles.some((b) => b.variableContent)) {
+        const varContent = latestVariableStoreRef.current;
+        if (varContent && bubbles.length > 0) {
+          bubbles[bubbles.length - 1].variableSnapshot = varContent.allVariables;
+          bubbles[bubbles.length - 1].variableContent = varContent;
+        }
       }
 
       console.log('[DebugChat] 🫧 Built V2 debug bubbles:', bubbles.length);
+      // Safety: preserve previous bubbles if API returned no entries (prevents intermittent data loss)
+      if (bubbles.length === 0) {
+        console.warn(
+          '[DebugChat] ⚠️ 0 V2 bubbles built (total entries:',
+          result.total,
+          '), keeping previous bubbles'
+        );
+        return;
+      }
       setDebugBubblesV2(bubbles);
     } catch (err) {
       console.warn('[DebugChat] ⚠️ Failed to fetch V2 debug entries:', err);
@@ -541,6 +648,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         scriptId: sessionDetail.scriptId,
         status: sessionDetail.status,
         executionStatus: sessionDetail.executionStatus,
+        hasMetadata: !!sessionDetail.metadata,
+        metadataKeys: sessionDetail.metadata ? Object.keys(sessionDetail.metadata) : [],
+        actionSnapshotsKeys: sessionDetail.metadata?.actionSnapshots
+          ? Object.keys(sessionDetail.metadata.actionSnapshots)
+          : [],
+        rerunHistoryCount: (sessionDetail.metadata?.rerunHistory as any[])?.length || 0,
       });
       setSessionInfo(sessionDetail);
 
@@ -665,6 +778,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           summary: '初始变量状态',
           actionStatus,
         };
+        indexVariableStoreByPosition(sessionDetail.position, latestVariableStoreRef.current);
       }
 
       // 滚动到底部
@@ -721,34 +835,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       onSessionStatusChange(currentSessionId, sessionInfo.executionStatus);
     }
   }, [sessionInfo?.executionStatus, activeSessionId, sessionId]);
-
-  // 初始快照：会话数据加载完成后自动创建
-  const hasInitialSnapshotRef = useRef(false);
-  const prevSessionIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (
-      !initialLoading &&
-      sessionId &&
-      messages.length > 0 &&
-      !hasInitialSnapshotRef.current &&
-      prevSessionIdRef.current !== sessionId
-    ) {
-      hasInitialSnapshotRef.current = true;
-      prevSessionIdRef.current = sessionId;
-      setTimelineSnapshots([
-        {
-          snapshotId: uuidv4(),
-          actionId: currentPosition?.actionId || '',
-          mode: 'initial',
-          timestamp: new Date().toISOString(),
-          label: 'Session 创建',
-          messages: messagesRef.current.map((m) => ({ ...m })),
-          debugBubbles: bubblesRef.current.map((b) => ({ ...b })),
-        },
-      ]);
-    }
-  }, [initialLoading, sessionId, messages.length]);
 
   // 发送消息
   // 处理发送消息
@@ -825,18 +911,26 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         const updates: any = {};
         if (response.executionStatus) updates.executionStatus = response.executionStatus;
         if ((response as any).actionSnapshots) {
+          console.log('[DebugChat] 🔍 Merging actionSnapshots from message response:', {
+            snapshotKeys: Object.keys((response as any).actionSnapshots),
+            prevSnapshotKeys: Object.keys(sessionInfo.metadata?.actionSnapshots || {}),
+          });
           updates.metadata = {
             ...(sessionInfo.metadata || {}),
             actionSnapshots: (response as any).actionSnapshots,
           };
         }
         if ((response as any).rerunHistory) {
+          console.log('[DebugChat] 🔍 Merging rerunHistory from message response:', {
+            historyEntries: (response as any).rerunHistory?.length || 0,
+          });
           updates.metadata = {
             ...(updates.metadata || sessionInfo.metadata || {}),
             rerunHistory: (response as any).rerunHistory,
           };
         }
         if (Object.keys(updates).length > 0) {
+          console.log('[DebugChat] 📝 Updating sessionInfo with keys:', Object.keys(updates));
           setSessionInfo({ ...sessionInfo, ...updates });
         }
       }
@@ -967,6 +1061,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           },
           exitReason: (response as any).exitReason,
         };
+        indexVariableStoreByPosition(response.position, latestVariableStoreRef.current);
       }
 
       // 检查 LLM 调试信息并创建 LLM 气泡（支持多个 action 的 debugInfo）
@@ -1030,6 +1125,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       if (response.currentRunId) {
         setCurrentRunId(response.currentRunId);
       }
+      console.log('[DebugChat] 🔍 V2 fetch debug entries trigger:', {
+        responseCurrentRunId: response.currentRunId,
+        stateCurrentRunId: currentRunId,
+        resolvedRunId: response.currentRunId || currentRunId || undefined,
+      });
       fetchDebugEntriesV2(response.currentRunId || currentRunId || undefined);
     } catch (err: any) {
       console.error('[DebugChat] ❌ Failed to send message:', {
@@ -1179,6 +1279,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           summary: '变量更新',
           actionStatus: ackActionStatus,
         };
+        indexVariableStoreByPosition(response.position, latestVariableStoreRef.current);
       }
 
       // 检查 LLM 调试信息并创建 LLM 气泡（支持多个 action 的 debugInfo）
@@ -1280,10 +1381,10 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       setAvailableRunIds([]);
       setNavigationTree(null);
       setCurrentPosition(undefined); // 使用 undefined 而不是 null
-      hasInitialSnapshotRef.current = false;
       setTimelineSnapshots([]);
       setViewingSnapshotId(null);
       latestVariableStoreRef.current = null;
+      variableStoreByPositionRef.current.clear();
 
       // 如果有初始消息，添加它
       if (newSession.aiMessage) {
@@ -1377,6 +1478,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               summary: '初始变量状态',
               actionStatus: restartActionStatus,
             };
+            indexVariableStoreByPosition(sessionDetail.position, latestVariableStoreRef.current);
           }
 
           // 处理初始的 debugInfo（来自会话创建时的第一个 action，支持数组格式）
@@ -1444,6 +1546,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     const snapshotMsgCount = snapshot.messageCount ?? snapshot.conversationHistoryLength ?? 0;
     const currentMsgCount = messages.length;
     const toClear = Math.max(0, currentMsgCount - snapshotMsgCount);
+    // Save pre-rerun message count for reliable separator insertion
+    preRerunMsgCountRef.current = snapshotMsgCount;
 
     setRerunMode('rollback');
     setRerunTargetActionId(actionId);
@@ -1480,6 +1584,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         label: snapshotLabel,
         messages: messagesRef.current.map((m) => ({ ...m })),
         debugBubbles: bubblesRef.current.map((b) => ({ ...b })),
+        debugBubblesV2: debugBubblesV2Ref.current.map((b) => ({ ...b })),
       },
     ]);
 
@@ -1487,27 +1592,115 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     try {
       result = await debugApi.rerunAction(activeSessionId, data);
     } catch (e: any) {
-      const errMsg = e?.response?.data?.error || e?.message || '重运行失败';
-      message.error(errMsg);
-      throw e;
+      const status = e?.response?.status;
+      if (status === 400) {
+        message.error('目标 action 已被删除，无法回退');
+      } else {
+        const errMsg = e?.response?.data?.error || e?.message || '重运行失败';
+        message.error(errMsg);
+      }
+      setRerunModalVisible(false);
+      return;
     }
 
     // === Clean up old state for rollback/rerun ===
-    // Clear all old debug bubbles — the rerun response will rebuild them
     setDebugBubbles([]);
+    setDebugBubblesV2([]);
+    // Selectively clear variable state: for rollback, only clear entries
+    // for actions at or after the rollback target. Keep historical variable
+    // state for actions before the target.
+    if (rerunMode === 'rollback' && rerunTargetActionId) {
+      const orderedActionIds = getOrderedActionIds(navigationTreeRef.current);
+      const targetIdx = orderedActionIds.indexOf(rerunTargetActionId);
+      if (targetIdx >= 0) {
+        const actionsToClear = new Set(orderedActionIds.slice(targetIdx));
+        for (const key of variableStoreByPositionRef.current.keys()) {
+          const actionId = key.split('|')[2];
+          if (actionId && actionsToClear.has(actionId)) {
+            variableStoreByPositionRef.current.delete(key);
+          }
+        }
+      } else {
+        // Fallback: can't determine ordering, clear everything
+        variableStoreByPositionRef.current.clear();
+      }
+    } else {
+      variableStoreByPositionRef.current.clear();
+    }
+
+    // Build separator SYSTEM MESSAGE (timestamp will be set after messages reload
+    // so it sorts correctly between old and new messages in the timestamp-based render order)
+    const separatorContent =
+      rerunMode === 'rerun'
+        ? `--- 🔄 重运行当前 action ---`
+        : `--- ↩️ 回退到 ${rerunTargetActionId} 并重新执行 ---`;
 
     // Reload messages from server and filter out superseded ones
-    // (The messages endpoint returns all messages; superseded ones must be filtered client-side)
+    // Insert the separator at the snapshot boundary (pre-snapshot msgs | separator | post-snapshot msgs)
     try {
       const msgsResult = await debugApi.getDebugSessionMessages(activeSessionId);
       if (msgsResult.success && msgsResult.data) {
         const activeMessages = msgsResult.data.filter(
           (m) => !((m.metadata as Record<string, any>)?.superseded === true)
         );
-        setMessages(activeMessages);
+        // Determine split point using extracted helper
+        const snapshotMsgCount = determineSnapshotMsgCount(
+          preRerunMsgCountRef.current,
+          (result as any).actionSnapshots,
+          actionSnapshots,
+          rerunTargetActionId
+        );
+
+        // Compute separator timestamp so it sorts between old and new messages.
+        // The renderer merges messages+bubbles and sorts by timestamp, so a
+        // client-side Date.now() timestamp would sort AFTER server-timestamped
+        // AI messages, placing the separator in the wrong position visually.
+        let separatorTimestamp: string;
+        if (
+          snapshotMsgCount !== undefined &&
+          snapshotMsgCount > 0 &&
+          snapshotMsgCount < activeMessages.length
+        ) {
+          // Between last old message and first new message
+          const prevTs = new Date(activeMessages[snapshotMsgCount - 1].timestamp).getTime();
+          const nextTs = new Date(activeMessages[snapshotMsgCount].timestamp).getTime();
+          separatorTimestamp = new Date(prevTs + (nextTs - prevTs) / 2).toISOString();
+        } else if (snapshotMsgCount !== undefined && snapshotMsgCount > 0) {
+          // After last old message (no new messages yet — append case)
+          const prevTs = new Date(activeMessages[snapshotMsgCount - 1].timestamp).getTime();
+          separatorTimestamp = new Date(prevTs + 1).toISOString();
+        } else if (snapshotMsgCount !== undefined && activeMessages.length > 0) {
+          // snapshotMsgCount === 0, separator before first message
+          const nextTs = new Date(activeMessages[0].timestamp).getTime();
+          separatorTimestamp = new Date(nextTs - 1).toISOString();
+        } else {
+          separatorTimestamp = new Date().toISOString();
+        }
+
+        const separatorMessage = {
+          messageId: `separator-${Date.now()}`,
+          role: 'system' as const,
+          content: separatorContent,
+          timestamp: separatorTimestamp,
+        };
+
+        console.log('[DebugChat] 🔍 Separator insertion:', {
+          rerunMode,
+          rerunTargetActionId,
+          preRerunMsgCount: preRerunMsgCountRef.current,
+          snapshotMsgCount,
+          separatorTimestamp,
+          activeMessageCount: activeMessages.length,
+          activeMessagePreviews: activeMessages.map((m) => ({
+            id: m.messageId?.slice(0, 8),
+            role: m.role,
+            content: m.content?.slice(0, 40),
+          })),
+        });
+        setMessages(insertSeparator(activeMessages, separatorMessage, snapshotMsgCount));
       }
     } catch (_e) {
-      // ignore reload errors
+      console.warn('[DebugChat] ⚠️ Message reload failed:', _e);
     }
 
     // Update sessionInfo with new metadata
@@ -1529,33 +1722,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       if (Object.keys(updates).length > 0) {
         setSessionInfo({ ...sessionInfo, ...updates });
       }
-    }
-
-    // Add separator SYSTEM MESSAGE (renders in chat, not as debug bubble)
-    setMessages((prev) => [
-      ...prev,
-      {
-        messageId: `separator-${Date.now()}`,
-        role: 'system' as const,
-        content:
-          rerunMode === 'rerun'
-            ? `--- 🔄 重运行当前 action ---`
-            : `--- ↩️ 回退到 ${rerunTargetActionId} 并重新执行 ---`,
-        timestamp: new Date().toISOString(),
-      },
-    ]);
-
-    // Add new AI message from rerun response
-    if (result.aiMessage && result.aiMessage.trim() !== '') {
-      setMessages((prev) => [
-        ...prev,
-        {
-          messageId: `ai-${Date.now()}`,
-          role: 'ai' as const,
-          content: result.aiMessage,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
     }
 
     // Process LLM debug info (create new LLM prompt/response bubbles)
@@ -1598,6 +1764,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         summary: rerunMode === 'rollback' ? '回退后变量状态' : '重运行后变量状态',
         actionStatus: 'running',
       };
+      indexVariableStoreByPosition(result.position, latestVariableStoreRef.current);
     }
 
     // Update position
@@ -1621,9 +1788,19 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         const updatedSession = await debugApi.getDebugSession(activeSessionId);
         setSessionInfo(updatedSession);
 
-        // V2: Update runId from new session and refresh debug entries
+        // V2: Update runId and refresh debug entries.
+        // For rollback: filter out stale entries for actions at/after the
+        // rollback target (keep only current runId). Preserve all entries
+        // for actions before the target.
         if (updatedSession.currentRunId) {
           setCurrentRunId(updatedSession.currentRunId);
+        }
+        if (rerunMode === 'rollback' && rerunTargetActionId && updatedSession.currentRunId) {
+          fetchDebugEntriesV2(undefined, {
+            excludeStaleForTarget: rerunTargetActionId,
+            currentRunId: updatedSession.currentRunId,
+          });
+        } else {
           fetchDebugEntriesV2(updatedSession.currentRunId);
         }
       } catch (_e) {
@@ -1642,12 +1819,21 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   ) => {
     if (!sessionInfo?.scriptId || !rerunTargetActionId) return;
 
-    await debugApi.writeBackActionConfig(sessionInfo.scriptId, rerunTargetActionId, {
-      config,
-      llmConfig,
-    });
-
-    message.success(`已将配置写入脚本文件的 action: ${rerunTargetActionId}`);
+    try {
+      await debugApi.writeBackActionConfig(sessionInfo.scriptId, rerunTargetActionId, {
+        config,
+        llmConfig,
+      });
+      message.success(`已将配置写入脚本文件的 action: ${rerunTargetActionId}`);
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 409) {
+        message.warning('文件冲突，请先保存当前编辑，然后再尝试回写配置');
+      } else {
+        const errMsg = e?.response?.data?.error || e?.message || '回写配置失败';
+        message.error(errMsg);
+      }
+    }
   };
 
   // 格式化时间戳
@@ -1713,7 +1899,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                 }))}
               />
             )}
-            {timelineSnapshots.length > 1 && (
+            {timelineSnapshots.length > 0 && (
               <Select
                 value={viewingSnapshotId || '__current__'}
                 onChange={(val) => setViewingSnapshotId(val === '__current__' ? null : val)}
@@ -1851,7 +2037,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                 });
 
                 // 添加 V2 统一调试气泡
-                debugBubblesV2.forEach((bubble) => {
+                displayDebugBubblesV2.forEach((bubble) => {
                   items.push({
                     type: 'bubble-v2' as any,
                     data: bubble,
@@ -1939,6 +2125,23 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                                   b.id === item.data.id ? { ...b, isExpanded: !b.isExpanded } : b
                                 )
                               );
+                              // When viewing a historical snapshot, also update its copy
+                              if (viewingSnapshotId) {
+                                setTimelineSnapshots((prev) =>
+                                  prev.map((s) =>
+                                    s.snapshotId === viewingSnapshotId
+                                      ? {
+                                          ...s,
+                                          debugBubblesV2: s.debugBubblesV2.map((b) =>
+                                            b.id === item.data.id
+                                              ? { ...b, isExpanded: !b.isExpanded }
+                                              : b
+                                          ),
+                                        }
+                                      : s
+                                  )
+                                );
+                              }
                             }}
                             sessionId={activeSessionId || sessionId || undefined}
                             isLatest={!!(item.data as DebugBubbleV2).variableContent}
