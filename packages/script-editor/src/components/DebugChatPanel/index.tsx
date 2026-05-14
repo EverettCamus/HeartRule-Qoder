@@ -6,13 +6,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { debugApi } from '../../api/debug';
 import type { DebugMessage, RerunRequest, RerunResponse, DebugEntryRecord } from '../../api/debug';
 import type {
-  DebugBubble,
   DebugBubbleV2,
   DebugOutputFilter,
   ErrorBubbleContent,
   VariableBubbleContent,
-  LLMPromptBubbleContent,
-  LLMResponseBubbleContent,
 } from '../../types/debug';
 import type { DetailedError } from '../../types/error';
 import type {
@@ -26,15 +23,17 @@ import { loadDebugFilter, saveDebugFilter } from '../../utils/debug-filter-stora
 import { analyzeActionVariables, categorizeVariablesByScope } from '../../utils/variableAnalyzer';
 import DebugEntryBubble from '../DebugBubbles/DebugEntryBubble';
 import ErrorBubble from '../DebugBubbles/ErrorBubble';
-import LLMPromptBubble from '../DebugBubbles/LLMPromptBubble';
-import LLMResponseBubble from '../DebugBubbles/LLMResponseBubble';
 import DebugFilterModal from '../DebugFilterModal/DebugFilterModal';
 import ErrorBanner from '../ErrorBanner/ErrorBanner';
 import ErrorDetailModal from '../ErrorDetailModal/ErrorDetailModal';
 import NavigationTree from '../NavigationTree/NavigationTree';
 
 import RerunModal from './RerunModal';
-import { determineSnapshotMsgCount, insertSeparator } from './separatorUtils';
+import {
+  computeSeparatorTimestamp,
+  determineSnapshotMsgCount,
+  insertSeparator,
+} from './separatorUtils';
 import './style.css';
 
 const { TextArea } = Input;
@@ -48,64 +47,6 @@ interface DebugChatPanelProps {
   onClose: () => void;
   onSessionRestart?: (newSessionId: string) => void; // 新增：重新开始调试的回调
   onSessionStatusChange?: (sessionId: string, executionStatus: string) => void; // 会话状态变化回调
-}
-
-/**
- * 从 debugInfo 数组创建 LLM prompt/response 气泡
- * 优先使用 debugInfo 自身的 actionId/actionType，回退到提供的 fallback
- */
-function createLLMBubblesFromDebugInfos(options: {
-  debugInfos: any[];
-  fallbackActionId?: string;
-  fallbackActionType?: string;
-  addDebugBubble: (bubble: DebugBubble) => void;
-  aiMessageFallback?: string;
-}): void {
-  const { debugInfos, fallbackActionId, fallbackActionType, addDebugBubble, aiMessageFallback } =
-    options;
-  debugInfos.forEach((info: any) => {
-    const dbgActionId = info.actionId || fallbackActionId;
-    const dbgActionType = info.actionType || fallbackActionType;
-    const promptPreview = (info.prompt || '').substring(0, 100) + '...';
-
-    addDebugBubble({
-      id: uuidv4(),
-      type: 'llm_prompt',
-      timestamp: info.timestamp || new Date().toISOString(),
-      isExpanded: false,
-      actionId: dbgActionId,
-      actionType: dbgActionType,
-      content: {
-        type: 'llm_prompt',
-        systemPrompt: '',
-        userPrompt: info.prompt || '',
-        conversationHistory: [],
-        preview: promptPreview,
-      } as LLMPromptBubbleContent,
-    });
-
-    if (info.response) {
-      const processedResponse = info.response.text || aiMessageFallback || '';
-      addDebugBubble({
-        id: uuidv4(),
-        type: 'llm_response',
-        timestamp: info.timestamp || new Date().toISOString(),
-        isExpanded: false,
-        actionId: dbgActionId,
-        actionType: dbgActionType,
-        content: {
-          type: 'llm_response',
-          model: info.model || 'unknown',
-          tokens: info.tokensUsed || 0,
-          maxTokens: info.config?.maxTokens || 0,
-          rawResponse: JSON.stringify(info.response.raw || info.response, null, 2),
-          processedResponse,
-          preview: processedResponse.substring(0, 100) + '...',
-          responseTimeMs: info.responseTimeMs,
-        } as LLMResponseBubbleContent,
-      });
-    }
-  });
 }
 
 /**
@@ -157,8 +98,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   const [navigationTree, setNavigationTree] = useState<NavigationTreeType | null>(null);
   const [currentPosition, setCurrentPosition] = useState<CurrentPosition | undefined>(undefined);
 
-  // 调试气泡相关状态
-  const [debugBubbles, setDebugBubbles] = useState<DebugBubble[]>([]);
+  // 错误气泡（V1 中唯一未被 V2 覆盖的类型）
+  const [errorBubbles, setErrorBubbles] = useState<ErrorBubbleItem[]>([]);
   const [debugFilter, setDebugFilter] = useState<DebugOutputFilter>(() => {
     const filter = loadDebugFilter();
     console.log('[DebugChat] 🔍 Loaded debug filter:', filter);
@@ -180,6 +121,16 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [availableRunIds, setAvailableRunIds] = useState<string[]>([]);
 
+  // Error bubble (the one V1 bubble type not covered by V2 debug_entries)
+  interface ErrorBubbleItem {
+    id: string;
+    timestamp: string;
+    isExpanded: boolean;
+    actionId?: string;
+    actionType?: string;
+    content: ErrorBubbleContent;
+  }
+
   // Timeline history snapshots (client-side only)
   interface TimelineSnapshot {
     snapshotId: string;
@@ -188,7 +139,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     timestamp: string;
     label: string;
     messages: DebugMessage[];
-    debugBubbles: DebugBubble[];
     debugBubblesV2: DebugBubbleV2[];
   }
   const [timelineSnapshots, setTimelineSnapshots] = useState<TimelineSnapshot[]>([]);
@@ -197,8 +147,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   // Refs for accessing latest messages/bubbles in snapshot callbacks
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
-  const bubblesRef = useRef(debugBubbles);
-  bubblesRef.current = debugBubbles;
   const debugBubblesV2Ref = useRef(debugBubblesV2);
   // Pre-rerun message count for reliable separator insertion
   const preRerunMsgCountRef = useRef<number | undefined>(undefined);
@@ -256,8 +204,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     [viewingSnapshotId, timelineSnapshots]
   );
   const displayMessages = viewingSnapshot ? viewingSnapshot.messages : messages;
-  const displayBubbles = viewingSnapshot ? viewingSnapshot.debugBubbles : debugBubbles;
   const displayDebugBubblesV2 = viewingSnapshot ? viewingSnapshot.debugBubblesV2 : debugBubblesV2;
+  const displayErrorBubbles = viewingSnapshot ? [] : errorBubbles;
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -392,29 +340,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   };
 
   // 气泡操作函数
-  const addDebugBubble = (bubble: DebugBubble) => {
-    setDebugBubbles((prev) => [...prev, bubble]);
-  };
-
-  const toggleBubbleExpand = (bubbleId: string) => {
-    setDebugBubbles((prev) =>
-      prev.map((b) => (b.id === bubbleId ? { ...b, isExpanded: !b.isExpanded } : b))
-    );
-    // When viewing a historical snapshot, also update its copy
-    if (viewingSnapshotId) {
-      setTimelineSnapshots((prev) =>
-        prev.map((s) =>
-          s.snapshotId === viewingSnapshotId
-            ? {
-                ...s,
-                debugBubbles: s.debugBubbles.map((b) =>
-                  b.id === bubbleId ? { ...b, isExpanded: !b.isExpanded } : b
-                ),
-              }
-            : s
-        )
-      );
-    }
+  const addErrorBubble = (bubble: ErrorBubbleItem) => {
+    setErrorBubbles((prev) => [...prev, bubble]);
   };
 
   const handleFilterChange = (newFilter: DebugOutputFilter) => {
@@ -423,11 +350,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
   };
 
   const handleExpandAll = () => {
-    setDebugBubbles((prev) => prev.map((b) => ({ ...b, isExpanded: true })));
+    setDebugBubblesV2((prev) => prev.map((b) => ({ ...b, isExpanded: true })));
   };
 
   const handleCollapseAll = () => {
-    setDebugBubbles((prev) => prev.map((b) => ({ ...b, isExpanded: false })));
+    setDebugBubblesV2((prev) => prev.map((b) => ({ ...b, isExpanded: false })));
   };
 
   // V2: Fetch debug entries from new API and build DebugBubbleV2[]
@@ -633,7 +560,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       setInitialLoading(true);
       setError(null);
       // 🔧 关键修复：清空旧的调试气泡，避免上次会话的气泡残留
-      setDebugBubbles([]);
+      setErrorBubbles([]);
       console.log('[DebugChat] 🧹 Cleared old debug bubbles');
       console.log('[DebugChat] ⏳ Loading session data...');
 
@@ -730,14 +657,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           initialDebugInfos.length,
           'entries'
         );
-        createLLMBubblesFromDebugInfos({
-          debugInfos: initialDebugInfos,
-          fallbackActionId:
-            (sessionDetail.position as any)?.sourceActionId || sessionDetail.position?.actionId,
-          fallbackActionType:
-            (sessionDetail.position as any)?.sourceActionType || sessionDetail.position?.actionType,
-          addDebugBubble,
-        });
       }
 
       // Store variable snapshot for V2 debug bubbles
@@ -941,9 +860,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         setDetailedError(errorData);
 
         // 创建错误气泡
-        const errorBubble: DebugBubble = {
+        const errorBubble: ErrorBubbleItem = {
           id: uuidv4(),
-          type: 'error',
           timestamp: new Date().toISOString(),
           isExpanded: true, // 错误默认展开
           actionId: response.position?.actionId,
@@ -967,13 +885,12 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             stackTrace: errorData.stackTrace,
           } as ErrorBubbleContent,
         };
-        addDebugBubble(errorBubble);
+        addErrorBubble(errorBubble);
       } else if (response.executionStatus === 'error') {
         // 兜底：executionStatus 是 error 但没有 error 对象
         console.error('[DebugChat] ❌ Backend returned error status but no error object');
-        const fallbackError: DebugBubble = {
+        const fallbackError: ErrorBubbleItem = {
           id: uuidv4(),
-          type: 'error',
           timestamp: new Date().toISOString(),
           isExpanded: true,
           actionId: response.position?.actionId,
@@ -1000,7 +917,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             },
           } as ErrorBubbleContent,
         };
-        addDebugBubble(fallbackError);
+        addErrorBubble(fallbackError);
       }
 
       // Store variable snapshot for V2 debug bubbles
@@ -1065,22 +982,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       }
 
       // 检查 LLM 调试信息并创建 LLM 气泡（支持多个 action 的 debugInfo）
-      if (response.debugInfo) {
-        const debugInfos = Array.isArray(response.debugInfo)
-          ? response.debugInfo
-          : [response.debugInfo];
-        console.log('[DebugChat] 📍 Received LLM debugInfos:', debugInfos.length, 'entries');
-        createLLMBubblesFromDebugInfos({
-          debugInfos,
-          fallbackActionId:
-            (response.position as any)?.sourceActionId || response.position?.actionId,
-          fallbackActionType:
-            (response.position as any)?.sourceActionType || response.position?.actionType,
-          addDebugBubble,
-          aiMessageFallback: response.aiMessage,
-        });
-        console.log('[DebugChat] ✅ Created LLM prompt and response bubbles');
-      }
+      // LLM debug infos are now displayed via V2 debug_entries (fetched below)
 
       // 更新执行位置（如果响应中包含）
       if (response.position) {
@@ -1217,9 +1119,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         const errorData = response.error;
         setDetailedError(errorData);
 
-        const errorBubble: DebugBubble = {
+        const errorBubble: ErrorBubbleItem = {
           id: uuidv4(),
-          type: 'error',
           timestamp: new Date().toISOString(),
           isExpanded: true,
           actionId: response.position?.actionId,
@@ -1243,7 +1144,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             stackTrace: errorData.stackTrace,
           } as ErrorBubbleContent,
         };
-        addDebugBubble(errorBubble);
+        addErrorBubble(errorBubble);
       }
 
       // Store variable snapshot for V2 debug bubbles
@@ -1282,21 +1183,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         indexVariableStoreByPosition(response.position, latestVariableStoreRef.current);
       }
 
-      // 检查 LLM 调试信息并创建 LLM 气泡（支持多个 action 的 debugInfo）
-      if (response.debugInfo) {
-        const debugInfos = Array.isArray(response.debugInfo)
-          ? response.debugInfo
-          : [response.debugInfo];
-        createLLMBubblesFromDebugInfos({
-          debugInfos,
-          fallbackActionId:
-            (response.position as any)?.sourceActionId || response.position?.actionId,
-          fallbackActionType:
-            (response.position as any)?.sourceActionType || response.position?.actionType,
-          addDebugBubble,
-          aiMessageFallback: response.aiMessage,
-        });
-      }
+      // LLM debug infos are now displayed via V2 debug_entries (fetched below)
 
       // 更新执行位置
       if (response.position) {
@@ -1375,7 +1262,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
       // 清空所有状态
       setMessages([]);
-      setDebugBubbles([]);
+      setErrorBubbles([]);
       setDebugBubblesV2([]);
       setCurrentRunId(null);
       setAvailableRunIds([]);
@@ -1480,28 +1367,9 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             };
             indexVariableStoreByPosition(sessionDetail.position, latestVariableStoreRef.current);
           }
-
-          // 处理初始的 debugInfo（来自会话创建时的第一个 action，支持数组格式）
-          if (newSession.debugInfo) {
-            const restartDebugInfos = Array.isArray(newSession.debugInfo)
-              ? newSession.debugInfo
-              : [newSession.debugInfo];
-            console.log(
-              '[DebugChat] 🔍 Processing initial debugInfos from restart:',
-              restartDebugInfos.length,
-              'entries'
-            );
-
-            createLLMBubblesFromDebugInfos({
-              debugInfos: restartDebugInfos,
-              fallbackActionId: pos.actionId,
-              fallbackActionType: pos.actionType,
-              addDebugBubble,
-            });
-          }
         }
 
-        // V2: Fetch debug entries from new session
+        // V2: Fetch debug entries from new session (covers LLM debug info previously in V1 bubbles)
         if (sessionDetail.currentRunId) {
           setCurrentRunId(sessionDetail.currentRunId);
           fetchDebugEntriesV2(sessionDetail.currentRunId);
@@ -1560,58 +1428,17 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     setRerunModalVisible(true);
   };
 
-  // 确认重运行/回退
-  const handleRerunConfirm = async (data: RerunRequest) => {
-    if (!activeSessionId) {
-      message.error('没有活跃的调试会话');
-      throw new Error('没有活跃的调试会话');
-    }
+  // -- Re-usable steps for handleRerunConfirm --------------------------
+  // Extracted so the confirm handler reads as a clear sequence rather than
+  // a 250-line monolithic function.
 
-    data.targetActionId = rerunMode === 'rollback' ? rerunTargetActionId : undefined;
-
-    // 在执行 rerun/rollback 之前创建快照
-    const snapshotLabel =
-      rerunMode === 'rerun'
-        ? `🔄 重运行 ${currentPosition?.actionId || ''}`
-        : `↩️ 回退到 ${rerunTargetActionId}`;
-    setTimelineSnapshots((prev) => [
-      ...prev,
-      {
-        snapshotId: uuidv4(),
-        actionId: rerunTargetActionId || currentPosition?.actionId || '',
-        mode: rerunMode === 'rerun' ? 'rerun' : 'rollback',
-        timestamp: new Date().toISOString(),
-        label: snapshotLabel,
-        messages: messagesRef.current.map((m) => ({ ...m })),
-        debugBubbles: bubblesRef.current.map((b) => ({ ...b })),
-        debugBubblesV2: debugBubblesV2Ref.current.map((b) => ({ ...b })),
-      },
-    ]);
-
-    let result: RerunResponse;
-    try {
-      result = await debugApi.rerunAction(activeSessionId, data);
-    } catch (e: any) {
-      const status = e?.response?.status;
-      if (status === 400) {
-        message.error('目标 action 已被删除，无法回退');
-      } else {
-        const errMsg = e?.response?.data?.error || e?.message || '重运行失败';
-        message.error(errMsg);
-      }
-      setRerunModalVisible(false);
-      return;
-    }
-
-    // === Clean up old state for rollback/rerun ===
-    setDebugBubbles([]);
+  const clearStaleStateForRerun = (mode: 'rerun' | 'rollback', targetActionId: string) => {
+    setErrorBubbles([]);
     setDebugBubblesV2([]);
-    // Selectively clear variable state: for rollback, only clear entries
-    // for actions at or after the rollback target. Keep historical variable
-    // state for actions before the target.
-    if (rerunMode === 'rollback' && rerunTargetActionId) {
+
+    if (mode === 'rollback' && targetActionId) {
       const orderedActionIds = getOrderedActionIds(navigationTreeRef.current);
-      const targetIdx = orderedActionIds.indexOf(rerunTargetActionId);
+      const targetIdx = orderedActionIds.indexOf(targetActionId);
       if (targetIdx >= 0) {
         const actionsToClear = new Set(orderedActionIds.slice(targetIdx));
         for (const key of variableStoreByPositionRef.current.keys()) {
@@ -1621,89 +1448,55 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           }
         }
       } else {
-        // Fallback: can't determine ordering, clear everything
         variableStoreByPositionRef.current.clear();
       }
     } else {
       variableStoreByPositionRef.current.clear();
     }
+  };
 
-    // Build separator SYSTEM MESSAGE (timestamp will be set after messages reload
-    // so it sorts correctly between old and new messages in the timestamp-based render order)
+  const reloadMessagesWithSeparator = async (
+    sessionId: string,
+    mode: 'rerun' | 'rollback',
+    targetActionId: string,
+    resultActionSnapshots: Record<string, any> | undefined
+  ) => {
     const separatorContent =
-      rerunMode === 'rerun'
+      mode === 'rerun'
         ? `--- 🔄 重运行当前 action ---`
-        : `--- ↩️ 回退到 ${rerunTargetActionId} 并重新执行 ---`;
+        : `--- ↩️ 回退到 ${targetActionId} 并重新执行 ---`;
 
-    // Reload messages from server and filter out superseded ones
-    // Insert the separator at the snapshot boundary (pre-snapshot msgs | separator | post-snapshot msgs)
-    try {
-      const msgsResult = await debugApi.getDebugSessionMessages(activeSessionId);
-      if (msgsResult.success && msgsResult.data) {
-        const activeMessages = msgsResult.data.filter(
-          (m) => !((m.metadata as Record<string, any>)?.superseded === true)
-        );
-        // Determine split point using extracted helper
-        const snapshotMsgCount = determineSnapshotMsgCount(
-          preRerunMsgCountRef.current,
-          (result as any).actionSnapshots,
-          actionSnapshots,
-          rerunTargetActionId
-        );
+    const msgsResult = await debugApi.getDebugSessionMessages(sessionId);
+    if (!msgsResult.success || !msgsResult.data) return;
 
-        // Compute separator timestamp so it sorts between old and new messages.
-        // The renderer merges messages+bubbles and sorts by timestamp, so a
-        // client-side Date.now() timestamp would sort AFTER server-timestamped
-        // AI messages, placing the separator in the wrong position visually.
-        let separatorTimestamp: string;
-        if (
-          snapshotMsgCount !== undefined &&
-          snapshotMsgCount > 0 &&
-          snapshotMsgCount < activeMessages.length
-        ) {
-          // Between last old message and first new message
-          const prevTs = new Date(activeMessages[snapshotMsgCount - 1].timestamp).getTime();
-          const nextTs = new Date(activeMessages[snapshotMsgCount].timestamp).getTime();
-          separatorTimestamp = new Date(prevTs + (nextTs - prevTs) / 2).toISOString();
-        } else if (snapshotMsgCount !== undefined && snapshotMsgCount > 0) {
-          // After last old message (no new messages yet — append case)
-          const prevTs = new Date(activeMessages[snapshotMsgCount - 1].timestamp).getTime();
-          separatorTimestamp = new Date(prevTs + 1).toISOString();
-        } else if (snapshotMsgCount !== undefined && activeMessages.length > 0) {
-          // snapshotMsgCount === 0, separator before first message
-          const nextTs = new Date(activeMessages[0].timestamp).getTime();
-          separatorTimestamp = new Date(nextTs - 1).toISOString();
-        } else {
-          separatorTimestamp = new Date().toISOString();
-        }
+    const activeMessages = msgsResult.data.filter(
+      (m) => !((m.metadata as Record<string, any>)?.superseded === true)
+    );
 
-        const separatorMessage = {
-          messageId: `separator-${Date.now()}`,
-          role: 'system' as const,
-          content: separatorContent,
-          timestamp: separatorTimestamp,
-        };
+    const snapshotMsgCount = determineSnapshotMsgCount(
+      preRerunMsgCountRef.current,
+      resultActionSnapshots,
+      actionSnapshots,
+      targetActionId
+    );
 
-        console.log('[DebugChat] 🔍 Separator insertion:', {
-          rerunMode,
-          rerunTargetActionId,
-          preRerunMsgCount: preRerunMsgCountRef.current,
-          snapshotMsgCount,
-          separatorTimestamp,
-          activeMessageCount: activeMessages.length,
-          activeMessagePreviews: activeMessages.map((m) => ({
-            id: m.messageId?.slice(0, 8),
-            role: m.role,
-            content: m.content?.slice(0, 40),
-          })),
-        });
-        setMessages(insertSeparator(activeMessages, separatorMessage, snapshotMsgCount));
-      }
-    } catch (_e) {
-      console.warn('[DebugChat] ⚠️ Message reload failed:', _e);
-    }
+    const separatorTimestamp = computeSeparatorTimestamp(activeMessages, snapshotMsgCount);
+    const separatorMessage = {
+      messageId: `separator-${Date.now()}`,
+      role: 'system' as const,
+      content: separatorContent,
+      timestamp: separatorTimestamp,
+    };
 
-    // Update sessionInfo with new metadata
+    setMessages(insertSeparator(activeMessages, separatorMessage, snapshotMsgCount));
+  };
+
+  const applyRerunResponse = (
+    result: RerunResponse,
+    mode: 'rerun' | 'rollback',
+    _targetActionId: string
+  ) => {
+    // Merge new metadata into sessionInfo
     if (sessionInfo) {
       const updates: any = {};
       if (result.executionStatus) updates.executionStatus = result.executionStatus;
@@ -1724,19 +1517,9 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       }
     }
 
-    // Process LLM debug info (create new LLM prompt/response bubbles)
-    if (result.debugInfo) {
-      const debugInfos = Array.isArray(result.debugInfo) ? result.debugInfo : [result.debugInfo];
-      createLLMBubblesFromDebugInfos({
-        debugInfos,
-        fallbackActionId: rerunTargetActionId || currentPosition?.actionId,
-        fallbackActionType: currentPosition?.actionType,
-        addDebugBubble,
-        aiMessageFallback: result.aiMessage,
-      });
-    }
+    // LLM debug infos are now displayed via V2 debug_entries (fetched by refreshSessionAndEntries)
 
-    // Store variable snapshot for V2 debug bubbles
+    // Variable snapshot for V2 debug bubbles
     if (result.variables && Object.keys(result.variables).length > 0) {
       const categorizedVars = result.variableStore
         ? result.variableStore
@@ -1761,7 +1544,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         changedVariables: [],
         allVariables: categorizedVars,
         relevantVariables,
-        summary: rerunMode === 'rollback' ? '回退后变量状态' : '重运行后变量状态',
+        summary: mode === 'rollback' ? '回退后变量状态' : '重运行后变量状态',
         actionStatus: 'running',
       };
       indexVariableStoreByPosition(result.position, latestVariableStoreRef.current);
@@ -1781,28 +1564,96 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         maxRounds: result.position.maxRounds,
       });
     }
+  };
 
-    // Refresh session detail
+  const refreshSessionAndEntries = async (
+    sessionId: string,
+    mode: 'rerun' | 'rollback',
+    targetActionId: string
+  ) => {
+    const updatedSession = await debugApi.getDebugSession(sessionId);
+    setSessionInfo(updatedSession);
+
+    if (updatedSession.currentRunId) {
+      setCurrentRunId(updatedSession.currentRunId);
+    }
+
+    if (mode === 'rollback' && targetActionId && updatedSession.currentRunId) {
+      fetchDebugEntriesV2(undefined, {
+        excludeStaleForTarget: targetActionId,
+        currentRunId: updatedSession.currentRunId,
+      });
+    } else {
+      fetchDebugEntriesV2(updatedSession.currentRunId);
+    }
+  };
+
+  // -- handleRerunConfirm -------------------------------------------------
+
+  const handleRerunConfirm = async (data: RerunRequest) => {
+    if (!activeSessionId) {
+      message.error('没有活跃的调试会话');
+      throw new Error('没有活跃的调试会话');
+    }
+
+    data.targetActionId = rerunMode === 'rollback' ? rerunTargetActionId : undefined;
+
+    // Create timeline snapshot before executing rerun/rollback
+    const snapshotLabel =
+      rerunMode === 'rerun'
+        ? `🔄 重运行 ${currentPosition?.actionId || ''}`
+        : `↩️ 回退到 ${rerunTargetActionId}`;
+    setTimelineSnapshots((prev) => [
+      ...prev,
+      {
+        snapshotId: uuidv4(),
+        actionId: rerunTargetActionId || currentPosition?.actionId || '',
+        mode: rerunMode === 'rerun' ? 'rerun' : 'rollback',
+        timestamp: new Date().toISOString(),
+        label: snapshotLabel,
+        messages: messagesRef.current.map((m) => ({ ...m })),
+        debugBubblesV2: debugBubblesV2Ref.current.map((b) => ({ ...b })),
+      },
+    ]);
+
+    // Execute rerun/rollback API call
+    let result: RerunResponse;
+    try {
+      result = await debugApi.rerunAction(activeSessionId, data);
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 400) {
+        message.error('目标 action 已被删除，无法回退');
+      } else {
+        const errMsg = e?.response?.data?.error || e?.message || '重运行失败';
+        message.error(errMsg);
+      }
+      setRerunModalVisible(false);
+      return;
+    }
+
+    // Step 1: Clear stale UI state (bubbles + variable store)
+    clearStaleStateForRerun(rerunMode, rerunTargetActionId);
+
+    // Step 2: Reload messages and insert separator at snapshot boundary
+    try {
+      await reloadMessagesWithSeparator(
+        activeSessionId,
+        rerunMode,
+        rerunTargetActionId,
+        (result as any).actionSnapshots
+      );
+    } catch (_e) {
+      console.warn('[DebugChat] ⚠️ Message reload failed:', _e);
+    }
+
+    // Step 3: Apply response — metadata, V1 bubbles, variable state, position
+    applyRerunResponse(result, rerunMode, rerunTargetActionId);
+
+    // Step 4: Refresh session detail and V2 debug entries
     if (activeSessionId) {
       try {
-        const updatedSession = await debugApi.getDebugSession(activeSessionId);
-        setSessionInfo(updatedSession);
-
-        // V2: Update runId and refresh debug entries.
-        // For rollback: filter out stale entries for actions at/after the
-        // rollback target (keep only current runId). Preserve all entries
-        // for actions before the target.
-        if (updatedSession.currentRunId) {
-          setCurrentRunId(updatedSession.currentRunId);
-        }
-        if (rerunMode === 'rollback' && rerunTargetActionId && updatedSession.currentRunId) {
-          fetchDebugEntriesV2(undefined, {
-            excludeStaleForTarget: rerunTargetActionId,
-            currentRunId: updatedSession.currentRunId,
-          });
-        } else {
-          fetchDebugEntriesV2(updatedSession.currentRunId);
-        }
+        await refreshSessionAndEntries(activeSessionId, rerunMode, rerunTargetActionId);
       } catch (_e) {
         // ignore refresh errors
       }
@@ -1972,19 +1823,20 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             <div className="debug-chat-loading">
               <Spin tip="Loading conversation history..." />
             </div>
-          ) : displayMessages.length === 0 && displayBubbles.length === 0 ? (
+          ) : displayMessages.length === 0 &&
+            displayDebugBubblesV2.length === 0 &&
+            errorBubbles.length === 0 ? (
             <Empty description="No messages yet" style={{ marginTop: 50 }} />
           ) : (
             <>
               {(() => {
-                // 合并消息和气泡，按时间顺序排列
+                // Merge messages, V2 bubbles, and error bubbles into a time-sorted list
                 const items: Array<{
-                  type: 'message' | 'bubble' | 'bubble-v2';
+                  type: 'message' | 'error' | 'bubble-v2';
                   data: any;
                   timestamp: string;
                 }> = [];
 
-                // 添加消息
                 displayMessages.forEach((msg) => {
                   items.push({
                     type: 'message',
@@ -1993,50 +1845,18 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                   });
                 });
 
-                // 添加气泡（并记录过滤统计）
-                const bubbleStats = {
-                  total: displayBubbles.length,
-                  filtered: 0,
-                  byType: {} as Record<string, { total: number; filtered: number }>,
-                };
-
-                displayBubbles.forEach((bubble) => {
-                  // 初始化类型统计
-                  if (!bubbleStats.byType[bubble.type]) {
-                    bubbleStats.byType[bubble.type] = { total: 0, filtered: 0 };
-                  }
-                  bubbleStats.byType[bubble.type].total++;
-
-                  // 根据过滤器过滤气泡
-                  if (bubble.type === 'error' && !debugFilter.showError) {
-                    bubbleStats.filtered++;
-                    bubbleStats.byType[bubble.type].filtered++;
-                    return;
-                  }
-                  if (bubble.type === 'llm_prompt' && !debugFilter.showLLMPrompt) {
-                    bubbleStats.filtered++;
-                    bubbleStats.byType[bubble.type].filtered++;
-                    return;
-                  }
-                  if (bubble.type === 'llm_response' && !debugFilter.showLLMResponse) {
-                    bubbleStats.filtered++;
-                    bubbleStats.byType[bubble.type].filtered++;
-                    return;
-                  }
-                  if (bubble.type === 'variable' && !debugFilter.showVariable) {
-                    bubbleStats.filtered++;
-                    bubbleStats.byType[bubble.type].filtered++;
-                    return;
-                  }
-
-                  items.push({
-                    type: 'bubble',
-                    data: bubble,
-                    timestamp: bubble.timestamp,
+                // Error bubbles (V2-style, filtered by debugFilter.showError)
+                if (debugFilter.showError) {
+                  displayErrorBubbles.forEach((bubble) => {
+                    items.push({
+                      type: 'error',
+                      data: bubble,
+                      timestamp: bubble.timestamp,
+                    });
                   });
-                });
+                }
 
-                // 添加 V2 统一调试气泡
+                // V2 unified debug bubbles
                 displayDebugBubblesV2.forEach((bubble) => {
                   items.push({
                     type: 'bubble-v2' as any,
@@ -2045,19 +1865,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                   });
                 });
 
-                // 输出过滤统计
-                if (bubbleStats.filtered > 0) {
-                  console.warn(
-                    `[DebugChat] ⚠️ ${bubbleStats.filtered}/${bubbleStats.total} debug bubbles filtered out by user settings. Details:`,
-                    bubbleStats.byType
-                  );
-                  console.warn(
-                    '[DebugChat] 🔧 To show all debug info, click the settings icon and enable all options, or click "Reset Default"'
-                  );
-                }
-
-                // 按时间排序；2s 窗口内消息优先于气泡（处理客户端/服务器时钟偏差）
-                const typeOrder = { message: 0, bubble: 1, 'bubble-v2': 2 };
+                // Sort by timestamp; within 2s window, messages first, then errors, then V2
+                const typeOrder = { message: 0, error: 1, 'bubble-v2': 2 };
                 const WINDOW_MS = 2000;
                 items.sort((a, b) => {
                   const ta = new Date(a.timestamp).getTime();
@@ -2086,86 +1895,73 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                         </div>
                         <div className="debug-message-content">{item.data.content}</div>
                       </div>
-                    ) : (
+                    ) : item.type === 'error' ? (
                       <div style={{ margin: '8px 0' }}>
-                        {item.data.type === 'error' && (
-                          <ErrorBubble
-                            content={item.data.content as ErrorBubbleContent}
-                            isExpanded={item.data.isExpanded}
-                            timestamp={item.data.timestamp}
-                            onToggleExpand={() => toggleBubbleExpand(item.data.id)}
-                            onRestart={handleRestartDebug}
-                          />
-                        )}
-                        {item.data.type === 'llm_prompt' && (
-                          <LLMPromptBubble
-                            content={item.data.content as LLMPromptBubbleContent}
-                            isExpanded={item.data.isExpanded}
-                            timestamp={item.data.timestamp}
-                            actionId={item.data.actionId}
-                            onToggleExpand={() => toggleBubbleExpand(item.data.id)}
-                          />
-                        )}
-                        {item.data.type === 'llm_response' && (
-                          <LLMResponseBubble
-                            content={item.data.content as LLMResponseBubbleContent}
-                            isExpanded={item.data.isExpanded}
-                            timestamp={item.data.timestamp}
-                            actionId={item.data.actionId}
-                            onToggleExpand={() => toggleBubbleExpand(item.data.id)}
-                          />
-                        )}
-                        {item.type === 'bubble-v2' && (
-                          <DebugEntryBubble
-                            bubble={item.data as DebugBubbleV2}
-                            filter={debugFilter}
-                            onToggleExpand={() => {
-                              setDebugBubblesV2((prev) =>
-                                prev.map((b) =>
-                                  b.id === item.data.id ? { ...b, isExpanded: !b.isExpanded } : b
+                        <ErrorBubble
+                          content={item.data.content as ErrorBubbleContent}
+                          isExpanded={item.data.isExpanded}
+                          timestamp={item.data.timestamp}
+                          onToggleExpand={() => {
+                            setErrorBubbles((prev) =>
+                              prev.map((b) =>
+                                b.id === item.data.id ? { ...b, isExpanded: !b.isExpanded } : b
+                              )
+                            );
+                          }}
+                          onRestart={handleRestartDebug}
+                        />
+                      </div>
+                    ) : item.type === 'bubble-v2' ? (
+                      <div style={{ margin: '8px 0' }}>
+                        <DebugEntryBubble
+                          bubble={item.data as DebugBubbleV2}
+                          filter={debugFilter}
+                          onToggleExpand={() => {
+                            setDebugBubblesV2((prev) =>
+                              prev.map((b) =>
+                                b.id === item.data.id ? { ...b, isExpanded: !b.isExpanded } : b
+                              )
+                            );
+                            // When viewing a historical snapshot, also update its copy
+                            if (viewingSnapshotId) {
+                              setTimelineSnapshots((prev) =>
+                                prev.map((s) =>
+                                  s.snapshotId === viewingSnapshotId
+                                    ? {
+                                        ...s,
+                                        debugBubblesV2: s.debugBubblesV2.map((b) =>
+                                          b.id === item.data.id
+                                            ? { ...b, isExpanded: !b.isExpanded }
+                                            : b
+                                        ),
+                                      }
+                                    : s
                                 )
                               );
-                              // When viewing a historical snapshot, also update its copy
-                              if (viewingSnapshotId) {
-                                setTimelineSnapshots((prev) =>
-                                  prev.map((s) =>
-                                    s.snapshotId === viewingSnapshotId
-                                      ? {
-                                          ...s,
-                                          debugBubblesV2: s.debugBubblesV2.map((b) =>
-                                            b.id === item.data.id
-                                              ? { ...b, isExpanded: !b.isExpanded }
-                                              : b
-                                          ),
-                                        }
-                                      : s
-                                  )
-                                );
-                              }
-                            }}
-                            sessionId={activeSessionId || sessionId || undefined}
-                            isLatest={!!(item.data as DebugBubbleV2).variableContent}
-                            onVariableEdit={(scope, name, newValue) => {
-                              setDebugBubblesV2((prev) =>
-                                prev.map((b) => {
-                                  if (!b.variableContent) return b;
-                                  const vc = { ...b.variableContent };
-                                  const scopeKey = scope as keyof typeof vc.allVariables;
-                                  vc.allVariables = {
-                                    ...vc.allVariables,
-                                    [scopeKey]: {
-                                      ...(vc.allVariables[scopeKey] || {}),
-                                      [name]: newValue,
-                                    },
-                                  };
-                                  return { ...b, variableContent: vc };
-                                })
-                              );
-                            }}
-                          />
-                        )}
+                            }
+                          }}
+                          sessionId={activeSessionId || sessionId || undefined}
+                          isLatest={!!(item.data as DebugBubbleV2).variableContent}
+                          onVariableEdit={(scope, name, newValue) => {
+                            setDebugBubblesV2((prev) =>
+                              prev.map((b) => {
+                                if (!b.variableContent) return b;
+                                const vc = { ...b.variableContent };
+                                const scopeKey = scope as keyof typeof vc.allVariables;
+                                vc.allVariables = {
+                                  ...vc.allVariables,
+                                  [scopeKey]: {
+                                    ...(vc.allVariables[scopeKey] || {}),
+                                    [name]: newValue,
+                                  },
+                                };
+                                return { ...b, variableContent: vc };
+                              })
+                            );
+                          }}
+                        />
                       </div>
-                    )}
+                    ) : null}
                   </React.Fragment>
                 ));
               })()}
@@ -2191,22 +1987,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           }}
         >
           {(() => {
-            // 查看历史快照模式：隐藏输入区域
-            if (viewingSnapshot) {
-              return (
-                <div style={{ textAlign: 'center', padding: '16px' }}>
-                  <Tag color="blue">📜 查看历史: {viewingSnapshot.label}</Tag>
-                  <Button
-                    type="link"
-                    onClick={() => setViewingSnapshotId(null)}
-                    style={{ marginLeft: 12 }}
-                  >
-                    ← 返回当前
-                  </Button>
-                </div>
-              );
-            }
-
             // 检查会话是否已结束
             const isSessionEnded =
               sessionInfo?.executionStatus === 'completed' ||
@@ -2233,6 +2013,32 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               );
             }
 
+            // 查看历史快照时，在输入框上方显示提示条（不阻挡输入）
+            const historyBanner = viewingSnapshot ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '4px 12px',
+                  marginBottom: 8,
+                  background: '#e6f7ff',
+                  borderRadius: 4,
+                  border: '1px solid #91d5ff',
+                }}
+              >
+                <span style={{ fontSize: 12, color: '#1890ff' }}>📜 {viewingSnapshot.label}</span>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => setViewingSnapshotId(null)}
+                  style={{ marginLeft: 8, fontSize: 12 }}
+                >
+                  ← 返回当前
+                </Button>
+              </div>
+            ) : null;
+
             // 检查是否是 ai_say max_rounds=1 的确认模式
             const isAcknowledgmentMode =
               currentPosition?.actionType === 'ai_say' &&
@@ -2243,6 +2049,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               // ai_say 确认模式：显示提示和下一步按钮
               return (
                 <>
+                  {historyBanner}
                   <div className="debug-chat-acknowledgment-hint">
                     <span style={{ color: '#666', fontSize: '14px' }}>
                       💡 按
@@ -2277,6 +2084,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
               // 正常文本输入模式
               return (
                 <>
+                  {historyBanner}
                   <TextArea
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
