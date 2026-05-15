@@ -5,6 +5,7 @@
  */
 
 import type { ActionResult } from '../../domain/actions/base-action.js';
+import type { ActionMetricsEntry } from '../../engines/script-execution/script-executor.js';
 
 /**
  * 监控分析结果
@@ -44,13 +45,7 @@ export interface MonitorContext {
   actionResult: ActionResult;
 
   // 历史评估记录（可选）
-  metricsHistory?: Array<{
-    round: number;
-    assessment: string;
-    progress: string;
-    exitReason?: string;
-    timestamp: string;
-  }>;
+  metricsHistory?: ActionMetricsEntry[];
 
   // Topic策略配置（可选）
   topicStrategy?: {

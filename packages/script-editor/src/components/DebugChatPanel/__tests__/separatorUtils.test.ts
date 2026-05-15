@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   determineSnapshotMsgCount,
   insertSeparator,
+  computeSeparatorTimestamp,
   type SeparatorMessage,
 } from '../separatorUtils';
 
@@ -144,5 +145,73 @@ describe('insertSeparator', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].messageId).toBe('separator');
+  });
+});
+
+describe('computeSeparatorTimestamp', () => {
+  const T0 = '2025-01-01T00:00:00.000Z';
+  const T1 = '2025-01-01T00:00:01.000Z'; // T0 + 1000ms
+  const T2 = '2025-01-01T00:00:02.000Z'; // T0 + 2000ms
+
+  const ts = (s: string) => ({ timestamp: s });
+
+  it('places separator at midpoint between last-old and first-new', () => {
+    const messages = [ts(T0), ts(T1), ts(T2)];
+    const result = computeSeparatorTimestamp(messages, 2); // split after index 1
+
+    const resultMs = new Date(result).getTime();
+    const prevMs = new Date(T1).getTime();
+    const nextMs = new Date(T2).getTime();
+    expect(resultMs).toBeGreaterThan(prevMs);
+    expect(resultMs).toBeLessThan(nextMs);
+    expect(resultMs).toBe(prevMs + (nextMs - prevMs) / 2);
+  });
+
+  it('appends 1ms after last message when split is at end', () => {
+    const messages = [ts(T0), ts(T1)];
+    const result = computeSeparatorTimestamp(messages, 2);
+
+    const resultMs = new Date(result).getTime();
+    const lastMs = new Date(T1).getTime();
+    expect(resultMs).toBe(lastMs + 1);
+  });
+
+  it('prepends 1ms before first message when snapshotMsgCount is 0', () => {
+    const messages = [ts(T0), ts(T1)];
+    const result = computeSeparatorTimestamp(messages, 0);
+
+    const resultMs = new Date(result).getTime();
+    const firstMs = new Date(T0).getTime();
+    expect(resultMs).toBe(firstMs - 1);
+  });
+
+  it('uses current time as fallback when snapshotMsgCount is undefined', () => {
+    const messages = [ts(T0), ts(T1)];
+    const before = Date.now();
+    const result = computeSeparatorTimestamp(messages, undefined);
+    const after = Date.now();
+
+    const resultMs = new Date(result).getTime();
+    expect(resultMs).toBeGreaterThanOrEqual(before - 100);
+    expect(resultMs).toBeLessThanOrEqual(after + 100);
+  });
+
+  it('uses current time as fallback when messages array is empty', () => {
+    const before = Date.now();
+    const result = computeSeparatorTimestamp([], 0);
+    const after = Date.now();
+
+    const resultMs = new Date(result).getTime();
+    expect(resultMs).toBeGreaterThanOrEqual(before - 100);
+    expect(resultMs).toBeLessThanOrEqual(after + 100);
+  });
+
+  it('appends after last message when snapshotMsgCount equals message length (non-zero)', () => {
+    const messages = [ts(T0), ts(T1), ts(T2)];
+    const result = computeSeparatorTimestamp(messages, 3);
+
+    const resultMs = new Date(result).getTime();
+    const lastMs = new Date(T2).getTime();
+    expect(resultMs).toBe(lastMs + 1);
   });
 });

@@ -23,7 +23,10 @@ import {
 import { ExecutionResultHandler } from '../../application/handlers/execution-result-handler.js';
 import { MonitorOrchestrator } from '../../application/orchestrators/monitor-orchestrator.js';
 import { BasicTopicPlanner, type ITopicPlanner } from '../../application/planning/topic-planner.js';
-import { ActionStateManager } from '../../application/state/action-state-manager.js';
+import {
+  ActionStateManager,
+  type ActionStateSnapshot,
+} from '../../application/state/action-state-manager.js';
 import type { BaseAction, ActionContext, ActionResult } from '../../domain/actions/base-action.js';
 import { createLogger } from '../../utils/logger.js';
 import type { LLMDebugInfo } from '../llm-orchestration/orchestrator.js';
@@ -42,6 +45,120 @@ export enum ExecutionStatus {
   PAUSED = 'paused',
   COMPLETED = 'completed',
   ERROR = 'error',
+}
+
+// -- Execution metadata types --------------------------------------------
+// Replaces the untyped `Record<string, any>` blob with structured optional
+// fields. Each sub-document is only present when its lifecycle is active.
+
+export interface ActionSnapshotMeta {
+  messageCount: number;
+  conversationHistoryLength: number;
+  timestamp: string;
+  phaseIndex: number;
+  topicIndex: number;
+  actionIndex: number;
+  originalConfig?: Record<string, any>;
+  [key: string]: any;
+}
+
+export interface RerunHistoryEntry {
+  versionId: string;
+  actionId: string;
+  runId: string;
+  currentRound: number;
+  timestamp: string;
+  [key: string]: any;
+}
+
+export interface ActionRoundInfo {
+  currentRound: number;
+  maxRounds: number;
+  lastUpdated?: string;
+  [key: string]: any;
+}
+
+export interface ExitDecisionEntry {
+  actionId: string;
+  decision: unknown;
+  timestamp?: string;
+  [key: string]: any;
+}
+
+export interface ActionMetricsEntry {
+  actionId?: string;
+  actionType?: string;
+  round?: number;
+  assessment: string;
+  progress: string;
+  exitReason?: string;
+  timestamp: string;
+  [key: string]: any;
+}
+
+export interface MonitorFeedbackEntry {
+  actionId: string;
+  actionType: string;
+  timestamp: string;
+  analysis: unknown;
+  [key: string]: any;
+}
+
+export interface LLMConfigOverride {
+  provider?: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+/** Typed metadata carried on ExecutionState during script execution. */
+export interface ExecutionMetadata {
+  // -- Rollback / rerun support --
+  actionSnapshots?: Record<string, ActionSnapshotMeta>;
+  rerunHistory?: RerunHistoryEntry[];
+  currentRunId?: string;
+  rerunConfigOverride?: Record<string, any>;
+
+  // -- Round tracking --
+  actionRoundInfo?: Record<string, ActionRoundInfo>;
+  lastActionRoundInfo?: ActionRoundInfo;
+
+  // -- Exit decisions --
+  exitDecisions?: ExitDecisionEntry[];
+
+  // -- Serialised action state (for recovery across requests) --
+  actionState?: ActionStateSnapshot | null;
+
+  // -- Error handling --
+  error?: string | null;
+
+  // -- Per-action metrics --
+  actionMetricsHistory?: ActionMetricsEntry[];
+
+  // -- Monitor feedback --
+  latestMonitorFeedback?: string;
+  monitorFeedback?: MonitorFeedbackEntry[];
+
+  // -- Session configuration --
+  sessionConfig?: Record<string, any>;
+  projectId?: string;
+
+  // -- Completed-action context --
+  completedActionContext?: Record<string, any>;
+  lastCompletedActionOutput?: Record<string, any>;
+
+  // -- LLM config override --
+  llmConfig?: LLMConfigOverride;
+
+  // -- Global variables (runtime callbacks — not serialised) --
+  globalVariableDefinitions?: any;
+  globalVariableCallback?: (name: string, value: unknown) => Promise<void>;
+
+  // -- Template provider (runtime reference — not serialised) --
+  templateProvider?: any;
+
+  // Allow gradual migration: unrecognised keys still compile.
+  [key: string]: any;
 }
 
 /**
@@ -69,7 +186,7 @@ export interface ExecutionState {
     actionId?: string;
     metadata?: Record<string, any>;
   }>;
-  metadata: Record<string, any>;
+  metadata: ExecutionMetadata;
   lastAiMessage: string | null;
   // Extended position information
   currentPhaseId?: string;
@@ -287,7 +404,7 @@ export class ScriptExecutor {
     scopeResolver: VariableScopeResolver,
     executionState: ExecutionState
   ): void {
-    const metadata = executionState.metadata as any;
+    const metadata = executionState.metadata;
     const globalDefs = metadata.globalVariableDefinitions as
       | Array<{ name: string; define?: string; defaultValue?: unknown }>
       | undefined;
@@ -874,7 +991,7 @@ export class ScriptExecutor {
         if (!executionState.metadata.actionSnapshots) {
           executionState.metadata.actionSnapshots = {};
         }
-        const snapshots = executionState.metadata.actionSnapshots as Record<string, any>;
+        const snapshots = executionState.metadata.actionSnapshots;
         if (!snapshots[actionConfig.action_id]) {
           snapshots[actionConfig.action_id] = {
             phaseIndex: executionState.currentPhaseIdx,

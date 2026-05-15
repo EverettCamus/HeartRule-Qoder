@@ -347,8 +347,8 @@ export class SessionManager {
     const phaseId = executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`;
     const topicId = executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`;
     const round =
-      (executionState.metadata.actionRoundInfo as any)?.[actionId]?.currentRound ||
-      (executionState.metadata.lastActionRoundInfo as any)?.currentRound ||
+      executionState.metadata.actionRoundInfo?.[actionId]?.currentRound ||
+      executionState.metadata.lastActionRoundInfo?.currentRound ||
       1;
 
     return [
@@ -714,7 +714,7 @@ export class SessionManager {
     const debugInfos = executionState.lastLLMDebugInfo;
     if (!debugInfos || debugInfos.length === 0) return;
 
-    const runId = (executionState.metadata.currentRunId as string) || 'unknown';
+    const runId = executionState.metadata.currentRunId || 'unknown';
     const phaseId = executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`;
     const topicId = executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`;
     const actionId = executionState.currentActionId || `action_${executionState.currentActionIdx}`;
@@ -772,7 +772,7 @@ export class SessionManager {
     });
 
     if (executionState.metadata.actionSnapshots) {
-      const snapshots = executionState.metadata.actionSnapshots as Record<string, any>;
+      const snapshots = executionState.metadata.actionSnapshots;
       let msgCount: number | null = null;
       for (const key of Object.keys(snapshots)) {
         if (snapshots[key].messageCount === undefined) {
@@ -790,9 +790,7 @@ export class SessionManager {
     }
 
     // Auto-create v1 entries in rerunHistory for actions that don't have one yet
-    const actionSnapshotsForV1 = executionState.metadata.actionSnapshots as
-      | Record<string, any>
-      | undefined;
+    const actionSnapshotsForV1 = executionState.metadata.actionSnapshots;
     if (actionSnapshotsForV1) {
       const rerunHistory = (executionState.metadata.rerunHistory || []) as any[];
       for (const [actionId, snapshot] of Object.entries(actionSnapshotsForV1)) {
@@ -807,8 +805,7 @@ export class SessionManager {
             config: originalConfig.config || {},
             llmConfig: originalConfig.llm_config || undefined,
             result: {
-              roundsUsed:
-                (executionState.metadata.actionRoundInfo as any)?.[actionId]?.currentRound ?? 1,
+              roundsUsed: executionState.metadata.actionRoundInfo?.[actionId]?.currentRound ?? 1,
               variableCount: Object.keys(executionState.variables || {}).length,
             },
           });
@@ -817,7 +814,7 @@ export class SessionManager {
       executionState.metadata.rerunHistory = rerunHistory;
     }
 
-    const runId = executionState.metadata.currentRunId as string | undefined;
+    const runId = executionState.metadata.currentRunId;
 
     const updateData: Record<string, any> = {
       position: {
@@ -978,10 +975,10 @@ export class SessionManager {
 
     // Include actionSnapshots and rerunHistory for frontend
     if (executionState.metadata.actionSnapshots) {
-      result.actionSnapshots = executionState.metadata.actionSnapshots as Record<string, any>;
+      result.actionSnapshots = executionState.metadata.actionSnapshots;
     }
     if (executionState.metadata.rerunHistory) {
-      result.rerunHistory = executionState.metadata.rerunHistory as any[];
+      result.rerunHistory = executionState.metadata.rerunHistory;
     }
 
     return result;
