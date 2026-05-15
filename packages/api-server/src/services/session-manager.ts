@@ -12,55 +12,25 @@ import {
 } from '@heartrule/core-engine';
 import type { DetailedApiError } from '@heartrule/shared-types';
 import { VariableScope, ExecutionStatus } from '@heartrule/shared-types';
-import { and, eq, count } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
 
-import { db } from '../db/index.js';
-import {
-  sessions,
-  messages,
-  scripts,
-  variables,
-  scriptFiles,
-  userGlobalVariables,
-  debugEntries,
-  type NewDebugEntry,
-} from '../db/schema.js';
 import { container } from '../ioc/container.js';
 import { buildDetailedError } from '../utils/error-handler.js';
 
 import { DatabaseTemplateProvider } from './database-template-provider.js';
+import type { ISessionRepository, SessionData, ScriptData } from './session-repository.js';
+import { SessionRepository } from './session-repository.js';
 import {
   flattenVariableStore,
   calculateRoundChanges,
   extractExitReason,
   buildVariableSnapshots,
-  determineDebugEntryRound,
 } from './session-variable-utils.js';
 
 const logger = createLogger('SessionManager');
 
 // 类型定义
-interface SessionData {
-  id: string;
-  scriptId: string;
-  userId: string;
-  status: string;
-  executionStatus: string;
-  variables: Record<string, unknown> | null;
-  position: Record<string, unknown> | null;
-  metadata: Record<string, any> | null;
-}
-
-interface ScriptData {
-  id: string;
-  scriptName: string;
-  scriptContent: string;
-  projectId?: string; // 从 tags 中提取
-  tags?: string[];
-}
-
 interface SessionResponse {
   aiMessage: string;
   sessionStatus: string;
@@ -96,6 +66,7 @@ interface SessionResponse {
 export class SessionManager {
   private scriptExecutor: ScriptExecutor;
   private templateProvider: TemplateProvider;
+  private repository: ISessionRepository;
   private prevVariableSnapshots: Map<
     string,
     {
@@ -106,97 +77,10 @@ export class SessionManager {
     }
   > = new Map();
 
-  constructor() {
-    // Phase 4: 使用依赖注入容器获取 ScriptExecutor
+  constructor(repository?: ISessionRepository) {
     this.scriptExecutor = container.getScriptExecutor();
     this.templateProvider = new DatabaseTemplateProvider();
-  }
-
-  /**
-   * 从数据库加载会话数据
-   */
-  private async loadSessionById(sessionId: string): Promise<SessionData> {
-    const session = await db.query.sessions.findFirst({
-      where: eq(sessions.id, sessionId),
-    });
-
-    if (!session) {
-      logger.error('❌ Session not found:', { sessionId });
-      throw new Error('Session not found');
-    }
-
-    logger.info('✅ Session found', {
-      id: session.id,
-      scriptId: session.scriptId,
-      status: session.status,
-      executionStatus: session.executionStatus,
-    });
-
-    return session as SessionData;
-  }
-
-  /**
-   * 从数据库加载脚本数据
-   */
-  private async loadScriptById(scriptId: string): Promise<ScriptData> {
-    const script = await db.query.scripts.findFirst({
-      where: eq(scripts.id, scriptId),
-    });
-
-    if (!script) {
-      logger.error('❌ Script not found:', { scriptId });
-      throw new Error('Script not found');
-    }
-
-    const tags = (script.tags as string[]) || [];
-    const projectTag = tags.find((tag) => tag.startsWith('project:'));
-    const projectId = projectTag ? projectTag.replace('project:', '') : undefined;
-
-    logger.info('✅ Script found', {
-      id: script.id,
-      scriptName: script.scriptName,
-      contentLength: script.scriptContent.length,
-      projectId,
-    });
-
-    return {
-      id: script.id,
-      scriptName: script.scriptName,
-      scriptContent: script.scriptContent,
-      projectId,
-      tags,
-    };
-  }
-
-  /**
-   * 加载对话历史消息
-   */
-  private async loadConversationHistory(sessionId: string): Promise<any[]> {
-    const history = await db.query.messages.findMany({
-      where: eq(messages.sessionId, sessionId),
-      orderBy: (fields, { asc }) => [asc(fields.timestamp)],
-    });
-
-    // Filter out superseded messages so the LLM only sees the current timeline
-    const activeMessages = history.filter(
-      (m) => !((m.metadata as Record<string, any>)?.superseded === true)
-    );
-
-    logger.debug(
-      `📋 Loaded ${activeMessages.length}/${history.length} active messages from database:`,
-      {
-        aiMessages: activeMessages.filter((m) => m.role === 'assistant').length,
-        userMessages: activeMessages.filter((m) => m.role === 'user').length,
-        supersededCount: history.length - activeMessages.length,
-      }
-    );
-
-    return activeMessages.map((m) => ({
-      role: m.role,
-      content: m.content,
-      actionId: m.actionId || undefined,
-      metadata: (m.metadata as Record<string, any>) || {},
-    }));
+    this.repository = repository || new SessionRepository();
   }
 
   /**
@@ -383,62 +267,6 @@ export class SessionManager {
   }
 
   /**
-   * 保存新增的 AI 消息
-   */
-  private async saveNewAIMessages(
-    sessionId: string,
-    executionState: ExecutionState,
-    prevHistoryLength: number
-  ): Promise<void> {
-    const newMessages = executionState.conversationHistory.slice(prevHistoryLength);
-    const aiMessages = newMessages.filter((msg) => msg.role === 'assistant');
-
-    if (aiMessages.length > 0) {
-      logger.debug(`💾 Saving ${aiMessages.length} AI message(s):`, {
-        messages: aiMessages.map((m) => ({
-          actionId: m.actionId,
-          content: m.content.substring(0, 50),
-        })),
-      });
-
-      for (const msg of aiMessages) {
-        const aiMessageId = uuidv4();
-        await db.insert(messages).values({
-          id: aiMessageId,
-          sessionId,
-          role: 'assistant',
-          content: msg.content,
-          actionId: msg.actionId,
-          metadata: msg.metadata || {},
-          timestamp: new Date(),
-        });
-      }
-    } else {
-      logger.warn('⚠️ No AI messages to save');
-    }
-  }
-
-  /**
-   * 保存用户消息
-   */
-  private async saveUserMessage(sessionId: string, userInput: string): Promise<void> {
-    const userMessageId = uuidv4();
-    logger.debug('💾 Saving user message:', {
-      messageId: userMessageId,
-      content: userInput,
-    });
-
-    await db.insert(messages).values({
-      id: userMessageId,
-      sessionId,
-      role: 'user',
-      content: userInput,
-      metadata: {},
-      timestamp: new Date(),
-    });
-  }
-
-  /**
    * 保存变量快照
    */
   private async saveVariableSnapshots(
@@ -446,144 +274,7 @@ export class SessionManager {
     executionState: ExecutionState
   ): Promise<void> {
     const snapshots = buildVariableSnapshots(sessionId, executionState);
-    if (snapshots.length > 0) {
-      logger.debug('💾 Saving variable snapshots:', snapshots.length);
-      await db.insert(variables).values(snapshots);
-    }
-  }
-
-  /**
-   * 保存调试信息到 debug_entries 表
-   */
-  private async saveDebugEntry(sessionId: string, executionState: ExecutionState): Promise<void> {
-    const debugInfos = executionState.lastLLMDebugInfo;
-    if (!debugInfos || debugInfos.length === 0) return;
-
-    const runId = executionState.metadata.currentRunId || 'unknown';
-    const phaseId = executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`;
-    const topicId = executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`;
-    const actionId = executionState.currentActionId || `action_${executionState.currentActionIdx}`;
-    const actionType = executionState.currentActionType || 'unknown';
-
-    // Determine current round from metadata
-    const round = determineDebugEntryRound(executionState.metadata, actionId);
-
-    const entries: Array<Record<string, unknown>> = debugInfos.map((info: any) => ({
-      type: 'llm_call',
-      model: info.model,
-      tokensUsed: info.tokensUsed,
-      responseTimeMs: info.responseTimeMs,
-      finishReason: info.response?.finishReason,
-      prompt: info.prompt,
-      response: typeof info.response === 'string' ? info.response : info.response?.text || '',
-    }));
-
-    const content = { entries };
-
-    try {
-      await db.insert(debugEntries).values({
-        sessionId,
-        runId,
-        phaseId,
-        topicId,
-        actionId,
-        actionType,
-        round,
-        content,
-      } as NewDebugEntry);
-      logger.info('💾 Debug entry saved', { actionId, runId, round, entryCount: entries.length });
-    } catch (err: any) {
-      logger.error('Failed to save debug entry:', err.message);
-    }
-  }
-
-  /**
-   * 更新会话状态到数据库
-   */
-  private async updateSessionState(
-    sessionId: string,
-    executionState: ExecutionState,
-    globalVariables: Record<string, any>
-  ): Promise<void> {
-    logger.debug('💾 Updating session state in DB');
-
-    // Add messageCount to any new snapshots that don't have it yet
-    logger.info('[DEBUG-UPDATESTATE] updateSessionState called', {
-      hasActionSnapshots: !!executionState.metadata.actionSnapshots,
-      snapshotKeys: executionState.metadata.actionSnapshots
-        ? Object.keys(executionState.metadata.actionSnapshots as Record<string, any>)
-        : [],
-      metadataKeys: Object.keys(executionState.metadata),
-    });
-
-    if (executionState.metadata.actionSnapshots) {
-      const snapshots = executionState.metadata.actionSnapshots;
-      let msgCount: number | null = null;
-      for (const key of Object.keys(snapshots)) {
-        if (snapshots[key].messageCount === undefined) {
-          if (msgCount === null) {
-            // Count messages for this session
-            const result = await db
-              .select({ count: count() })
-              .from(messages)
-              .where(eq(messages.sessionId, sessionId));
-            msgCount = result[0]?.count ?? 0;
-          }
-          snapshots[key].messageCount = msgCount;
-        }
-      }
-    }
-
-    // Auto-create v1 entries in rerunHistory for actions that don't have one yet
-    const actionSnapshotsForV1 = executionState.metadata.actionSnapshots;
-    if (actionSnapshotsForV1) {
-      const rerunHistory = (executionState.metadata.rerunHistory || []) as any[];
-      for (const [actionId, snapshot] of Object.entries(actionSnapshotsForV1)) {
-        const alreadyExists = rerunHistory.some((e: any) => e.actionId === actionId);
-        if (!alreadyExists) {
-          const originalConfig = (snapshot as any).originalConfig || {};
-          rerunHistory.push({
-            versionId: uuidv4(),
-            actionId,
-            runId: executionState.metadata.currentRunId,
-            timestamp: new Date().toISOString(),
-            config: originalConfig.config || {},
-            llmConfig: originalConfig.llm_config || undefined,
-            result: {
-              roundsUsed: executionState.metadata.actionRoundInfo?.[actionId]?.currentRound ?? 1,
-              variableCount: Object.keys(executionState.variables || {}).length,
-            },
-          });
-        }
-      }
-      executionState.metadata.rerunHistory = rerunHistory;
-    }
-
-    const runId = executionState.metadata.currentRunId;
-
-    const updateData: Record<string, any> = {
-      position: {
-        phaseIndex: executionState.currentPhaseIdx,
-        topicIndex: executionState.currentTopicIdx,
-        actionIndex: executionState.currentActionIdx,
-      },
-      variables: executionState.variables,
-      executionStatus: executionState.status,
-      metadata: {
-        ...executionState.metadata,
-        globalVariables,
-        variableStore: executionState.variableStore,
-      },
-      updatedAt: new Date(),
-    };
-
-    if (runId) {
-      updateData.currentRunId = runId;
-    }
-
-    await this.saveDebugEntry(sessionId, executionState);
-
-    await db.update(sessions).set(updateData).where(eq(sessions.id, sessionId));
+    await this.repository.saveVariableSnapshots(snapshots);
   }
 
   /**
@@ -775,96 +466,6 @@ export class SessionManager {
   /**
    * 加载项目的全局变量
    */
-  private async loadGlobalVariables(
-    scriptName: string,
-    userId: string
-  ): Promise<{
-    values: Record<string, any>;
-    definitions: Array<{ name: string; define?: string; defaultValue?: unknown }>;
-  }> {
-    try {
-      // 查找包含该脚本文件的项目
-      const sessionFile = await db.query.scriptFiles.findFirst({
-        where: eq(scriptFiles.fileName, scriptName),
-      });
-
-      if (!sessionFile) {
-        return { values: {}, definitions: [] };
-      }
-
-      // 查找该项目的 global.yaml 文件
-      const globalFile = await db.query.scriptFiles.findFirst({
-        where: (fields, { and: andFn, eq: eqFn }) =>
-          andFn(eqFn(fields.projectId, sessionFile.projectId), eqFn(fields.fileType, 'global')),
-      });
-
-      if (!globalFile) {
-        return { values: {}, definitions: [] };
-      }
-
-      // 解析变量定义
-      const definitions: Array<{ name: string; define?: string; defaultValue?: unknown }> = [];
-
-      if (globalFile.yamlContent) {
-        const parsed = yaml.parse(globalFile.yamlContent);
-        if (parsed && parsed.variables && Array.isArray(parsed.variables)) {
-          for (const varDef of parsed.variables) {
-            if (varDef.name) {
-              definitions.push({
-                name: varDef.name,
-                define: varDef.define,
-                defaultValue: varDef.defaultValue,
-              });
-            }
-          }
-        }
-      } else if (globalFile.fileContent) {
-        const content = globalFile.fileContent as any;
-        if (content.variables && Array.isArray(content.variables)) {
-          for (const varDef of content.variables) {
-            if (varDef.name) {
-              definitions.push({
-                name: varDef.name,
-                define: varDef.define,
-                defaultValue: varDef.defaultValue,
-              });
-            }
-          }
-        }
-      }
-
-      // 查询用户已存储的全局变量值
-      let storedValues: Record<string, any> = {};
-      if (userId && sessionFile.projectId) {
-        const userVars = await db.query.userGlobalVariables.findFirst({
-          where: (fields, { and: andFn, eq: eqFn }) =>
-            andFn(eqFn(fields.userId, userId), eqFn(fields.projectId, sessionFile.projectId)),
-        });
-        if (userVars?.variables) {
-          storedValues = userVars.variables as Record<string, any>;
-        }
-      }
-
-      // 解析最终值：已存值 > defaultValue
-      const values: Record<string, any> = {};
-      for (const def of definitions) {
-        if (def.name in storedValues) {
-          values[def.name] = storedValues[def.name];
-        } else if (def.defaultValue !== undefined) {
-          values[def.name] = def.defaultValue;
-        }
-      }
-
-      logger.debug('📋 Loaded global variables from global.yaml:', Object.keys(values));
-      logger.debug('📋 Global variable definitions:', definitions.length);
-
-      return { values, definitions };
-    } catch (error) {
-      logger.error('❌ Error loading global variables:', error);
-      return { values: {}, definitions: [] };
-    }
-  }
-
   /**
    * 初始化会话 - 获取初始 AI 消息
    */
@@ -873,21 +474,18 @@ export class SessionManager {
     logger.info('🔵 initializeSession called', { sessionId });
 
     // 1. 加载会话和脚本数据
-    const session = await this.loadSessionById(sessionId);
-    const script = await this.loadScriptById(session.scriptId);
+    const session = await this.repository.loadSessionById(sessionId);
+    const script = await this.repository.loadScriptById(session.scriptId);
 
     try {
       // 2. 生成首个 runId 并写入 DB
       const runId = uuidv4();
-      await db
-        .update(sessions)
-        .set({ currentRunId: runId, updatedAt: new Date() })
-        .where(eq(sessions.id, sessionId));
+      await this.repository.setSessionRunId(sessionId, runId);
 
       // 3. 加载全局变量和对话历史
       const { values: globalVariables, definitions: globalVariableDefinitions } =
-        await this.loadGlobalVariables(script.scriptName, session.userId);
-      const conversationHistory = await this.loadConversationHistory(sessionId);
+        await this.repository.loadGlobalVariables(script.scriptName, session.userId);
+      const conversationHistory = await this.repository.loadConversationHistory(sessionId);
 
       // 4. 创建初始执行状态，将projectId传递给metadata
       let executionState = this.createInitialExecutionState(
@@ -912,34 +510,12 @@ export class SessionManager {
             logger.warn(`[SessionManager] Cannot persist global "${name}": projectId missing`);
             return;
           }
-
-          const existing = await db.query.userGlobalVariables.findFirst({
-            where: (fields, { and: andFn, eq: eqFn }) =>
-              andFn(eqFn(fields.userId, session.userId), eqFn(fields.projectId, script.projectId!)),
-          });
-
-          const merged = {
-            ...((existing?.variables as Record<string, unknown>) || {}),
-            [name]: value,
-          };
-
-          if (existing) {
-            await db
-              .update(userGlobalVariables)
-              .set({ variables: merged, updatedAt: new Date() })
-              .where(
-                and(
-                  eq(userGlobalVariables.userId, session.userId),
-                  eq(userGlobalVariables.projectId, script.projectId!)
-                )
-              );
-          } else {
-            await db.insert(userGlobalVariables).values({
-              userId: session.userId,
-              projectId: script.projectId,
-              variables: { [name]: value },
-            });
-          }
+          await this.repository.persistGlobalVariable(
+            session.userId,
+            script.projectId,
+            name,
+            value
+          );
           logger.info(`💾 [GlobalVarCallback] Persisted: "${name}" = "${value}"`);
         } catch (err: any) {
           logger.error(
@@ -961,18 +537,15 @@ export class SessionManager {
           sessionConfig: executionState.metadata.sessionConfig,
         };
 
-        await db
-          .update(sessions)
-          .set({ metadata: updatedMetadata })
-          .where(eq(sessions.id, sessionId));
+        await this.repository.updateSessionMetadata(sessionId, updatedMetadata);
 
         logger.debug('💾 Saved sessionConfig to database:', executionState.metadata.sessionConfig);
       }
 
       // 6. 保存执行结果
-      await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
+      await this.repository.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
       await this.saveVariableSnapshots(sessionId, executionState);
-      await this.updateSessionState(sessionId, executionState, globalVariables);
+      await this.repository.updateSessionState(sessionId, executionState, globalVariables);
 
       // 7. 构建并返回响应
       const result = this.buildSessionResponse(
@@ -999,19 +572,19 @@ export class SessionManager {
     logger.info('🔵 processUserInput called', { sessionId, userInput });
 
     // 1. 加载会话和脚本数据
-    const session = await this.loadSessionById(sessionId);
-    const script = await this.loadScriptById(session.scriptId);
+    const session = await this.repository.loadSessionById(sessionId);
+    const script = await this.repository.loadScriptById(session.scriptId);
 
     try {
       // 2. 加载全局变量（包含definition用于重建callback）
       const { values: globalVariables, definitions: globalVariableDefinitions } =
-        await this.loadGlobalVariables(script.scriptName, session.userId);
+        await this.repository.loadGlobalVariables(script.scriptName, session.userId);
 
       // 3. 保存用户消息（先保存，再加载，确保 conversationHistory 完整）
-      await this.saveUserMessage(sessionId, userInput);
+      await this.repository.saveUserMessage(sessionId, userInput);
 
       // 4. 加载对话历史（包含刚保存的用户消息）
-      const conversationHistory = await this.loadConversationHistory(sessionId);
+      const conversationHistory = await this.repository.loadConversationHistory(sessionId);
 
       // 5. 恢复执行状态
       let executionState = this.restoreExecutionState(
@@ -1029,34 +602,12 @@ export class SessionManager {
             logger.warn(`[SessionManager] Cannot persist global "${name}": projectId missing`);
             return;
           }
-
-          const existing = await db.query.userGlobalVariables.findFirst({
-            where: (fields, { and: andFn, eq: eqFn }) =>
-              andFn(eqFn(fields.userId, session.userId), eqFn(fields.projectId, script.projectId!)),
-          });
-
-          const merged = {
-            ...((existing?.variables as Record<string, unknown>) || {}),
-            [name]: value,
-          };
-
-          if (existing) {
-            await db
-              .update(userGlobalVariables)
-              .set({ variables: merged, updatedAt: new Date() })
-              .where(
-                and(
-                  eq(userGlobalVariables.userId, session.userId),
-                  eq(userGlobalVariables.projectId, script.projectId!)
-                )
-              );
-          } else {
-            await db.insert(userGlobalVariables).values({
-              userId: session.userId,
-              projectId: script.projectId,
-              variables: { [name]: value },
-            });
-          }
+          await this.repository.persistGlobalVariable(
+            session.userId,
+            script.projectId,
+            name,
+            value
+          );
           logger.info(`💾 [GlobalVarCallback] Persisted: "${name}" = "${value}"`);
         } catch (err: any) {
           logger.error(
@@ -1071,9 +622,9 @@ export class SessionManager {
       executionState = await this.executeScript(script, sessionId, executionState, userInput);
 
       // 7. 保存执行结果
-      await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
+      await this.repository.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
       await this.saveVariableSnapshots(sessionId, executionState);
-      await this.updateSessionState(sessionId, executionState, globalVariables);
+      await this.repository.updateSessionState(sessionId, executionState, globalVariables);
 
       // 8. 构建并返回响应
       const result = this.buildSessionResponse(
@@ -1170,38 +721,17 @@ export class SessionManager {
     // 全局作用域: 持久化到 user_global_variables
     if (scope === 'global') {
       try {
-        const tags = (await this.getScriptTags(session.scriptId)) || [];
+        const tags = (await this.repository.getScriptTags(session.scriptId)) || [];
         const projectTag = tags.find((tag: string) => tag.startsWith('project:'));
         const projectId = projectTag ? projectTag.replace('project:', '') : undefined;
 
         if (projectId) {
-          const existing = await db.query.userGlobalVariables.findFirst({
-            where: (fields, { and: andFn, eq: eqFn }) =>
-              andFn(eqFn(fields.userId, session.userId), eqFn(fields.projectId, projectId)),
-          });
-
-          const merged = {
-            ...((existing?.variables as Record<string, unknown>) || {}),
-            [variableName]: value,
-          };
-
-          if (existing) {
-            await db
-              .update(userGlobalVariables)
-              .set({ variables: merged, updatedAt: new Date() })
-              .where(
-                and(
-                  eq(userGlobalVariables.userId, session.userId),
-                  eq(userGlobalVariables.projectId, projectId)
-                )
-              );
-          } else {
-            await db.insert(userGlobalVariables).values({
-              userId: session.userId,
-              projectId,
-              variables: { [variableName]: value },
-            });
-          }
+          await this.repository.persistGlobalVariable(
+            session.userId,
+            projectId,
+            variableName,
+            value
+          );
           logger.info(
             `💾 [updateVariable] Persisted global "${variableName}" to user_global_variables`
           );
@@ -1215,14 +745,10 @@ export class SessionManager {
     }
 
     // 更新 sessions 表
-    await db
-      .update(sessions)
-      .set({
-        variables: flatVariables,
-        metadata: { ...metadata, variableStore },
-        updatedAt: new Date(),
-      })
-      .where(eq(sessions.id, session.id));
+    await this.repository.updateSessionVariablesAndMetadata(session.id, flatVariables, {
+      ...metadata,
+      variableStore,
+    });
 
     return { variableName, scope, value, updatedAt: now };
   }
@@ -1247,8 +773,8 @@ export class SessionManager {
     logger.info('🔵 rerunAction called', { sessionId, targetActionId });
 
     // 1. Load session and script
-    const session = await this.loadSessionById(sessionId);
-    const script = await this.loadScriptById(session.scriptId);
+    const session = await this.repository.loadSessionById(sessionId);
+    const script = await this.repository.loadScriptById(session.scriptId);
 
     const metadata = (session.metadata as Record<string, any>) || {};
     const actionSnapshots = metadata.actionSnapshots || {};
@@ -1318,37 +844,9 @@ export class SessionManager {
 
     // 5. Flag messages after snapshot point as superseded (instead of hard-delete)
     // This preserves them in the debug panel for comparison while excluding them from LLM context.
-    const allMessages = await db
-      .select({ id: messages.id })
-      .from(messages)
-      .where(eq(messages.sessionId, sessionId))
-      .orderBy(messages.timestamp);
-
-    // snapshot uses conversationHistoryLength; also accept messageCount for forward compat
     const msgCount: number =
       (snapshot.messageCount as number) ?? (snapshot.conversationHistoryLength as number) ?? 0;
-    if (msgCount < allMessages.length) {
-      const idsToFlag = allMessages.slice(msgCount).map((m) => m.id);
-      if (idsToFlag.length > 0) {
-        const supersededMeta = { superseded: true, supersededAt: new Date().toISOString() };
-        // Update each message's metadata individually (Drizzle does not support bulk JSONB merge)
-        for (const msgId of idsToFlag) {
-          const msg = await db.query.messages.findFirst({
-            where: eq(messages.id, msgId),
-          });
-          if (msg) {
-            const existingMeta = (msg.metadata as Record<string, any>) || {};
-            await db
-              .update(messages)
-              .set({
-                metadata: { ...existingMeta, ...supersededMeta },
-              })
-              .where(eq(messages.id, msgId));
-          }
-        }
-        logger.debug(`🏷️ Flagged ${idsToFlag.length} messages as superseded after snapshot point`);
-      }
-    }
+    await this.repository.flagSupersededMessages(sessionId, msgCount);
 
     // 6. Clean rerunHistory — keep only entries up to target
     let rerunHistory = (metadata.rerunHistory || []) as any[];
@@ -1377,34 +875,29 @@ export class SessionManager {
     delete restoredMetadata.actionRoundInfo;
 
     // 9. Update session in DB
-    await db
-      .update(sessions)
-      .set({
-        position: {
-          phaseIndex: snapshot.phaseIndex,
-          topicIndex: snapshot.topicIndex,
-          actionIndex: snapshot.actionIndex,
-          actionId: snapshot.actionId,
-          actionType: snapshot.actionType,
-          currentRound: 0,
-        } as any,
-        executionStatus: ExecutionStatus.RUNNING,
-        variables: {},
-        currentRunId: newRunId,
-        metadata: restoredMetadata,
-        updatedAt: new Date(),
-      })
-      .where(eq(sessions.id, sessionId));
+    await this.repository.updateSessionForRerun(
+      sessionId,
+      {
+        phaseIndex: snapshot.phaseIndex,
+        topicIndex: snapshot.topicIndex,
+        actionIndex: snapshot.actionIndex,
+        actionId: snapshot.actionId,
+        actionType: snapshot.actionType,
+        currentRound: 0,
+      } as any,
+      restoredMetadata,
+      newRunId
+    );
 
     // 9. Re-execute (same flow as processUserInput but without user input)
-    const { values: globalVariables } = await this.loadGlobalVariables(
+    const { values: globalVariables } = await this.repository.loadGlobalVariables(
       script.scriptName,
       session.userId
     );
-    const conversationHistory = await this.loadConversationHistory(sessionId);
+    const conversationHistory = await this.repository.loadConversationHistory(sessionId);
 
     // Re-read session to get updated state
-    const updatedSession = await this.loadSessionById(sessionId);
+    const updatedSession = await this.repository.loadSessionById(sessionId);
     let executionState = this.restoreExecutionState(
       updatedSession,
       globalVariables,
@@ -1419,18 +912,11 @@ export class SessionManager {
     const prevHistoryLength = executionState.conversationHistory.length;
     executionState = await this.executeScript(script, sessionId, executionState, null);
 
-    await this.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
+    await this.repository.saveNewAIMessages(sessionId, executionState, prevHistoryLength);
     await this.saveVariableSnapshots(sessionId, executionState);
-    await this.updateSessionState(sessionId, executionState, globalVariables);
+    await this.repository.updateSessionState(sessionId, executionState, globalVariables);
 
     return this.buildSessionResponse(executionState, updatedSession, script, globalVariables, true);
-  }
-
-  private async getScriptTags(scriptId: string): Promise<string[]> {
-    const script = await db.query.scripts.findFirst({
-      where: eq(scripts.id, scriptId),
-    });
-    return (script?.tags as string[]) || [];
   }
 }
 
