@@ -25,13 +25,19 @@ import {
   scriptFiles,
   userGlobalVariables,
   debugEntries,
-  type NewVariable,
   type NewDebugEntry,
 } from '../db/schema.js';
 import { container } from '../ioc/container.js';
 import { buildDetailedError } from '../utils/error-handler.js';
 
 import { DatabaseTemplateProvider } from './database-template-provider.js';
+import {
+  flattenVariableStore,
+  calculateRoundChanges,
+  extractExitReason,
+  buildVariableSnapshots,
+  determineDebugEntryRound,
+} from './session-variable-utils.js';
 
 const logger = createLogger('SessionManager');
 
@@ -104,267 +110,6 @@ export class SessionManager {
     // Phase 4: 使用依赖注入容器获取 ScriptExecutor
     this.scriptExecutor = container.getScriptExecutor();
     this.templateProvider = new DatabaseTemplateProvider();
-  }
-
-  private static readonly PLACEHOLDER_PATTERNS = [
-    /^\(?(未收集|未提供|暂无|无|N\/A|n\/a|null)\)?$/i,
-    /^\(未收集\)$/,
-    /^\(未提供\)$/,
-  ];
-
-  private isPlaceholderValue(value: unknown): boolean {
-    if (value === null || value === undefined || value === '') return true;
-    if (typeof value !== 'string') return false;
-    const trimmed = value.trim();
-    if (trimmed === '') return true;
-    return SessionManager.PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(trimmed));
-  }
-
-  private unwrapVariableValue(value: unknown): unknown {
-    if (value !== null && typeof value === 'object' && 'value' in (value as object)) {
-      const unwrapped = (value as { value: unknown }).value;
-      if (this.isPlaceholderValue(unwrapped)) {
-        return undefined;
-      }
-      return unwrapped;
-    }
-    if (this.isPlaceholderValue(value)) {
-      return undefined;
-    }
-    return value;
-  }
-
-  private unwrapScopeValues(
-    scopeData: Record<string, unknown> | null | undefined
-  ): Record<string, unknown> {
-    if (!scopeData) return {};
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(scopeData)) {
-      const unwrapped = this.unwrapVariableValue(value);
-      if (unwrapped !== undefined) {
-        result[key] = unwrapped;
-      }
-    }
-    return result;
-  }
-
-  private findFirstNonEmptyScope(
-    scopes: Record<string, Record<string, unknown>> | undefined
-  ): Record<string, unknown> | null {
-    if (!scopes) return null;
-    for (const scopeKey of Object.keys(scopes)) {
-      const scopeData = scopes[scopeKey];
-      if (scopeData && typeof scopeData === 'object' && Object.keys(scopeData).length > 0) {
-        return scopeData;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * 扁平化 variableStore，将嵌套的 phase/topic 结构转为当前位置的扁平结构
-   *
-   * 当 action 完成后，position 可能已跳到下一个 topic/phase，
-   * 但变量存储在源 action 的 topic/phase 中。
-   * 此时需要回退到有数据的 topic/phase，确保变量不丢失。
-   */
-  private flattenVariableStore(
-    variableStore:
-      | {
-          global?: Record<string, unknown>;
-          session?: Record<string, unknown>;
-          phase?: Record<string, Record<string, unknown>>;
-          topic?: Record<string, Record<string, unknown>>;
-        }
-      | null
-      | undefined,
-    position: { phaseId?: string; topicId?: string }
-  ): {
-    global: Record<string, unknown>;
-    session: Record<string, unknown>;
-    phase: Record<string, unknown>;
-    topic: Record<string, unknown>;
-  } {
-    if (!variableStore) {
-      return {
-        global: {},
-        session: {},
-        phase: {},
-        topic: {},
-      };
-    }
-
-    const hasPhaseDataAtPosition =
-      position.phaseId &&
-      variableStore.phase?.[position.phaseId] &&
-      Object.keys(variableStore.phase[position.phaseId]).length > 0;
-    const hasTopicDataAtPosition =
-      position.topicId &&
-      variableStore.topic?.[position.topicId] &&
-      Object.keys(variableStore.topic[position.topicId]).length > 0;
-
-    const rawPhaseData = hasPhaseDataAtPosition
-      ? variableStore.phase![position.phaseId!]
-      : this.findFirstNonEmptyScope(variableStore.phase);
-    const rawTopicData = hasTopicDataAtPosition
-      ? variableStore.topic![position.topicId!]
-      : this.findFirstNonEmptyScope(variableStore.topic);
-
-    const globalData = this.unwrapScopeValues(variableStore.global || {});
-    const sessionData = this.unwrapScopeValues(variableStore.session || {});
-    const phaseData = this.unwrapScopeValues(rawPhaseData);
-    const topicData = this.unwrapScopeValues(rawTopicData);
-
-    return {
-      global: globalData,
-      session: sessionData,
-      phase: phaseData,
-      topic: topicData,
-    };
-  }
-
-  private calculateRoundChanges(
-    prevState: {
-      global: Record<string, any>;
-      session: Record<string, any>;
-      phase: Record<string, any>;
-      topic: Record<string, any>;
-    } | null,
-    currentState: {
-      global: Record<string, any>;
-      session: Record<string, any>;
-      phase: Record<string, any>;
-      topic: Record<string, any>;
-    },
-    outputVariables: string[],
-    round: number
-  ): {
-    round: number;
-    timestamp: string;
-    changes: Array<{
-      name: string;
-      fromValue?: any;
-      toValue: any;
-      scope: string;
-    }>;
-  } | null {
-    if (!outputVariables || outputVariables.length === 0) {
-      return null;
-    }
-
-    const changes: Array<{
-      name: string;
-      fromValue?: any;
-      toValue: any;
-      scope: string;
-    }> = [];
-
-    for (const varName of outputVariables) {
-      let found = false;
-      for (const scope of ['topic', 'phase', 'session', 'global'] as const) {
-        const currentScopedVars = currentState[scope];
-        if (currentScopedVars && varName in currentScopedVars) {
-          const currentValue = currentScopedVars[varName];
-          const prevValue = prevState?.[scope]?.[varName];
-
-          if (JSON.stringify(prevValue) !== JSON.stringify(currentValue)) {
-            changes.push({
-              name: varName,
-              fromValue: prevValue,
-              toValue: currentValue,
-              scope,
-            });
-          }
-          found = true;
-          break;
-        }
-      }
-
-      if (!found) {
-        for (const scope of ['topic', 'phase', 'session', 'global'] as const) {
-          const currentScopedVars = currentState[scope];
-          if (currentScopedVars && varName in currentScopedVars) {
-            changes.push({
-              name: varName,
-              toValue: currentScopedVars[varName],
-              scope,
-            });
-            break;
-          }
-        }
-      }
-    }
-
-    if (changes.length === 0) {
-      return null;
-    }
-
-    return {
-      round,
-      timestamp: new Date().toISOString(),
-      changes,
-    };
-  }
-
-  private extractExitReason(
-    executionState: ExecutionState
-  ): 'collected' | 'resistance' | 'crisis' | 'max_rounds' | 'user_interrupt' | undefined {
-    const exitDecisions = executionState.metadata?.exitDecisions;
-    if (exitDecisions && exitDecisions.length > 0) {
-      const lastDecision = exitDecisions[exitDecisions.length - 1];
-      const reason = lastDecision?.decision?.reason;
-      if (
-        reason === 'collected' ||
-        reason === 'resistance' ||
-        reason === 'crisis' ||
-        reason === 'max_rounds' ||
-        reason === 'user_interrupt'
-      ) {
-        return reason;
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * 构建全量变量快照（每次 action 执行完存完整四层变量状态）
-   */
-  private buildVariableSnapshots(sessionId: string, executionState: ExecutionState): NewVariable[] {
-    const variableStore = executionState.variableStore || {};
-    const fullSnapshot: Record<string, unknown> = {};
-
-    for (const scope of ['global', 'session', 'phase', 'topic'] as const) {
-      const scopeData = (variableStore as any)[scope] || {};
-      // 展平作用域内的变量（去除 Drizzle 包装的 value/type/source 元数据）
-      const flatScope: Record<string, unknown> = {};
-      for (const [key, entry] of Object.entries(scopeData)) {
-        flatScope[key] = (entry as any)?.value ?? entry;
-      }
-      fullSnapshot[scope] = flatScope;
-    }
-
-    const actionId = executionState.currentActionId || `action_${executionState.currentActionIdx}`;
-    const phaseId = executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`;
-    const topicId = executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`;
-    const round =
-      executionState.metadata.actionRoundInfo?.[actionId]?.currentRound ||
-      executionState.metadata.lastActionRoundInfo?.currentRound ||
-      1;
-
-    return [
-      {
-        sessionId,
-        variableName: actionId,
-        value: fullSnapshot,
-        scope: 'session',
-        valueType: 'object',
-        source: 'script_executor',
-        actionId,
-        phaseId,
-        topicId,
-        round,
-      },
-    ];
   }
 
   /**
@@ -700,7 +445,7 @@ export class SessionManager {
     sessionId: string,
     executionState: ExecutionState
   ): Promise<void> {
-    const snapshots = this.buildVariableSnapshots(sessionId, executionState);
+    const snapshots = buildVariableSnapshots(sessionId, executionState);
     if (snapshots.length > 0) {
       logger.debug('💾 Saving variable snapshots:', snapshots.length);
       await db.insert(variables).values(snapshots);
@@ -937,7 +682,7 @@ export class SessionManager {
 
     // 仅在 processUserInput 中包含扁平化的 variableStore
     if (includeVariableStore) {
-      result.variableStore = this.flattenVariableStore(executionState.variableStore, {
+      result.variableStore = flattenVariableStore(executionState.variableStore, {
         phaseId: executionState.currentPhaseId,
         topicId: executionState.currentTopicId,
       });
@@ -950,7 +695,7 @@ export class SessionManager {
     const prevSnapshot = this.prevVariableSnapshots.get(session.id);
     const roundChanges =
       includeVariableStore && outputVariables.length > 0 && currentRound
-        ? this.calculateRoundChanges(
+        ? calculateRoundChanges(
             prevSnapshot || null,
             result.variableStore as any,
             outputVariables,
@@ -970,7 +715,7 @@ export class SessionManager {
       (result as any).roundChanges = roundChanges;
     }
     if (actionStatus === 'completed') {
-      (result as any).exitReason = this.extractExitReason(executionState);
+      (result as any).exitReason = extractExitReason(executionState);
     }
 
     // Include actionSnapshots and rerunHistory for frontend
@@ -1689,25 +1434,5 @@ export class SessionManager {
   }
 }
 
-/**
- * Determine round number for a debug entry.
- *
- * Priority:
- *   1. actionRoundInfo[actionId]?.currentRound — per-action round tracking
- *   2. lastActionRoundInfo?.currentRound — fallback from last action
- *   3. 1 — default for first entry
- *
- * Extracted for testability. After rerun/rollback, actionRoundInfo must be cleared
- * (see rerunAction) so that re-executed actions start at round 1 instead of stale values.
- */
-export function determineDebugEntryRound(
-  metadata: Record<string, any> | undefined,
-  actionId: string
-): number {
-  if (!metadata) return 1;
-  return (
-    (metadata.actionRoundInfo as any)?.[actionId]?.currentRound ||
-    (metadata.lastActionRoundInfo as any)?.currentRound ||
-    1
-  );
-}
+// Re-exported for backward compatibility
+export { determineDebugEntryRound } from './session-variable-utils.js';
