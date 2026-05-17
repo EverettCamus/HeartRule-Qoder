@@ -5,7 +5,7 @@
  * to separate persistence concerns from business orchestration.
  */
 
-import type { ExecutionState } from '@heartrule/core-engine';
+import type { Session } from '@heartrule/core-engine';
 import { createLogger } from '@heartrule/core-engine';
 import { and, eq, count } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
@@ -19,12 +19,8 @@ import {
   variables,
   scriptFiles,
   userGlobalVariables,
-  debugEntries,
   type NewVariable,
-  type NewDebugEntry,
 } from '../db/schema.js';
-
-import { determineDebugEntryRound } from './session-variable-utils.js';
 
 const logger = createLogger('SessionRepository');
 
@@ -67,19 +63,8 @@ export interface ISessionRepository {
   getMessageCount(sessionId: string): Promise<number>;
 
   // Writes
-  saveNewAIMessages(
-    sessionId: string,
-    executionState: ExecutionState,
-    prevHistoryLength: number
-  ): Promise<void>;
   saveUserMessage(sessionId: string, userInput: string): Promise<void>;
   saveVariableSnapshots(snapshots: NewVariable[]): Promise<void>;
-  saveDebugEntry(sessionId: string, executionState: ExecutionState): Promise<void>;
-  updateSessionState(
-    sessionId: string,
-    executionState: ExecutionState,
-    globalVariables: Record<string, any>
-  ): Promise<void>;
 
   // Session lifecycle
   setSessionRunId(sessionId: string, runId: string): Promise<void>;
@@ -106,6 +91,14 @@ export interface ISessionRepository {
 
   // Rerun support
   flagSupersededMessages(sessionId: string, fromMessageIndex: number): Promise<void>;
+
+  // Session-based persistence (Phase 2: Session domain activation)
+  persistSession(session: Session, globalVariables: Record<string, any>): Promise<void>;
+  saveNewAIMessagesFromSession(
+    sessionId: string,
+    session: Session,
+    prevHistoryLength: number
+  ): Promise<void>;
 }
 
 // ---- Implementation ----
@@ -292,31 +285,6 @@ export class SessionRepository implements ISessionRepository {
 
   // ==================== Writes ====================
 
-  async saveNewAIMessages(
-    sessionId: string,
-    executionState: ExecutionState,
-    prevHistoryLength: number
-  ): Promise<void> {
-    const newMessages = executionState.conversationHistory.slice(prevHistoryLength);
-
-    for (const msg of newMessages) {
-      if (msg.role === 'assistant') {
-        await db.insert(messages).values({
-          sessionId,
-          role: 'assistant',
-          content: msg.content || '',
-          actionId: msg.actionId,
-          metadata: msg.metadata || {},
-          timestamp: new Date(),
-        });
-        logger.debug('Saved AI message', {
-          actionId: msg.actionId,
-          length: msg.content?.length,
-        });
-      }
-    }
-  }
-
   async saveUserMessage(sessionId: string, userInput: string): Promise<void> {
     await db.insert(messages).values({
       sessionId,
@@ -332,126 +300,6 @@ export class SessionRepository implements ISessionRepository {
       logger.debug('💾 Saving variable snapshots:', snapshots.length);
       await db.insert(variables).values(snapshots);
     }
-  }
-
-  async saveDebugEntry(sessionId: string, executionState: ExecutionState): Promise<void> {
-    const debugInfos = executionState.lastLLMDebugInfo;
-    if (!debugInfos || debugInfos.length === 0) return;
-
-    const runId = executionState.metadata.currentRunId || 'unknown';
-    const phaseId = executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`;
-    const topicId = executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`;
-    const actionId = executionState.currentActionId || `action_${executionState.currentActionIdx}`;
-    const actionType = executionState.currentActionType || 'unknown';
-
-    const round = determineDebugEntryRound(executionState.metadata, actionId);
-
-    const entries: Array<Record<string, unknown>> = debugInfos.map((info: any) => ({
-      type: 'llm_call',
-      model: info.model,
-      tokensUsed: info.tokensUsed,
-      responseTimeMs: info.responseTimeMs,
-      finishReason: info.response?.finishReason,
-      prompt: info.prompt,
-      response: typeof info.response === 'string' ? info.response : info.response?.text || '',
-    }));
-
-    const content = { entries };
-
-    try {
-      await db.insert(debugEntries).values({
-        sessionId,
-        runId,
-        phaseId,
-        topicId,
-        actionId,
-        actionType,
-        round,
-        content,
-      } as NewDebugEntry);
-      logger.info('💾 Debug entry saved', { actionId, runId, round, entryCount: entries.length });
-    } catch (err: any) {
-      logger.error('Failed to save debug entry:', err.message);
-    }
-  }
-
-  async updateSessionState(
-    sessionId: string,
-    executionState: ExecutionState,
-    globalVariables: Record<string, any>
-  ): Promise<void> {
-    logger.debug('💾 Updating session state in DB');
-
-    logger.info('[DEBUG-UPDATESTATE] updateSessionState called', {
-      hasActionSnapshots: !!executionState.metadata.actionSnapshots,
-      snapshotKeys: executionState.metadata.actionSnapshots
-        ? Object.keys(executionState.metadata.actionSnapshots as Record<string, any>)
-        : [],
-      metadataKeys: Object.keys(executionState.metadata),
-    });
-
-    // Backfill messageCount on snapshots
-    if (executionState.metadata.actionSnapshots) {
-      const snapshots = executionState.metadata.actionSnapshots;
-      let msgCount: number | null = null;
-      for (const key of Object.keys(snapshots)) {
-        if (snapshots[key].messageCount === undefined) {
-          if (msgCount === null) {
-            msgCount = await this.getMessageCount(sessionId);
-          }
-          snapshots[key].messageCount = msgCount;
-        }
-      }
-    }
-
-    // Auto-create v1 entries in rerunHistory for actions that don't have one yet
-    const actionSnapshotsForV1 = executionState.metadata.actionSnapshots;
-    if (actionSnapshotsForV1) {
-      const rerunHistory = (executionState.metadata.rerunHistory || []) as any[];
-      for (const [actionId, snapshot] of Object.entries(actionSnapshotsForV1)) {
-        const alreadyExists = rerunHistory.some((e: any) => e.actionId === actionId);
-        if (!alreadyExists) {
-          const originalConfig = (snapshot as any).originalConfig || {};
-          rerunHistory.push({
-            versionId: uuidv4(),
-            actionId,
-            runId: executionState.metadata.currentRunId,
-            timestamp: new Date().toISOString(),
-            config: originalConfig.config || {},
-            llmConfig: originalConfig.llm_config || undefined,
-            result: {
-              roundsUsed: executionState.metadata.actionRoundInfo?.[actionId]?.currentRound ?? 1,
-              variableCount: Object.keys(executionState.variables || {}).length,
-            },
-          });
-        }
-      }
-      executionState.metadata.rerunHistory = rerunHistory;
-    }
-
-    const runId = executionState.metadata.currentRunId;
-
-    const updateData: Record<string, any> = {
-      position: {
-        phaseIndex: executionState.currentPhaseIdx,
-        topicIndex: executionState.currentTopicIdx,
-        actionIndex: executionState.currentActionIdx,
-      },
-      variables: executionState.variables,
-      executionStatus: executionState.status,
-      metadata: {
-        ...executionState.metadata,
-        globalVariables,
-        variableStore: executionState.variableStore,
-      },
-      updatedAt: new Date(),
-    };
-
-    if (runId) {
-      updateData.currentRunId = runId;
-    }
-
-    await db.update(sessions).set(updateData).where(eq(sessions.id, sessionId));
   }
 
   // ==================== Session Lifecycle ====================
@@ -570,5 +418,106 @@ export class SessionRepository implements ISessionRepository {
     }
 
     logger.debug(`🏷️ Flagged ${idsToFlag.length} messages as superseded after snapshot point`);
+  }
+
+  // ==================== Session-based Persistence ====================
+
+  async persistSession(session: Session, globalVariables: Record<string, any>): Promise<void> {
+    logger.debug('💾 Persisting session state to DB');
+
+    logger.info('[DEBUG-UPDATESTATE] persistSession called', {
+      hasActionSnapshots: !!session.metadata.actionSnapshots,
+      snapshotKeys: session.metadata.actionSnapshots
+        ? Object.keys(session.metadata.actionSnapshots as Record<string, any>)
+        : [],
+    });
+
+    // Backfill messageCount on snapshots
+    if (session.metadata.actionSnapshots) {
+      const snapshots = session.metadata.actionSnapshots;
+      let msgCount: number | null = null;
+      for (const key of Object.keys(snapshots)) {
+        if (snapshots[key].messageCount === undefined) {
+          if (msgCount === null) {
+            msgCount = await this.getMessageCount(session.sessionId);
+          }
+          snapshots[key].messageCount = msgCount;
+        }
+      }
+    }
+
+    // Auto-create v1 entries in rerunHistory
+    const actionSnapshots = session.metadata.actionSnapshots;
+    if (actionSnapshots) {
+      const rerunHistory = (session.metadata.rerunHistory || []) as any[];
+      for (const [actionId, snapshot] of Object.entries(actionSnapshots)) {
+        const alreadyExists = rerunHistory.some((e: any) => e.actionId === actionId);
+        if (!alreadyExists) {
+          const originalConfig = (snapshot as any).originalConfig || {};
+          rerunHistory.push({
+            versionId: uuidv4(),
+            actionId,
+            runId: session.metadata.currentRunId,
+            timestamp: new Date().toISOString(),
+            config: originalConfig.config || {},
+            llmConfig: originalConfig.llm_config || undefined,
+            result: {
+              roundsUsed: (session.metadata.actionRoundInfo as any)?.[actionId]?.currentRound ?? 1,
+              variableCount: Object.keys(session.variables || {}).length,
+            },
+          });
+        }
+      }
+      session.metadata.rerunHistory = rerunHistory;
+    }
+
+    const runId = session.metadata.currentRunId;
+
+    const updateData: Record<string, any> = {
+      position: {
+        phaseIndex: session.position.phaseIndex,
+        topicIndex: session.position.topicIndex,
+        actionIndex: session.position.actionIndex,
+      },
+      variables: session.variables,
+      executionStatus: session.executionStatus,
+      metadata: {
+        ...session.metadata,
+        globalVariables,
+        variableStore: session.variableStore,
+      },
+      updatedAt: new Date(),
+    };
+
+    if (runId) {
+      updateData.currentRunId = runId;
+    }
+
+    await db.update(sessions).set(updateData).where(eq(sessions.id, session.sessionId));
+  }
+
+  async saveNewAIMessagesFromSession(
+    sessionId: string,
+    session: Session,
+    prevHistoryLength: number
+  ): Promise<void> {
+    const newMessages = session.conversationHistory.slice(prevHistoryLength);
+
+    for (const msg of newMessages) {
+      if (msg.role === 'assistant') {
+        await db.insert(messages).values({
+          sessionId,
+          role: 'assistant',
+          content: msg.content || '',
+          actionId: msg.actionId,
+          metadata: msg.metadata || {},
+          timestamp: new Date(),
+        });
+        logger.debug('Saved AI message', {
+          actionId: msg.actionId,
+          length: msg.content?.length,
+        });
+      }
+    }
   }
 }

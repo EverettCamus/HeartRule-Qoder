@@ -7,7 +7,7 @@
  *
  * 职责：
  * - 根据环境配置选择具体的适配器实现
- * - 组装核心引擎的依赖（LLM、ScriptExecutor、SessionApplicationService等）
+ * - 组装核心引擎的依赖（LLM、ScriptExecutor等）
  * - 提供单例服务获取接口
  *
  * 依赖流向：
@@ -38,8 +38,6 @@ export class DependencyContainer {
     this.llmProvider = this.createLLMProvider();
 
     // 2. 创建 LLM Orchestrator（核心引擎端口）
-    // Register with the canonical provider name so llmConfig.provider from
-    // rerun/rollback requests can resolve the correct provider.
     const providerName = process.env.LLM_PROVIDER || 'volcano';
     this.llmOrchestrator = new LLMOrchestrator(this.llmProvider, providerName.toLowerCase());
 
@@ -53,11 +51,8 @@ export class DependencyContainer {
       this.llmOrchestrator.registerProvider('openai', this.llmProvider);
     }
 
-    // 3. 创建 ScriptExecutor（注入依赖）
-    this.scriptExecutor = new ScriptExecutor(
-      this.llmOrchestrator
-      // 其他依赖可以继续注入：actionFactory, monitorOrchestrator等
-    );
+    // 3. 创建 ScriptExecutor（注入 LLMOrchestrator）
+    this.scriptExecutor = new ScriptExecutor(this.llmOrchestrator);
 
     console.log('[DependencyContainer] ✅ Container initialized:', {
       llmProvider: this.getLLMProviderName(),
@@ -188,7 +183,10 @@ export class DependencyContainer {
   }
 
   /**
-   * 获取 ScriptExecutor
+   * 获取 ScriptExecutor（单例）
+   *
+   * SessionOrchestrator 通过构造函数可选注入此依赖，
+   * 方便单元测试 mock，生产代码默认使用此容器提供的单例。
    */
   getScriptExecutor(): ScriptExecutor {
     return this.scriptExecutor;

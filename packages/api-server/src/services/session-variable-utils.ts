@@ -10,7 +10,7 @@
  * - Debug entry round determination
  */
 
-import type { ExecutionState } from '@heartrule/core-engine';
+import type { Session } from '@heartrule/core-engine';
 
 import type { NewVariable } from '../db/schema.js';
 
@@ -222,74 +222,6 @@ export function calculateRoundChanges(
   };
 }
 
-// ---- Exit reason ----
-
-export function extractExitReason(
-  executionState: ExecutionState
-): 'collected' | 'resistance' | 'crisis' | 'max_rounds' | 'user_interrupt' | undefined {
-  const exitDecisions = executionState.metadata?.exitDecisions;
-  if (exitDecisions && exitDecisions.length > 0) {
-    const lastDecision = exitDecisions[exitDecisions.length - 1];
-    const reason = (lastDecision?.decision as any)?.reason;
-    if (
-      reason === 'collected' ||
-      reason === 'resistance' ||
-      reason === 'crisis' ||
-      reason === 'max_rounds' ||
-      reason === 'user_interrupt'
-    ) {
-      return reason;
-    }
-  }
-  return undefined;
-}
-
-// ---- Variable snapshots ----
-
-/**
- * 构建全量变量快照（每次 action 执行完存完整四层变量状态）
- */
-export function buildVariableSnapshots(
-  sessionId: string,
-  executionState: ExecutionState
-): NewVariable[] {
-  const variableStore = executionState.variableStore || {};
-  const fullSnapshot: Record<string, unknown> = {};
-
-  for (const scope of ['global', 'session', 'phase', 'topic'] as const) {
-    const scopeData = (variableStore as any)[scope] || {};
-    // 展平作用域内的变量（去除 Drizzle 包装的 value/type/source 元数据）
-    const flatScope: Record<string, unknown> = {};
-    for (const [key, entry] of Object.entries(scopeData)) {
-      flatScope[key] = (entry as any)?.value ?? entry;
-    }
-    fullSnapshot[scope] = flatScope;
-  }
-
-  const actionId = executionState.currentActionId || `action_${executionState.currentActionIdx}`;
-  const phaseId = executionState.currentPhaseId || `phase_${executionState.currentPhaseIdx}`;
-  const topicId = executionState.currentTopicId || `topic_${executionState.currentTopicIdx}`;
-  const round =
-    executionState.metadata.actionRoundInfo?.[actionId]?.currentRound ||
-    executionState.metadata.lastActionRoundInfo?.currentRound ||
-    1;
-
-  return [
-    {
-      sessionId,
-      variableName: actionId,
-      value: fullSnapshot,
-      scope: 'session',
-      valueType: 'object',
-      source: 'script_executor',
-      actionId,
-      phaseId,
-      topicId,
-      round,
-    },
-  ];
-}
-
 // ---- Debug entry round ----
 
 /**
@@ -308,4 +240,136 @@ export function determineDebugEntryRound(
     (metadata.lastActionRoundInfo as any)?.currentRound ||
     1
   );
+}
+
+// ---- Position enhancement ----
+
+export interface EnhancedPosition {
+  phaseIndex: number;
+  phaseId: string;
+  topicIndex: number;
+  topicId: string;
+  actionIndex: number;
+  actionId: string;
+  actionType: string;
+  currentRound?: number;
+  maxRounds?: number;
+}
+
+/**
+ * Map position indices to actual phase/topic/action IDs from parsed YAML structure.
+ * Also extracts round info from metadata.
+ */
+export function enhancePositionWithIds(
+  parsedScript: any,
+  position: { phaseIndex: number; topicIndex: number; actionIndex: number } | null | undefined,
+  metadata?: Record<string, any> | null
+): EnhancedPosition | null {
+  if (!parsedScript || !position) return null;
+
+  const sessionData = parsedScript.session || parsedScript;
+  const phases = sessionData.phases || [];
+  const roundInfo = metadata?.lastActionRoundInfo || metadata?.actionState || {};
+
+  const pos = {
+    phaseIndex: position.phaseIndex ?? 0,
+    topicIndex: position.topicIndex ?? 0,
+    actionIndex: position.actionIndex ?? 0,
+  };
+
+  if (phases.length <= pos.phaseIndex) return null;
+
+  const phase = phases[pos.phaseIndex];
+  const result: EnhancedPosition = {
+    phaseIndex: pos.phaseIndex,
+    phaseId: phase.phase_id || `phase_${pos.phaseIndex}`,
+    topicIndex: pos.topicIndex,
+    topicId: '',
+    actionIndex: pos.actionIndex,
+    actionId: '',
+    actionType: '',
+    currentRound: roundInfo.currentRound,
+    maxRounds: roundInfo.maxRounds,
+  };
+
+  if (phase.topics && phase.topics.length > pos.topicIndex) {
+    const topic = phase.topics[pos.topicIndex];
+    result.topicId = topic.topic_id || `topic_${pos.topicIndex}`;
+
+    if (topic.actions && topic.actions.length > pos.actionIndex) {
+      const action = topic.actions[pos.actionIndex];
+      result.actionId = action.action_id || `action_${pos.actionIndex}`;
+      result.actionType = action.action_type || 'unknown';
+    }
+  }
+
+  return result;
+}
+
+// ---- Session-based utilities (Phase 2: Session domain activation) ----
+
+/**
+ * Build variable snapshots from a Session domain object.
+ */
+export function buildVariableSnapshotsFromSession(
+  sessionId: string,
+  session: Session
+): NewVariable[] {
+  const variableStore = session.variableStore || {};
+  const fullSnapshot: Record<string, unknown> = {};
+
+  for (const scope of ['global', 'session', 'phase', 'topic'] as const) {
+    const scopeData = (variableStore as any)[scope] || {};
+    const flatScope: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(scopeData)) {
+      flatScope[key] = (entry as any)?.value ?? entry;
+    }
+    fullSnapshot[scope] = flatScope;
+  }
+
+  const actionId = session.position.actionId || `action_${session.position.actionIndex}`;
+  const phaseId = session.position.phaseId || `phase_${session.position.phaseIndex}`;
+  const topicId = session.position.topicId || `topic_${session.position.topicIndex}`;
+  const round =
+    (session.metadata.actionRoundInfo as any)?.[actionId]?.currentRound ||
+    (session.metadata.lastActionRoundInfo as any)?.currentRound ||
+    1;
+
+  return [
+    {
+      sessionId,
+      variableName: actionId,
+      value: fullSnapshot,
+      scope: 'session',
+      valueType: 'object',
+      source: 'script_executor',
+      actionId,
+      phaseId,
+      topicId,
+      round,
+    },
+  ];
+}
+
+/**
+ * Extract exit reason from a Session domain object.
+ */
+export function extractExitReasonFromSession(
+  session: Session
+): 'collected' | 'resistance' | 'crisis' | 'max_rounds' | 'user_interrupt' | undefined {
+  const exitDecisions = session.metadata.exitDecisions;
+  if (exitDecisions && exitDecisions.length > 0) {
+    const lastDecision = exitDecisions[exitDecisions.length - 1];
+    const reason = (lastDecision?.decision as any)?.reason;
+    if (
+      reason === 'collected' ||
+      reason === 'resistance' ||
+      reason === 'crisis' ||
+      reason === 'max_rounds' ||
+      reason === 'user_interrupt'
+    ) {
+      return reason;
+    }
+  }
+  return undefined;
 }

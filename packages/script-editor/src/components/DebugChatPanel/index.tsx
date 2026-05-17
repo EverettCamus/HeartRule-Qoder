@@ -53,7 +53,8 @@ interface DebugChatPanelProps {
  * Extract ordered action IDs from the navigation tree (execution order).
  * Used to determine which actions come before/after a rollback target.
  */
-function getOrderedActionIds(tree: NavigationTreeType | null): string[] {
+function getOrderedActionIds(tree: NavigationTreeType | null, serverIds?: string[]): string[] {
+  if (serverIds && serverIds.length > 0) return serverIds;
   const ids: string[] = [];
   if (tree?.phases) {
     for (const phase of tree.phases) {
@@ -386,7 +387,10 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       // Entries for actions BEFORE the target (any runId) are preserved.
       let entries = result.data;
       if (rollbackFilter) {
-        const orderedActionIds = getOrderedActionIds(navigationTreeRef.current);
+        const orderedActionIds = getOrderedActionIds(
+          navigationTreeRef.current,
+          sessionInfo?.orderedActionIds
+        );
         const targetIdx = orderedActionIds.indexOf(rollbackFilter.excludeStaleForTarget);
         if (targetIdx >= 0) {
           const actionsBeforeTarget = new Set(orderedActionIds.slice(0, targetIdx));
@@ -1437,7 +1441,10 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     setDebugBubblesV2([]);
 
     if (mode === 'rollback' && targetActionId) {
-      const orderedActionIds = getOrderedActionIds(navigationTreeRef.current);
+      const orderedActionIds = getOrderedActionIds(
+        navigationTreeRef.current,
+        sessionInfo?.orderedActionIds
+      );
       const targetIdx = orderedActionIds.indexOf(targetActionId);
       if (targetIdx >= 0) {
         const actionsToClear = new Set(orderedActionIds.slice(targetIdx));

@@ -5,7 +5,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { db } from '../db/index.js';
 import { sessions, messages, scripts, debugEntries } from '../db/schema.js';
-import { SessionManager } from '../services/session-manager.js';
+import { SessionOrchestrator } from '../services/session-orchestrator.js';
+import { enhancePositionWithIds } from '../services/session-variable-utils.js';
 import { sendErrorResponse, logError } from '../utils/error-handler.js';
 
 /**
@@ -141,8 +142,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         }
 
         // 初始化会话，获取第一条 AI 消息
-        const sessionManager = new SessionManager();
-        const initResult = await sessionManager.initializeSession(sessionId);
+        const orchestrator = new SessionOrchestrator();
+        const initResult = await orchestrator.initializeSession(sessionId);
 
         // 调试日志
         app.log.info(
@@ -382,45 +383,17 @@ export async function registerSessionRoutes(app: FastifyInstance) {
 
         // 构建完整的 position 信息（包含 ID 字段）
         if (script?.parsedContent && session.position) {
-          const pos = session.position as any;
-          const parsedScript = script.parsedContent as any;
-          const sessionData = parsedScript.session || parsedScript;
-          const phases = sessionData.phases || [];
-
-          // 从 metadata 中提取回合数信息
-          const metadata = (session.metadata as any) || {};
-          const roundInfo = metadata.lastActionRoundInfo || metadata.actionState || {};
-
-          if (phases.length > pos.phaseIndex) {
-            const phase = phases[pos.phaseIndex];
-            response.position = {
-              phaseIndex: pos.phaseIndex,
-              phaseId: phase.phase_id || `phase_${pos.phaseIndex}`,
-              topicIndex: pos.topicIndex,
-              topicId: '',
-              actionIndex: pos.actionIndex,
-              actionId: '',
-              actionType: '',
-              // 添加回合数信息
-              currentRound: roundInfo.currentRound,
-              maxRounds: roundInfo.maxRounds,
-            };
-
-            if (phase.topics && phase.topics.length > pos.topicIndex) {
-              const topic = phase.topics[pos.topicIndex];
-              response.position.topicId = topic.topic_id || `topic_${pos.topicIndex}`;
-
-              if (topic.actions && topic.actions.length > pos.actionIndex) {
-                const action = topic.actions[pos.actionIndex];
-                response.position.actionId = action.action_id || `action_${pos.actionIndex}`;
-                response.position.actionType = action.action_type || 'unknown';
-              }
-            }
-
+          const enhanced = enhancePositionWithIds(
+            script.parsedContent,
+            session.position as any,
+            (session.metadata as any) || {}
+          );
+          if (enhanced) {
+            response.position = enhanced;
             app.log.info(
               {
-                originalPosition: pos,
-                enhancedPosition: response.position,
+                originalPosition: session.position,
+                enhancedPosition: enhanced,
               },
               'Session detail - enhanced position with IDs'
             );
@@ -753,9 +726,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           where: eq(scripts.id, session.scriptId),
         });
 
-        // 调用SessionManager处理用户输入
-        const sessionManager = new SessionManager();
-        const result = await sessionManager.processUserInput(id, content);
+        // 调用 SessionOrchestrator 处理用户输入
+        const orchestrator = new SessionOrchestrator();
+        const result = await orchestrator.processUserInput(id, content);
 
         app.log.info(
           {
@@ -922,8 +895,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           };
         }
 
-        const sessionManager = new SessionManager();
-        const result = await sessionManager.updateVariable(session as any, {
+        const orchestrator = new SessionOrchestrator();
+        const result = await orchestrator.updateVariable(session as any, {
           variableName,
           scope,
           value,
@@ -1024,61 +997,14 @@ export async function registerSessionRoutes(app: FastifyInstance) {
             llmConfig?: Record<string, any>;
           }) || {};
 
-        const sessionManager = new SessionManager();
+        const orchestrator = new SessionOrchestrator();
 
-        const result = await sessionManager.rerunAction(
+        const result = await orchestrator.rerunAction(
           sessionId,
           body.targetActionId,
           body.config,
           body.llmConfig
         );
-
-        // Record version in rerunHistory
-        const session = await db.query.sessions.findFirst({
-          where: eq(sessions.id, sessionId),
-        });
-        if (session) {
-          const metadata = (session.metadata as Record<string, any>) || {};
-          const rerunHistory = (metadata.rerunHistory || []) as any[];
-          const actionId =
-            body.targetActionId ||
-            (session.position as Record<string, any>)?.actionId ||
-            metadata.currentActionId;
-
-          const newVersion: any = {
-            versionId: uuidv4(),
-            actionId,
-            runId: result.currentRunId,
-            timestamp: new Date().toISOString(),
-            config: body.config ?? {},
-            llmConfig: body.llmConfig ?? undefined,
-            result: {
-              roundsUsed: (result as any).currentRound ?? 0,
-              exitReason: (result as any).exitReason || undefined,
-              variableCount: result.variables ? Object.keys(result.variables).length : 0,
-            },
-          };
-
-          // Per-action limit: max 20 versions, remove oldest (except v1) if exceeded
-          const actionVersions = rerunHistory.filter((e: any) => e.actionId === actionId);
-          while (actionVersions.length >= 20) {
-            const oldestNonV1 = actionVersions.find(
-              (e: any) => e.versionId !== actionVersions[0]?.versionId
-            );
-            if (!oldestNonV1) break;
-            const idx = rerunHistory.indexOf(oldestNonV1);
-            rerunHistory.splice(idx, 1);
-            actionVersions.splice(actionVersions.indexOf(oldestNonV1), 1);
-          }
-
-          rerunHistory.push(newVersion);
-          metadata.rerunHistory = rerunHistory;
-
-          await db
-            .update(sessions)
-            .set({ metadata, updatedAt: new Date() })
-            .where(eq(sessions.id, sessionId));
-        }
 
         return result;
       } catch (error: any) {

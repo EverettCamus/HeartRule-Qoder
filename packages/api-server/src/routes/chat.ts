@@ -4,10 +4,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { db } from '../db/index.js';
 import { sessions, messages } from '../db/schema.js';
-import { SessionManager } from '../services/session-manager.js';
+import { SessionOrchestrator } from '../services/session-orchestrator.js';
 
-// 创建SessionManager单例
-const sessionManager = new SessionManager();
+const orchestrator = new SessionOrchestrator();
 
 /**
  * 注册聊天相关路由
@@ -68,8 +67,7 @@ export async function registerChatRoutes(app: FastifyInstance) {
           });
         }
 
-        // 调用SessionManager处理用户输入
-        const result = await sessionManager.processUserInput(sessionId, message);
+        const result = await orchestrator.processUserInput(sessionId, message);
 
         return {
           aiMessage: result.aiMessage,
