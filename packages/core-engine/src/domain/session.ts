@@ -3,10 +3,15 @@ import {
   ExecutionStatus,
   type ExecutionPosition,
   type VariableStore,
+  type TopicPlan,
 } from '@heartrule/shared-types';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { LLMDebugInfo } from '../engines/llm-orchestration/orchestrator.js';
+import type {
+  ExecutionState,
+  ExecutionMetadata,
+} from '../engines/script-execution/script-executor.js';
 
 import type { BaseAction } from './actions/base-action.js';
 
@@ -18,6 +23,22 @@ export interface ConversationEntry {
   content: string;
   actionId?: string;
   metadata?: Record<string, any>;
+}
+
+/**
+ * Lightweight persistence shape — matches the DB row returned by SessionRepository.
+ * Defined here so the domain class stays package-agnostic (no api-server import).
+ */
+export interface SessionPersistenceData {
+  id: string;
+  scriptId: string;
+  userId: string;
+  status: string;
+  executionStatus: string;
+  variables: Record<string, unknown> | null;
+  position: Record<string, unknown> | null;
+  metadata: Record<string, any> | null;
+  currentRunId?: string;
 }
 
 /**
@@ -37,17 +58,17 @@ export class Session {
   public executionStatus: ExecutionStatus;
   public position: ExecutionPosition;
 
-  // 变量管理（双轨制）
-  public variables: Map<string, unknown>; // 旧版：扁平变量存储
-  public variableStore?: VariableStore; // 新版：分层变量存储
+  public variables: Record<string, unknown>;
+  public variableStore?: VariableStore;
 
-  // 执行状态扩展
-  public currentAction: BaseAction | null; // 当前正在执行的 Action 实例
-  public conversationHistory: ConversationEntry[]; // 对话历史
-  public lastAiMessage: string | null; // 最近的 AI 消息
-  public lastLLMDebugInfo: LLMDebugInfo[]; // LLM 调试信息（累积所有LLM调用）
+  public currentAction: BaseAction | null;
+  public conversationHistory: ConversationEntry[];
+  public lastAiMessage: string | null;
+  public lastLLMDebugInfo: LLMDebugInfo[];
 
-  public metadata: Map<string, unknown>;
+  public metadata: ExecutionMetadata;
+  public currentTopicPlan?: TopicPlan;
+
   public createdAt: Date;
   public updatedAt: Date;
   public completedAt?: Date;
@@ -59,13 +80,14 @@ export class Session {
     status?: SessionStatus;
     executionStatus?: ExecutionStatus;
     position?: ExecutionPosition;
-    variables?: Map<string, unknown>;
+    variables?: Record<string, unknown>;
     variableStore?: VariableStore;
     currentAction?: BaseAction | null;
     conversationHistory?: ConversationEntry[];
     lastAiMessage?: string | null;
     lastLLMDebugInfo?: LLMDebugInfo[];
-    metadata?: Map<string, unknown>;
+    metadata?: ExecutionMetadata;
+    currentTopicPlan?: TopicPlan;
     createdAt?: Date;
     updatedAt?: Date;
     completedAt?: Date;
@@ -76,7 +98,7 @@ export class Session {
     this.status = params.status || SessionStatus.ACTIVE;
     this.executionStatus = params.executionStatus || ExecutionStatus.RUNNING;
     this.position = params.position || { phaseIndex: 0, topicIndex: 0, actionIndex: 0 };
-    this.variables = params.variables || new Map();
+    this.variables = params.variables || {};
     this.variableStore = params.variableStore || {
       global: {},
       session: {},
@@ -87,33 +109,27 @@ export class Session {
     this.conversationHistory = params.conversationHistory || [];
     this.lastAiMessage = params.lastAiMessage || null;
     this.lastLLMDebugInfo = params.lastLLMDebugInfo || [];
-    this.metadata = params.metadata || new Map();
+    this.metadata = params.metadata || {};
+    this.currentTopicPlan = params.currentTopicPlan;
     this.createdAt = params.createdAt || new Date();
     this.updatedAt = params.updatedAt || new Date();
     this.completedAt = params.completedAt;
   }
 
-  /**
-   * 启动会话
-   */
+  // ---- State machine ----
+
   start(): void {
     this.status = SessionStatus.ACTIVE;
     this.executionStatus = ExecutionStatus.RUNNING;
     this.updatedAt = new Date();
   }
 
-  /**
-   * 暂停会话
-   */
   pause(): void {
     this.status = SessionStatus.PAUSED;
     this.executionStatus = ExecutionStatus.PAUSED;
     this.updatedAt = new Date();
   }
 
-  /**
-   * 恢复会话
-   */
   resume(): void {
     if (this.status === SessionStatus.PAUSED) {
       this.status = SessionStatus.ACTIVE;
@@ -122,9 +138,6 @@ export class Session {
     }
   }
 
-  /**
-   * 完成会话
-   */
   complete(): void {
     this.status = SessionStatus.COMPLETED;
     this.executionStatus = ExecutionStatus.COMPLETED;
@@ -132,74 +145,187 @@ export class Session {
     this.updatedAt = new Date();
   }
 
-  /**
-   * 会话失败
-   */
   fail(error: string): void {
     this.status = SessionStatus.FAILED;
     this.executionStatus = ExecutionStatus.ERROR;
-    this.metadata.set('error', error);
+    this.metadata.error = error;
     this.updatedAt = new Date();
   }
 
-  /**
-   * 更新执行位置
-   */
+  // ---- Position ----
+
   updatePosition(position: ExecutionPosition): void {
     this.position = position;
     this.updatedAt = new Date();
   }
 
-  /**
-   * 设置变量（兼容旧版）
-   */
+  // ---- Variables ----
+
   setVariable(name: string, value: unknown): void {
-    this.variables.set(name, value);
+    this.variables[name] = value;
     this.updatedAt = new Date();
   }
 
-  /**
-   * 获取变量（兼容旧版）
-   */
   getVariable(name: string): unknown {
-    return this.variables.get(name);
+    return this.variables[name];
   }
 
-  /**
-   * 添加对话历史条目
-   */
+  // ---- Conversation ----
+
   addConversationEntry(entry: ConversationEntry): void {
     this.conversationHistory.push(entry);
     this.updatedAt = new Date();
   }
 
-  /**
-   * 设置当前正在执行的 Action
-   */
+  // ---- Action ----
+
   setCurrentAction(action: BaseAction | null): void {
     this.currentAction = action;
     this.updatedAt = new Date();
   }
 
-  /**
-   * 标记为等待用户输入
-   */
+  // ---- Execution status helpers ----
+
   waitForInput(): void {
     this.executionStatus = ExecutionStatus.WAITING_INPUT;
     this.updatedAt = new Date();
   }
 
-  /**
-   * 恢复运行状态
-   */
   resumeRunning(): void {
     this.executionStatus = ExecutionStatus.RUNNING;
     this.updatedAt = new Date();
   }
 
+  // ---- ExecutionState bridge ----
+
   /**
-   * 转换为JSON对象
+   * Build an ExecutionState snapshot for passing to ScriptExecutor.
+   * The ScriptExecutor and its internal engines mutate ExecutionState;
+   * call applyExecutionResult() afterwards to sync changes back.
    */
+  toExecutionState(): ExecutionState {
+    return {
+      status: this.executionStatus,
+      currentPhaseIdx: this.position.phaseIndex,
+      currentTopicIdx: this.position.topicIndex,
+      currentActionIdx: this.position.actionIndex,
+      currentAction: this.currentAction,
+      variables: { ...this.variables },
+      variableStore: this.variableStore,
+      conversationHistory: [...this.conversationHistory],
+      metadata: { ...this.metadata },
+      lastAiMessage: this.lastAiMessage,
+      lastLLMDebugInfo: this.lastLLMDebugInfo ? [...this.lastLLMDebugInfo] : [],
+      currentPhaseId: this.position.phaseId,
+      currentTopicId: this.position.topicId,
+      currentActionId: this.position.actionId,
+      currentActionType: this.position.actionType,
+      currentTopicPlan: this.currentTopicPlan,
+    };
+  }
+
+  /**
+   * Sync mutated ExecutionState fields back into this Session.
+   * Called after ScriptExecutor.executeSession() returns.
+   */
+  applyExecutionResult(state: ExecutionState): void {
+    this.executionStatus = state.status;
+    this.position = {
+      phaseIndex: state.currentPhaseIdx,
+      topicIndex: state.currentTopicIdx,
+      actionIndex: state.currentActionIdx,
+      phaseId: state.currentPhaseId,
+      topicId: state.currentTopicId,
+      actionId: state.currentActionId,
+      actionType: state.currentActionType,
+    };
+    this.currentAction = state.currentAction;
+    this.variables = { ...state.variables };
+    this.variableStore = state.variableStore;
+    this.conversationHistory = [...state.conversationHistory];
+    this.metadata = { ...state.metadata };
+    this.lastAiMessage = state.lastAiMessage;
+    this.lastLLMDebugInfo = state.lastLLMDebugInfo ? [...state.lastLLMDebugInfo] : [];
+    this.currentTopicPlan = state.currentTopicPlan;
+    this.updatedAt = new Date();
+  }
+
+  // ---- Factory ----
+
+  /**
+   * Rebuild a Session from database row data.
+   *
+   * Handles the DB-to-domain mapping:
+   * - DB status strings → SessionStatus/ExecutionStatus enums
+   * - JSONB position → ExecutionPosition
+   * - Metadata variableStore extraction
+   * - Global variable sync into variableStore.global
+   * - currentRunId injection
+   */
+  static fromSessionData(
+    data: SessionPersistenceData,
+    options: {
+      globalVariables: Record<string, any>;
+      conversationHistory: ConversationEntry[];
+    }
+  ): Session {
+    const pos = (data.position as Record<string, any>) || {};
+    const meta = (data.metadata as Record<string, any>) || {};
+    const variableStore = meta.variableStore || {
+      global: {},
+      session: {},
+      phase: {},
+      topic: {},
+    };
+
+    if (options.globalVariables) {
+      if (!variableStore.global) variableStore.global = {};
+      for (const [key, value] of Object.entries(options.globalVariables)) {
+        if (!variableStore.global[key]) {
+          variableStore.global[key] = {
+            value,
+            type: typeof value,
+            source: 'global_sync',
+            lastUpdated: new Date().toISOString(),
+            scope: 'global',
+          };
+        }
+      }
+    }
+
+    if (data.currentRunId) {
+      meta.currentRunId = data.currentRunId;
+    }
+
+    return new Session({
+      sessionId: data.id,
+      userId: data.userId,
+      scriptId: data.scriptId,
+      status: (data.status as SessionStatus) || SessionStatus.ACTIVE,
+      executionStatus: (data.executionStatus as ExecutionStatus) || ExecutionStatus.RUNNING,
+      position: {
+        phaseIndex: pos.phaseIndex ?? 0,
+        topicIndex: pos.topicIndex ?? 0,
+        actionIndex: pos.actionIndex ?? 0,
+        phaseId: pos.phaseId,
+        topicId: pos.topicId,
+        actionId: pos.actionId,
+        actionType: pos.actionType,
+      },
+      variables: {
+        ...options.globalVariables,
+        ...((data.variables as Record<string, unknown>) || {}),
+      },
+      variableStore,
+      conversationHistory: options.conversationHistory,
+      metadata: meta as ExecutionMetadata,
+      lastAiMessage: null,
+      lastLLMDebugInfo: [],
+    });
+  }
+
+  // ---- Serialisation ----
+
   toJSON(): Record<string, unknown> {
     return {
       sessionId: this.sessionId,
@@ -208,7 +334,7 @@ export class Session {
       status: this.status,
       executionStatus: this.executionStatus,
       position: this.position,
-      variables: Object.fromEntries(this.variables),
+      variables: this.variables,
       variableStore: this.variableStore,
       currentAction: this.currentAction
         ? {
@@ -219,7 +345,8 @@ export class Session {
       conversationHistory: this.conversationHistory,
       lastAiMessage: this.lastAiMessage,
       lastLLMDebugInfo: this.lastLLMDebugInfo,
-      metadata: Object.fromEntries(this.metadata),
+      metadata: this.metadata,
+      currentTopicPlan: this.currentTopicPlan,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
       completedAt: this.completedAt?.toISOString(),

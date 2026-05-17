@@ -1389,7 +1389,11 @@ export class ScriptExecutor {
   }
 
   /**
-   * Create initial execution state
+   * Create initial execution state.
+   *
+   * @deprecated Use `new Session()` + `session.toExecutionState()` instead.
+   *             Session is the canonical source for fresh execution state.
+   *             This static factory remains for test backward compatibility.
    */
   static createInitialState(): ExecutionState {
     return {
