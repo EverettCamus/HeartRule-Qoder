@@ -1,9 +1,7 @@
-import { eq, desc, and, inArray } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
-import { db } from '../db/index.js';
-import { projects, projectDrafts, projectVersions, scriptFiles } from '../db/schema.js';
+import { ProjectRepository } from '../services/project-repository.js';
 
 // Schema定义
 const saveDraftSchema = z.object({
@@ -26,8 +24,8 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/projects/:id/draft', async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
-
-      const [draft] = await db.select().from(projectDrafts).where(eq(projectDrafts.projectId, id));
+      const repo = new ProjectRepository();
+      const draft = await repo.findDraftByProjectId(id);
 
       if (!draft) {
         return reply.status(404).send({
@@ -54,9 +52,10 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       const { id } = request.params as { id: string };
       const body = saveDraftSchema.parse(request.body);
+      const repo = new ProjectRepository();
 
       // 检查项目是否存在
-      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      const project = await repo.findProjectById(id);
 
       if (!project) {
         return reply.status(404).send({
@@ -66,37 +65,13 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // 更新或插入草稿
-      const [existingDraft] = await db
-        .select()
-        .from(projectDrafts)
-        .where(eq(projectDrafts.projectId, id));
-
-      let result;
-      if (existingDraft) {
-        [result] = await db
-          .update(projectDrafts)
-          .set({
-            draftFiles: body.draftFiles,
-            updatedBy: body.updatedBy,
-            updatedAt: new Date(),
-            validationStatus: 'unknown',
-          })
-          .where(eq(projectDrafts.projectId, id))
-          .returning();
-      } else {
-        [result] = await db
-          .insert(projectDrafts)
-          .values({
-            projectId: id,
-            draftFiles: body.draftFiles,
-            updatedBy: body.updatedBy,
-            validationStatus: 'unknown',
-          })
-          .returning();
-      }
+      const result = await repo.upsertDraft(id, {
+        draftFiles: body.draftFiles,
+        updatedBy: body.updatedBy,
+      });
 
       // 更新项目的更新时间
-      await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, id));
+      await repo.updateProject(id, { updatedAt: new Date() });
 
       return reply.send({
         success: true,
@@ -123,9 +98,10 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       const { id } = request.params as { id: string };
       const body = publishVersionSchema.parse(request.body);
+      const repo = new ProjectRepository();
 
       // 获取项目和草稿
-      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      const project = await repo.findProjectById(id);
 
       if (!project) {
         return reply.status(404).send({
@@ -134,7 +110,7 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const [draft] = await db.select().from(projectDrafts).where(eq(projectDrafts.projectId, id));
+      const draft = await repo.findDraftByProjectId(id);
 
       if (!draft) {
         return reply.status(404).send({
@@ -144,7 +120,7 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // 获取所有文件
-      const files = await db.select().from(scriptFiles).where(eq(scriptFiles.projectId, id));
+      const files = await repo.findScriptFilesByProjectId(id);
 
       // 创建版本记录
       const versionFiles = files.reduce(
@@ -160,27 +136,19 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
         {} as Record<string, any>
       );
 
-      const [newVersion] = await db
-        .insert(projectVersions)
-        .values({
-          projectId: id,
-          versionNumber: body.versionNumber,
-          versionFiles,
-          releaseNote: body.releaseNote,
-          publishedBy: body.publishedBy,
-          isRollback: 'false',
-        })
-        .returning();
+      const newVersion = await repo.createVersion({
+        projectId: id,
+        versionNumber: body.versionNumber,
+        versionFiles,
+        releaseNote: body.releaseNote,
+        publishedBy: body.publishedBy,
+      });
 
       // 更新项目的当前版本和状态
-      await db
-        .update(projects)
-        .set({
-          currentVersionId: newVersion.id,
-          status: 'published',
-          updatedAt: new Date(),
-        })
-        .where(eq(projects.id, id));
+      await repo.updateProject(id, {
+        currentVersionId: newVersion.id,
+        status: 'published',
+      });
 
       return reply.status(201).send({
         success: true,
@@ -206,12 +174,8 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/projects/:id/versions', async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
-
-      const versions = await db
-        .select()
-        .from(projectVersions)
-        .where(eq(projectVersions.projectId, id))
-        .orderBy(desc(projectVersions.publishedAt));
+      const repo = new ProjectRepository();
+      const versions = await repo.findVersionsByProjectId(id);
 
       return reply.send({
         success: true,
@@ -230,11 +194,8 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/projects/:id/versions/:versionId', async (request, reply) => {
     try {
       const { id, versionId } = request.params as { id: string; versionId: string };
-
-      const [version] = await db
-        .select()
-        .from(projectVersions)
-        .where(and(eq(projectVersions.projectId, id), eq(projectVersions.id, versionId))!);
+      const repo = new ProjectRepository();
+      const version = await repo.findVersionById(id, versionId);
 
       if (!version) {
         return reply.status(404).send({
@@ -264,12 +225,10 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
         targetVersionId: string;
         publishedBy: string;
       };
+      const repo = new ProjectRepository();
 
       // 获取目标版本
-      const [targetVersion] = await db
-        .select()
-        .from(projectVersions)
-        .where(and(eq(projectVersions.projectId, id), eq(projectVersions.id, targetVersionId))!);
+      const targetVersion = await repo.findVersionById(id, targetVersionId);
 
       if (!targetVersion) {
         return reply.status(404).send({
@@ -281,80 +240,48 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
       // 恢复文件到目标版本
       const versionFiles = targetVersion.versionFiles as Record<string, any>;
 
-      // 1. 获取工作区当前所有文件
-      const currentFiles = await db
-        .select({ id: scriptFiles.id })
-        .from(scriptFiles)
-        .where(eq(scriptFiles.projectId, id));
-      const currentFileIds = currentFiles.map((f) => f.id);
+      // 1. 获取工作区当前所有文件ID
+      const currentFileIds = await repo.findScriptFileIdsByProjectId(id);
 
       // 2. 删除工作区中存在但目标版本中不存在的文件
       const idsToDelete = currentFileIds.filter((fileId) => !versionFiles[fileId]);
-      if (idsToDelete.length > 0) {
-        await db.delete(scriptFiles).where(inArray(scriptFiles.id, idsToDelete));
-      }
+      await repo.deleteScriptFiles(idsToDelete);
 
       // 3. 恢复/更新文件内容
-      for (const [fileId, fileData] of Object.entries(versionFiles)) {
-        if (currentFileIds.includes(fileId)) {
-          // 更新已存在的文件
-          await db
-            .update(scriptFiles)
-            .set({
-              fileName: fileData.fileName,
-              fileType: fileData.fileType,
-              fileContent: fileData.fileContent,
-              yamlContent: fileData.yamlContent,
-              updatedAt: new Date(),
-            })
-            .where(eq(scriptFiles.id, fileId));
-        } else {
-          // 恢复在当前工作区已被删除的文件
-          await db.insert(scriptFiles).values({
-            id: fileId,
-            projectId: id,
-            fileName: fileData.fileName,
-            fileType: fileData.fileType,
-            fileContent: fileData.fileContent,
-            yamlContent: fileData.yamlContent,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
-        }
-      }
+      const filesToRestore = Object.entries(versionFiles).map(([fileId, fileData]) => ({
+        id: fileId,
+        fileName: fileData.fileName as string,
+        fileType: fileData.fileType as
+          | 'session'
+          | 'global'
+          | 'roles'
+          | 'skills'
+          | 'forms'
+          | 'rules'
+          | 'template',
+        fileContent: fileData.fileContent,
+        yamlContent: fileData.yamlContent,
+      }));
+      await repo.upsertScriptFiles(filesToRestore, id);
 
       // 创建新版本（标记为回滚）
-      const versions = await db
-        .select()
-        .from(projectVersions)
-        .where(eq(projectVersions.projectId, id))
-        .orderBy(desc(projectVersions.publishedAt));
-
+      const versions = await repo.findVersionsByProjectId(id);
       const latestVersion = versions[0];
       const versionParts = latestVersion.versionNumber.split('.');
       const newVersionNumber = `${versionParts[0]}.${versionParts[1]}.${parseInt(versionParts[2]) + 1}`;
 
-      const [newVersion] = await db
-        .insert(projectVersions)
-        .values({
-          projectId: id,
-          versionNumber: newVersionNumber,
-          versionFiles: targetVersion.versionFiles,
-          releaseNote: `回滚到版本 ${targetVersion.versionNumber}`,
-          publishedBy,
-          isRollback: 'true',
-          rollbackFromVersionId: targetVersionId,
-        })
-        .returning();
+      const newVersion = await repo.createVersion({
+        projectId: id,
+        versionNumber: newVersionNumber,
+        versionFiles: targetVersion.versionFiles,
+        releaseNote: `回滚到版本 ${targetVersion.versionNumber}`,
+        publishedBy,
+        isRollback: 'true',
+        rollbackFromVersionId: targetVersionId,
+      });
 
       // 更新项目
-      await db
-        .update(projects)
-        .set({
-          currentVersionId: newVersion.id,
-          updatedAt: new Date(),
-        })
-        .where(eq(projects.id, id));
+      await repo.updateProject(id, { currentVersionId: newVersion.id });
 
       return reply.send({
         success: true,
@@ -374,87 +301,61 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       const { id } = request.params as { id: string };
       const body = setCurrentVersionSchema.parse(request.body);
-  
+      const repo = new ProjectRepository();
+
       // 检查项目是否存在
-      const [project] = await db.select().from(projects).where(eq(projects.id, id));
-  
+      const project = await repo.findProjectById(id);
+
       if (!project) {
         return reply.status(404).send({
           success: false,
           error: 'Project not found',
         });
       }
-  
+
       // 检查目标版本是否存在且属于该项目
-      const [targetVersion] = await db
-        .select()
-        .from(projectVersions)
-        .where(and(eq(projectVersions.projectId, id), eq(projectVersions.id, body.versionId))!);
-  
+      const targetVersion = await repo.findVersionById(id, body.versionId);
+
       if (!targetVersion) {
         return reply.status(404).send({
           success: false,
           error: 'Version not found',
         });
       }
-  
+
       // 记录旧版本 ID
       const previousVersionId = project.currentVersionId;
-      
+
       // 将目标版本的文件快照恢复到工作区
       const versionFiles = targetVersion.versionFiles as Record<string, any>;
-      
-      // 1. 获取工作区当前所有文件
-      const currentFiles = await db
-        .select({ id: scriptFiles.id })
-        .from(scriptFiles)
-        .where(eq(scriptFiles.projectId, id));
-      const currentFileIds = currentFiles.map((f) => f.id);
-      
+
+      // 1. 获取工作区当前所有文件ID
+      const currentFileIds = await repo.findScriptFileIdsByProjectId(id);
+
       // 2. 删除工作区中存在但目标版本中不存在的文件
       const idsToDelete = currentFileIds.filter((fileId) => !versionFiles[fileId]);
-      if (idsToDelete.length > 0) {
-        await db.delete(scriptFiles).where(inArray(scriptFiles.id, idsToDelete));
-      }
-      
+      await repo.deleteScriptFiles(idsToDelete);
+
       // 3. 恢复/更新文件内容
-      for (const [fileId, fileData] of Object.entries(versionFiles)) {
-        if (currentFileIds.includes(fileId)) {
-          // 更新已存在的文件
-          await db
-            .update(scriptFiles)
-            .set({
-              fileName: fileData.fileName,
-              fileType: fileData.fileType,
-              fileContent: fileData.fileContent,
-              yamlContent: fileData.yamlContent,
-              updatedAt: new Date(),
-            })
-            .where(eq(scriptFiles.id, fileId));
-        } else {
-          // 恢复在当前工作区已被删除的文件
-          await db.insert(scriptFiles).values({
-            id: fileId,
-            projectId: id,
-            fileName: fileData.fileName,
-            fileType: fileData.fileType,
-            fileContent: fileData.fileContent,
-            yamlContent: fileData.yamlContent,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
-        }
-      }
-      
+      const filesToRestore = Object.entries(versionFiles).map(([fileId, fileData]) => ({
+        id: fileId,
+        fileName: fileData.fileName as string,
+        fileType: fileData.fileType as
+          | 'session'
+          | 'global'
+          | 'roles'
+          | 'skills'
+          | 'forms'
+          | 'rules'
+          | 'template',
+        fileContent: fileData.fileContent,
+        yamlContent: fileData.yamlContent,
+      }));
+      await repo.upsertScriptFiles(filesToRestore, id);
+
       // 更新项目的当前版本
-      await db
-        .update(projects)
-        .set({
-          currentVersionId: body.versionId,
-          updatedAt: new Date(),
-        })
-        .where(eq(projects.id, id));
-  
+      await repo.updateProject(id, { currentVersionId: body.versionId });
+
       return reply.send({
         success: true,
         data: {
@@ -485,11 +386,9 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       const { id, versionId } = request.params as { id: string; versionId: string };
       const { compareWith } = request.query as { compareWith?: string };
+      const repo = new ProjectRepository();
 
-      const [version] = await db
-        .select()
-        .from(projectVersions)
-        .where(and(eq(projectVersions.projectId, id), eq(projectVersions.id, versionId))!);
+      const version = await repo.findVersionById(id, versionId);
 
       if (!version) {
         return reply.status(404).send({
@@ -500,18 +399,10 @@ const versionsRoutes: FastifyPluginAsync = async (fastify) => {
 
       let compareVersion;
       if (compareWith) {
-        [compareVersion] = await db
-          .select()
-          .from(projectVersions)
-          .where(and(eq(projectVersions.projectId, id), eq(projectVersions.id, compareWith))!);
+        compareVersion = await repo.findVersionById(id, compareWith);
       } else {
         // 默认与前一个版本对比
-        const versions = await db
-          .select()
-          .from(projectVersions)
-          .where(eq(projectVersions.projectId, id))
-          .orderBy(desc(projectVersions.publishedAt));
-
+        const versions = await repo.findVersionsByProjectId(id);
         const currentIndex = versions.findIndex((v) => v.id === versionId);
         if (currentIndex < versions.length - 1) {
           compareVersion = versions[currentIndex + 1];
