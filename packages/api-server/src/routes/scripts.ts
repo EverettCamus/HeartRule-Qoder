@@ -1,11 +1,8 @@
 import { schemaValidator } from '@heartrule/core-engine';
-import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { v4 as uuidv4 } from 'uuid';
 import * as yaml from 'yaml';
 
-import { db } from '../db/index.js';
-import { scripts } from '../db/schema.js';
+import { ScriptRepository } from '../services/script-repository.js';
 
 /**
  * 注册脚本管理路由
@@ -43,19 +40,15 @@ export async function registerScriptRoutes(app: FastifyInstance) {
       };
 
       try {
-        const scriptId = uuidv4();
-        const now = new Date();
-
         // 解析 YAML 内容
         let parsedContent: Record<string, unknown> | null = null;
         try {
           parsedContent = yaml.parse(body.scriptContent);
-          app.log.info({ scriptId }, 'YAML parsed successfully');
 
           // 执行 Schema 验证
           const validationResult = schemaValidator.validateYAML(body.scriptContent);
           if (!validationResult.valid) {
-            app.log.warn({ scriptId, errors: validationResult.errors }, 'Schema validation failed');
+            app.log.warn({ errors: validationResult.errors }, 'Schema validation failed');
             return reply.status(400).send({
               success: false,
               error: 'SCHEMA_VALIDATION_FAILED',
@@ -63,9 +56,8 @@ export async function registerScriptRoutes(app: FastifyInstance) {
               errors: validationResult.errors,
             });
           }
-          app.log.info({ scriptId }, 'Schema validation passed');
         } catch (parseError) {
-          app.log.warn({ scriptId, error: parseError }, 'Failed to parse YAML');
+          app.log.warn({ error: parseError }, 'Failed to parse YAML');
           return reply.status(400).send({
             success: false,
             error: 'YAML_PARSE_ERROR',
@@ -74,23 +66,15 @@ export async function registerScriptRoutes(app: FastifyInstance) {
           });
         }
 
-        await db.insert(scripts).values({
-          id: scriptId,
+        const repo = new ScriptRepository();
+        const script = await repo.create({
           scriptName: body.scriptName,
           scriptType: body.scriptType as 'session' | 'technique' | 'awareness',
           scriptContent: body.scriptContent,
-          parsedContent, // 保存解析后的内容
-          version: '1.0.0',
-          status: 'draft',
+          parsedContent,
           author: body.author,
-          description: body.description || '',
-          tags: body.tags || [],
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        const script = await db.query.scripts.findFirst({
-          where: eq(scripts.id, scriptId),
+          description: body.description,
+          tags: body.tags,
         });
 
         return script;
@@ -124,9 +108,8 @@ export async function registerScriptRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        const script = await db.query.scripts.findFirst({
-          where: eq(scripts.id, id),
-        });
+        const repo = new ScriptRepository();
+        const script = await repo.findById(id);
 
         if (!script) {
           return reply.status(404).send({
@@ -168,12 +151,8 @@ export async function registerScriptRoutes(app: FastifyInstance) {
       // };
 
       try {
-        const query = db.query.scripts.findMany({
-          orderBy: (scripts, { desc }) => [desc(scripts.createdAt)],
-        });
-
-        // TODO: 根据type和status过滤
-        const allScripts = await query;
+        const repo = new ScriptRepository();
+        const allScripts = await repo.listAll();
 
         return {
           scripts: allScripts,
@@ -230,13 +209,12 @@ export async function registerScriptRoutes(app: FastifyInstance) {
       };
 
       try {
+        const repo = new ScriptRepository();
+
         // 检查脚本是否已存在
-        const existingScript = await db.query.scripts.findFirst({
-          where: eq(scripts.scriptName, scriptName),
-        });
+        const existingScript = await repo.findByName(scriptName);
 
         let scriptId: string;
-        const now = new Date();
 
         // 解析 YAML 内容
         let parsedContent: Record<string, unknown> | null = null;
@@ -273,39 +251,36 @@ export async function registerScriptRoutes(app: FastifyInstance) {
           // 脚本已存在，更新内容
           scriptId = existingScript.id;
 
-          // 构建更新数据
-          const updateData: any = {
+          const updateData: {
+            scriptContent: string;
+            parsedContent: Record<string, unknown> | null;
+            description: string;
+            tags?: string[];
+          } = {
             scriptContent: yamlContent,
-            parsedContent, // 更新解析后的内容
+            parsedContent,
             description: description || existingScript.description,
-            updatedAt: now,
           };
 
-          // 如果提供了 projectId，更新 tags
           if (projectId) {
             updateData.tags = ['debug', `project:${projectId}`];
           }
 
-          await db.update(scripts).set(updateData).where(eq(scripts.id, scriptId));
+          await repo.update(scriptId, updateData);
 
           app.log.info({ scriptId, scriptName, projectId }, 'Script updated successfully');
         } else {
           // 脚本不存在，插入新记录
-          scriptId = uuidv4();
-          await db.insert(scripts).values({
-            id: scriptId,
-            scriptName: scriptName,
-            scriptType: 'session', // 调试脚本默认为session类型
+          const created = await repo.create({
+            scriptName,
+            scriptType: 'session',
             scriptContent: yamlContent,
-            parsedContent, // 保存解析后的内容
-            version: '1.0.0',
-            status: 'draft',
+            parsedContent,
             author: 'debug_user',
             description: description || `Debug script: ${scriptName}`,
-            tags: projectId ? ['debug', `project:${projectId}`] : ['debug'], // 将projectId存在tags中
-            createdAt: now,
-            updatedAt: now,
+            tags: projectId ? ['debug', `project:${projectId}`] : ['debug'],
           });
+          scriptId = created.id;
 
           app.log.info({ scriptId, scriptName, projectId }, 'Script imported successfully');
         }
@@ -347,9 +322,8 @@ export async function registerScriptRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        const script = await db.query.scripts.findFirst({
-          where: eq(scripts.id, id),
-        });
+        const repo = new ScriptRepository();
+        const script = await repo.findById(id);
 
         if (!script) {
           return reply.status(404).send({
@@ -416,10 +390,10 @@ export async function registerScriptRoutes(app: FastifyInstance) {
           llmConfig?: Record<string, any>;
         };
 
+        const repo = new ScriptRepository();
+
         // Load script
-        const script = await db.query.scripts.findFirst({
-          where: eq(scripts.id, scriptId),
-        });
+        const script = await repo.findById(scriptId);
         if (!script) {
           return reply.status(404).send({ error: 'Script not found' });
         }
@@ -466,10 +440,7 @@ export async function registerScriptRoutes(app: FastifyInstance) {
 
         // Serialize back to YAML preserving original formatting
         const updatedYaml = doc.toString();
-        await db
-          .update(scripts)
-          .set({ scriptContent: updatedYaml, updatedAt: new Date() })
-          .where(eq(scripts.id, scriptId));
+        await repo.update(scriptId, { scriptContent: updatedYaml });
 
         return { success: true };
       } catch (error: any) {
