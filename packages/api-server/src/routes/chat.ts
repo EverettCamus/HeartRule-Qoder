@@ -1,10 +1,7 @@
-import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { v4 as uuidv4 } from 'uuid';
 
-import { db } from '../db/index.js';
-import { sessions, messages } from '../db/schema.js';
 import { SessionOrchestrator } from '../services/session-orchestrator.js';
+import { SessionRepository } from '../services/session-repository.js';
 
 const orchestrator = new SessionOrchestrator();
 
@@ -56,10 +53,10 @@ export async function registerChatRoutes(app: FastifyInstance) {
       };
 
       try {
+        const repo = new SessionRepository();
+
         // 验证会话是否存在
-        const session = await db.query.sessions.findFirst({
-          where: eq(sessions.id, sessionId),
-        });
+        const session = await repo.loadSessionById(sessionId).catch(() => null);
 
         if (!session) {
           return reply.status(404).send({
@@ -109,10 +106,10 @@ export async function registerChatRoutes(app: FastifyInstance) {
       };
 
       try {
+        const repo = new SessionRepository();
+
         // 验证会话
-        const session = await db.query.sessions.findFirst({
-          where: eq(sessions.id, sessionId),
-        });
+        const session = await repo.loadSessionById(sessionId).catch(() => null);
 
         if (!session) {
           return reply.status(404).send({
@@ -128,15 +125,7 @@ export async function registerChatRoutes(app: FastifyInstance) {
         });
 
         // 保存用户消息
-        const userMessageId = uuidv4();
-        await db.insert(messages).values({
-          id: userMessageId,
-          sessionId,
-          role: 'user',
-          content: message,
-          metadata: {},
-          timestamp: new Date(),
-        });
+        await repo.saveUserMessage(sessionId, message);
 
         // TODO: 实现真实的流式响应
         // 模拟流式输出

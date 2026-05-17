@@ -7,7 +7,7 @@
 
 import type { Session } from '@heartrule/core-engine';
 import { createLogger } from '@heartrule/core-engine';
-import { and, eq, count } from 'drizzle-orm';
+import { and, eq, count, sql, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
 
@@ -19,6 +19,7 @@ import {
   variables,
   scriptFiles,
   userGlobalVariables,
+  debugEntries,
   type NewVariable,
 } from '../db/schema.js';
 
@@ -41,6 +42,7 @@ export interface ScriptData {
   id: string;
   scriptName: string;
   scriptContent: string;
+  parsedContent?: any;
   projectId?: string;
   tags?: string[];
 }
@@ -99,6 +101,33 @@ export interface ISessionRepository {
     session: Session,
     prevHistoryLength: number
   ): Promise<void>;
+
+  // Route-level operations (formerly inline db.* in routes)
+  createSession(
+    userId: string,
+    scriptId: string,
+    initialVariables?: Record<string, unknown>,
+    projectId?: string
+  ): Promise<string>;
+  deleteSession(sessionId: string): Promise<boolean>;
+  listSessionsByProject(
+    projectId: string,
+    limit?: number
+  ): Promise<
+    Array<{
+      sessionId: string;
+      scriptId: string;
+      scriptFileName: string;
+      executionStatus: string;
+      createdAt: string;
+      updatedAt: string;
+      position: Record<string, unknown> | null;
+      messageCount: number;
+    }>
+  >;
+  getRawMessages(sessionId: string): Promise<any[]>;
+  listUserSessions(userId: string): Promise<SessionData[]>;
+  getDebugEntries(sessionId: string, runId?: string): Promise<any[]>;
 }
 
 // ---- Implementation ----
@@ -151,6 +180,7 @@ export class SessionRepository implements ISessionRepository {
       id: script.id,
       scriptName: script.scriptName,
       scriptContent: script.scriptContent,
+      parsedContent: (script as any).parsedContent,
       projectId,
       tags,
     };
@@ -519,5 +549,165 @@ export class SessionRepository implements ISessionRepository {
         });
       }
     }
+  }
+
+  // ==================== Route-level operations ====================
+
+  async createSession(
+    userId: string,
+    scriptId: string,
+    initialVariables?: Record<string, unknown>,
+    projectId?: string
+  ): Promise<string> {
+    const sessionId = uuidv4();
+    const now = new Date();
+
+    await db.insert(sessions).values({
+      id: sessionId,
+      userId,
+      scriptId,
+      status: 'active',
+      executionStatus: 'running',
+      position: { phaseIndex: 0, topicIndex: 0, actionIndex: 0 },
+      variables: initialVariables || {},
+      metadata: projectId ? { projectId } : {},
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    if (projectId) {
+      await db.transaction(async (tx) => {
+        const countResult = await tx
+          .select({ count: count() })
+          .from(sessions)
+          .where(sql`(((${sessions.metadata}#>>'{}'))::jsonb->>'projectId') = ${projectId}`);
+        const projectSessionCount = countResult[0]?.count ?? 0;
+
+        if (projectSessionCount > 50) {
+          const excessCount = projectSessionCount - 50;
+          const oldestToDelete = await tx
+            .select({ id: sessions.id })
+            .from(sessions)
+            .where(sql`(((${sessions.metadata}#>>'{}'))::jsonb->>'projectId') = ${projectId}`)
+            .orderBy(sql`${sessions.updatedAt} ASC`)
+            .limit(excessCount);
+
+          for (const old of oldestToDelete) {
+            await tx.delete(messages).where(eq(messages.sessionId, old.id));
+            await tx.delete(sessions).where(eq(sessions.id, old.id));
+          }
+          logger.info(`Auto-cleaned ${oldestToDelete.length} old sessions`);
+        }
+      });
+    }
+
+    return sessionId;
+  }
+
+  async deleteSession(sessionId: string): Promise<boolean> {
+    const session = await db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+    });
+
+    if (!session) return false;
+
+    await db.delete(messages).where(eq(messages.sessionId, sessionId));
+    await db.delete(sessions).where(eq(sessions.id, sessionId));
+    return true;
+  }
+
+  async listSessionsByProject(
+    projectId: string,
+    limit: number = 50
+  ): Promise<
+    Array<{
+      sessionId: string;
+      scriptId: string;
+      scriptFileName: string;
+      executionStatus: string;
+      createdAt: string;
+      updatedAt: string;
+      position: Record<string, unknown> | null;
+      messageCount: number;
+    }>
+  > {
+    const projectSessions = await db
+      .select({
+        id: sessions.id,
+        scriptId: sessions.scriptId,
+        executionStatus: sessions.executionStatus,
+        position: sessions.position,
+        createdAt: sessions.createdAt,
+        updatedAt: sessions.updatedAt,
+      })
+      .from(sessions)
+      .where(sql`(((${sessions.metadata}#>>'{}'))::jsonb->>'projectId') = ${projectId}`)
+      .orderBy(sql`${sessions.updatedAt} DESC`)
+      .limit(Math.min(limit, 50));
+
+    const sessionIds = projectSessions.map((s) => s.id);
+    if (sessionIds.length === 0) return [];
+
+    const scriptIds = [...new Set(projectSessions.map((s) => s.scriptId).filter(Boolean))];
+
+    const [scriptRows, msgCountRows] = await Promise.all([
+      scriptIds.length > 0
+        ? db
+            .select({ id: scripts.id, scriptName: scripts.scriptName })
+            .from(scripts)
+            .where(inArray(scripts.id, scriptIds))
+        : [],
+      db
+        .select({ sessionId: messages.sessionId, count: count() })
+        .from(messages)
+        .where(inArray(messages.sessionId, sessionIds))
+        .groupBy(messages.sessionId),
+    ]);
+
+    const scriptNameMap = new Map(scriptRows.map((r) => [r.id, r.scriptName]));
+    const msgCountMap = new Map(msgCountRows.map((r) => [r.sessionId, r.count]));
+
+    return projectSessions.map((s) => ({
+      sessionId: s.id,
+      scriptId: s.scriptId,
+      scriptFileName: scriptNameMap.get(s.scriptId) || 'unknown.yaml',
+      executionStatus: s.executionStatus,
+      createdAt: s.createdAt.toISOString(),
+      updatedAt: s.updatedAt.toISOString(),
+      position: s.position,
+      messageCount: msgCountMap.get(s.id) ?? 0,
+    }));
+  }
+
+  async getRawMessages(sessionId: string): Promise<any[]> {
+    return db.query.messages.findMany({
+      where: eq(messages.sessionId, sessionId),
+      orderBy: (messages, { asc }) => [asc(messages.timestamp)],
+    });
+  }
+
+  async listUserSessions(userId: string): Promise<SessionData[]> {
+    return db.query.sessions.findMany({
+      where: eq(sessions.userId, userId),
+      orderBy: (sessions, { desc }) => [desc(sessions.createdAt)],
+    }) as Promise<SessionData[]>;
+  }
+
+  async getDebugEntries(sessionId: string, runId?: string): Promise<any[]> {
+    const conditions = [eq(debugEntries.sessionId, sessionId)];
+    if (runId) {
+      conditions.push(eq(debugEntries.runId, runId));
+    }
+
+    return db.query.debugEntries.findMany({
+      where: and(...conditions),
+      orderBy: (debugEntries, { asc }) => [
+        asc(debugEntries.phaseId),
+        asc(debugEntries.topicId),
+        asc(debugEntries.actionId),
+        asc(debugEntries.round),
+        asc(debugEntries.createdAt),
+      ],
+    });
   }
 }

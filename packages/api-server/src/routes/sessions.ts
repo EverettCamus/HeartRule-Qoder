@@ -1,11 +1,8 @@
 import { ExecutionStatus, ErrorCode } from '@heartrule/shared-types';
-import { eq, sql, count, inArray, and } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { v4 as uuidv4 } from 'uuid';
 
-import { db } from '../db/index.js';
-import { sessions, messages, scripts, debugEntries } from '../db/schema.js';
 import { SessionOrchestrator } from '../services/session-orchestrator.js';
+import { SessionRepository } from '../services/session-repository.js';
 import { enhancePositionWithIds } from '../services/session-variable-utils.js';
 import { sendErrorResponse, logError } from '../utils/error-handler.js';
 
@@ -75,71 +72,25 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         projectId?: string;
       };
 
+      const repo = new SessionRepository();
       let script: any = null;
 
       try {
         // 验证脚本是否存在
-        script = await db.query.scripts.findFirst({
-          where: eq(scripts.id, scriptId),
-        });
-
+        script = await repo.loadScriptById(scriptId).catch(() => null);
         if (!script) {
-          return sendErrorResponse(reply, new Error('Script not found'), {
-            scriptId,
-          });
+          return sendErrorResponse(reply, new Error('Script not found'), { scriptId });
         }
 
         // 从 script.tags 中提取 projectId
-        const tags = (script.tags as string[]) || [];
-        const projectTag = tags.find((tag) => tag.startsWith('project:'));
+        const tags = script.tags || [];
+        const projectTag = tags.find((tag: string) => tag.startsWith('project:'));
         const projectId =
           bodyProjectId || (projectTag ? projectTag.replace('project:', '') : undefined);
 
         app.log.info({ scriptId, projectId, tags }, 'Creating session with projectId');
 
-        // 创建会话
-        const sessionId = uuidv4();
-        const now = new Date();
-
-        await db.insert(sessions).values({
-          id: sessionId,
-          userId,
-          scriptId,
-          status: 'active',
-          executionStatus: 'running',
-          position: { phaseIndex: 0, topicIndex: 0, actionIndex: 0 },
-          variables: initialVariables || {},
-          metadata: projectId ? { projectId } : {}, // 保存 projectId 到 metadata
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        // Auto-cleanup: keep max 50 sessions per project
-        if (projectId) {
-          await db.transaction(async (tx) => {
-            const projectSessionCountResult = await tx
-              .select({ count: count() })
-              .from(sessions)
-              .where(sql`(((${sessions.metadata}#>>'{}'))::jsonb->>'projectId') = ${projectId}`);
-            const projectSessionCount = projectSessionCountResult[0]?.count ?? 0;
-
-            if (projectSessionCount > 50) {
-              const excessCount = projectSessionCount - 50;
-              const oldestToDelete = await tx
-                .select({ id: sessions.id })
-                .from(sessions)
-                .where(sql`(((${sessions.metadata}#>>'{}'))::jsonb->>'projectId') = ${projectId}`)
-                .orderBy(sql`${sessions.updatedAt} ASC`)
-                .limit(excessCount);
-
-              for (const old of oldestToDelete) {
-                await tx.delete(messages).where(eq(messages.sessionId, old.id));
-                await tx.delete(sessions).where(eq(sessions.id, old.id));
-              }
-              app.log.info({ deletedCount: oldestToDelete.length }, 'Auto-cleaned old sessions');
-            }
-          });
-        }
+        const sessionId = await repo.createSession(userId, scriptId, initialVariables, projectId);
 
         // 初始化会话，获取第一条 AI 消息
         const orchestrator = new SessionOrchestrator();
@@ -158,7 +109,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         const responseData: any = {
           sessionId,
           status: 'active',
-          createdAt: now.toISOString(),
+          createdAt: new Date().toISOString(),
           aiMessage: initResult.aiMessage,
           executionStatus: initResult.executionStatus,
           currentRunId: initResult.currentRunId,
@@ -217,61 +168,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       };
 
       try {
-        // Query sessions where metadata->>'projectId' matches
-        const projectSessions = await db
-          .select({
-            id: sessions.id,
-            scriptId: sessions.scriptId,
-            executionStatus: sessions.executionStatus,
-            position: sessions.position,
-            createdAt: sessions.createdAt,
-            updatedAt: sessions.updatedAt,
-          })
-          .from(sessions)
-          .where(sql`(((${sessions.metadata}#>>'{}'))::jsonb->>'projectId') = ${projectId}`)
-          .orderBy(sql`${sessions.updatedAt} DESC`)
-          .limit(Math.min(limit, 50));
-
-        // Batch query: all scripts and message counts at once
-        const sessionIds = projectSessions.map((s) => s.id);
-
-        // Early return for empty results to avoid inArray() with empty array
-        if (sessionIds.length === 0) {
-          return { success: true, data: [] };
-        }
-
-        const scriptIds = [...new Set(projectSessions.map((s) => s.scriptId).filter(Boolean))];
-
-        const [scriptRows, msgCountRows] = await Promise.all([
-          scriptIds.length > 0
-            ? db
-                .select({ id: scripts.id, scriptName: scripts.scriptName })
-                .from(scripts)
-                .where(inArray(scripts.id, scriptIds))
-            : [],
-          db
-            .select({ sessionId: messages.sessionId, count: count() })
-            .from(messages)
-            .where(inArray(messages.sessionId, sessionIds))
-            .groupBy(messages.sessionId),
-        ]);
-
-        const scriptNameMap = new Map(scriptRows.map((r) => [r.id, r.scriptName]));
-        const msgCountMap = new Map(msgCountRows.map((r) => [r.sessionId, r.count]));
-
-        // Enrich with script file name and message count (no per-session queries)
-        const enriched = projectSessions.map((s) => ({
-          sessionId: s.id,
-          scriptId: s.scriptId,
-          scriptFileName: scriptNameMap.get(s.scriptId) || 'unknown.yaml',
-          executionStatus: s.executionStatus,
-          createdAt: s.createdAt.toISOString(),
-          updatedAt: s.updatedAt.toISOString(),
-          position: s.position,
-          messageCount: msgCountMap.get(s.id) ?? 0,
-        }));
-
-        return { success: true, data: enriched };
+        const repo = new SessionRepository();
+        const data = await repo.listSessionsByProject(projectId, limit);
+        return { success: true, data };
       } catch (error) {
         logError(app.log, error, { projectId });
         return reply.status(500).send({
@@ -302,16 +201,12 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        const session = await db.query.sessions.findFirst({
-          where: eq(sessions.id, id),
-        });
+        const repo = new SessionRepository();
+        const deleted = await repo.deleteSession(id);
 
-        if (!session) {
+        if (!deleted) {
           return reply.status(404).send({ success: false, error: 'Session not found' });
         }
-
-        await db.delete(messages).where(eq(messages.sessionId, id));
-        await db.delete(sessions).where(eq(sessions.id, id));
 
         return { success: true };
       } catch (error) {
@@ -341,20 +236,14 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        const session = await db.query.sessions.findFirst({
-          where: eq(sessions.id, id),
-        });
+        const repo = new SessionRepository();
+        const session = await repo.loadSessionById(id).catch(() => null);
 
         if (!session) {
-          return reply.status(404).send({
-            error: 'Session not found',
-          });
+          return reply.status(404).send({ error: 'Session not found' });
         }
 
-        // 获取脚本信息以便构建导航树
-        const script = await db.query.scripts.findFirst({
-          where: eq(scripts.id, session.scriptId),
-        });
+        const script = await repo.loadScriptById(session.scriptId);
 
         app.log.info(
           {
@@ -462,10 +351,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        const sessionMessages = await db.query.messages.findMany({
-          where: eq(messages.sessionId, id),
-          orderBy: (messages, { asc }) => [asc(messages.timestamp)],
-        });
+        const repo = new SessionRepository();
+        const sessionMessages = await repo.getRawMessages(id);
 
         // Filter out superseded messages (created by rerun/rollback)
         const activeMessages = sessionMessages.filter(
@@ -517,21 +404,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       const { runId } = request.query as { runId?: string };
 
       try {
-        const conditions = [eq(debugEntries.sessionId, id)];
-        if (runId) {
-          conditions.push(eq(debugEntries.runId, runId));
-        }
-
-        const entries = await db.query.debugEntries.findMany({
-          where: and(...conditions),
-          orderBy: (debugEntries, { asc }) => [
-            asc(debugEntries.phaseId),
-            asc(debugEntries.topicId),
-            asc(debugEntries.actionId),
-            asc(debugEntries.round),
-            asc(debugEntries.createdAt),
-          ],
-        });
+        const repo = new SessionRepository();
+        const entries = await repo.getDebugEntries(id, runId);
 
         return {
           success: true,
@@ -681,10 +555,10 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       let script: any = null;
 
       try {
+        const repo = new SessionRepository();
+
         // 验证会话是否存在
-        session = await db.query.sessions.findFirst({
-          where: eq(sessions.id, id),
-        });
+        session = await repo.loadSessionById(id).catch(() => null);
 
         if (!session) {
           return sendErrorResponse(reply, new Error('Session not found'), {
@@ -722,9 +596,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         }
 
         // 获取脚本信息
-        script = await db.query.scripts.findFirst({
-          where: eq(scripts.id, session.scriptId),
-        });
+        script = await repo.loadScriptById(session.scriptId).catch(() => null);
 
         // 调用 SessionOrchestrator 处理用户输入
         const orchestrator = new SessionOrchestrator();
@@ -814,9 +686,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        const session = await db.query.sessions.findFirst({
-          where: eq(sessions.id, id),
-        });
+        const repo = new SessionRepository();
+        const session = await repo.loadSessionById(id).catch(() => null);
 
         if (!session) {
           return reply.status(404).send({
@@ -872,9 +743,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       };
 
       try {
-        const session = await db.query.sessions.findFirst({
-          where: eq(sessions.id, id),
-        });
+        const repo = new SessionRepository();
+        const session = await repo.loadSessionById(id).catch(() => null);
 
         if (!session) {
           return reply.status(404).send({ success: false, error: 'Session not found' });
@@ -932,10 +802,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       const { userId } = request.params as { userId: string };
 
       try {
-        const userSessions = await db.query.sessions.findMany({
-          where: eq(sessions.userId, userId),
-          orderBy: (sessions, { desc }) => [desc(sessions.createdAt)],
-        });
+        const repo = new SessionRepository();
+        const userSessions = await repo.listUserSessions(userId);
 
         return userSessions;
       } catch (error) {
