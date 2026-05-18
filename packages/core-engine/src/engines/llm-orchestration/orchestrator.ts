@@ -171,6 +171,7 @@ export abstract class BaseLLMProvider implements ILLMProvider {
         topP: mergedConfig.topP,
         frequencyPenalty: mergedConfig.frequencyPenalty,
         presencePenalty: mergedConfig.presencePenalty,
+        ...(mergedConfig.responseFormat ? { responseFormat: mergedConfig.responseFormat } : {}),
         abortSignal: abortController.signal,
       });
 
@@ -250,6 +251,7 @@ export abstract class BaseLLMProvider implements ILLMProvider {
       topP: mergedConfig.topP,
       frequencyPenalty: mergedConfig.frequencyPenalty,
       presencePenalty: mergedConfig.presencePenalty,
+      ...(mergedConfig.responseFormat ? { responseFormat: mergedConfig.responseFormat } : {}),
     });
 
     for await (const chunk of result.textStream) {
