@@ -523,6 +523,51 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         return;
       }
       setDebugBubblesV2(bubbles);
+
+      // When viewing a specific run, update currentPosition and navigation tree state
+      if (runId && bubbles.length > 0 && tree) {
+        const lastBubble = bubbles[bubbles.length - 1];
+        let phaseIdx = 0;
+        let topicIdx = 0;
+        let actionIdx = 0;
+        let foundAction: ActionNode | null = null;
+
+        for (let pi = 0; pi < tree.phases.length; pi++) {
+          const phase = tree.phases[pi];
+          if (phase.phaseId === lastBubble.phaseId) {
+            phaseIdx = pi;
+            for (let ti = 0; ti < phase.topics.length; ti++) {
+              const topic = phase.topics[ti];
+              if (topic.topicId === lastBubble.topicId) {
+                topicIdx = ti;
+                for (let ai = 0; ai < topic.actions.length; ai++) {
+                  const action = topic.actions[ai];
+                  if (action.actionId === lastBubble.actionId) {
+                    actionIdx = ai;
+                    foundAction = action;
+                    break;
+                  }
+                }
+                break;
+              }
+            }
+            break;
+          }
+        }
+
+        const pos: CurrentPosition = {
+          phaseIndex: phaseIdx,
+          phaseId: lastBubble.phaseId,
+          topicIndex: topicIdx,
+          topicId: lastBubble.topicId,
+          actionIndex: actionIdx,
+          actionId: lastBubble.actionId,
+          actionType: lastBubble.actionType,
+          currentRound: lastBubble.round,
+          maxRounds: (foundAction?.config as any)?.max_rounds,
+        };
+        setCurrentPosition(pos);
+      }
     } catch (err) {
       console.warn('[DebugChat] ⚠️ Failed to fetch V2 debug entries:', err);
     }
