@@ -524,6 +524,96 @@ export class SessionRepository implements ISessionRepository {
     }
 
     await db.update(sessions).set(updateData).where(eq(sessions.id, session.sessionId));
+
+    // Persist debug entries to debug_entries table
+    await this.saveDebugEntries(session);
+  }
+
+  /**
+   * Persist lastLLMDebugInfo entries from Session into the debug_entries table.
+   * Groups entries by (phaseId, topicId, actionId, round) so all LLM calls
+   * for one action execution form a single debug_entries row.
+   */
+  private async saveDebugEntries(session: Session): Promise<void> {
+    const debugEntries_ = session.lastLLMDebugInfo;
+    if (!debugEntries_ || debugEntries_.length === 0) return;
+
+    const runId = (session.metadata.currentRunId as string) || 'default';
+    const phaseId = (session.position.phaseId as string) || `phase_${session.position.phaseIndex}`;
+    const topicId = (session.position.topicId as string) || `topic_${session.position.topicIndex}`;
+    const actionId =
+      (session.position.actionId as string) || `action_${session.position.actionIndex}`;
+    const actionType = (session.position.actionType as string) || 'unknown';
+
+    // Determine round from actionRoundInfo
+    let round = 1;
+    const roundInfo = session.metadata.actionRoundInfo as
+      | Record<string, { currentRound?: number }>
+      | undefined;
+    if (roundInfo?.[actionId]?.currentRound) {
+      round = roundInfo[actionId].currentRound!;
+    }
+
+    // Group by (actionId, round) — supports multiple actions per execution cycle
+    const groups = new Map<string, typeof debugEntries_>();
+    for (const entry of debugEntries_) {
+      const key = `${entry.actionId || actionId}|${round}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(entry);
+    }
+
+    for (const [, group] of groups) {
+      const first = group[0];
+      const content = {
+        entries: group.map((e) => ({
+          type: 'llm_call' as const,
+          model: e.model,
+          tokensUsed: e.tokensUsed,
+          responseTimeMs: e.responseTimeMs,
+          finishReason: (e.config as any)?.finish_reason,
+          prompt: e.prompt,
+          response: typeof e.response === 'string' ? e.response : JSON.stringify(e.response),
+        })),
+      };
+
+      const entryActionId = first.actionId || actionId;
+      const entryActionType = first.actionType || actionType;
+
+      // Check for existing row to merge into
+      const existing = await db.query.debugEntries.findFirst({
+        where: and(
+          eq(debugEntries.sessionId, session.sessionId),
+          eq(debugEntries.runId, runId),
+          eq(debugEntries.phaseId, phaseId),
+          eq(debugEntries.topicId, topicId),
+          eq(debugEntries.actionId, entryActionId),
+          eq(debugEntries.round, round)
+        ),
+      });
+
+      if (existing) {
+        const existingEntries = (existing.content as any)?.entries || [];
+        await db
+          .update(debugEntries)
+          .set({
+            content: { entries: [...existingEntries, ...content.entries] },
+          } as any)
+          .where(eq(debugEntries.id, existing.id));
+      } else {
+        await db.insert(debugEntries).values({
+          sessionId: session.sessionId,
+          runId,
+          phaseId,
+          topicId,
+          actionId: entryActionId,
+          actionType: entryActionType,
+          round,
+          content,
+        } as any);
+      }
+    }
+
+    logger.debug('💾 Saved debug entries', { count: debugEntries_.length, groups: groups.size });
   }
 
   async saveNewAIMessagesFromSession(
