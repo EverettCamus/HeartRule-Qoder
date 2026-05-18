@@ -642,18 +642,18 @@ const ProjectEditor: React.FC = () => {
 
   // 处理内容变化
   const handleContentChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setFileContent(e.target.value);
+    (value: string) => {
+      setFileContent(value);
       setHasUnsavedChanges(true);
 
       // YAML 模式下实时解析（可选，仅在用户停止输入一段时间后）
       if (selectedFile?.fileType === 'session') {
         // 更新该文件的YAML基线（包含metadata的修改）
-        fileYamlBaseRef.current.set(selectedFile.id, e.target.value);
-        parseYamlToScript(e.target.value);
+        fileYamlBaseRef.current.set(selectedFile.id, value);
+        parseYamlToScript(value);
 
         // 触发点 2: 内容变更时验证（带防抖）
-        validationServiceRef.current.validateOnChange(e.target.value, (result) => {
+        validationServiceRef.current.validateOnChange(value, (result) => {
           setValidationResult(result);
           setShowValidationErrors(true);
           if (!result.valid) {
@@ -662,7 +662,7 @@ const ProjectEditor: React.FC = () => {
         });
       } else if (selectedFile?.fileType === 'global') {
         // 全局变量文件内容变更时验证（带防抖）
-        validationServiceRef.current.validateOnChange(e.target.value, (result) => {
+        validationServiceRef.current.validateOnChange(value, (result) => {
           setValidationResult(result);
           setShowValidationErrors(true);
           if (!result.valid) {

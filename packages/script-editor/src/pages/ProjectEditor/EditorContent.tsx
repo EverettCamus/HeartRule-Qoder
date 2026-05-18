@@ -1,5 +1,7 @@
 import { CodeOutlined, AppstoreOutlined, FileOutlined } from '@ant-design/icons';
-import { Layout, Typography, Space, Button, Divider, Input, Alert } from 'antd';
+import { yaml as yamlLang } from '@codemirror/lang-yaml';
+import CodeMirror from '@uiw/react-codemirror';
+import { Layout, Typography, Space, Button, Divider, Alert } from 'antd';
 import React, { useState, useEffect } from 'react';
 
 import { projectsApi } from '../../api/projects';
@@ -18,7 +20,6 @@ import { isErrorForAction } from '../../utils/validation-path-parser';
 
 const { Content } = Layout;
 const { Text } = Typography;
-const { TextArea } = Input;
 
 interface EditorContentProps {
   projectId: string; // 新增：用于获取模板方案列表
@@ -34,7 +35,7 @@ interface EditorContentProps {
   selectedTopicPath: { phaseIndex: number; topicIndex: number } | null;
   editingType: 'phase' | 'topic' | 'action' | 'session' | null;
   actionNodeListRef: React.RefObject<ActionNodeListRef>;
-  onContentChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  onContentChange: (value: string) => void;
   onModeChange: (mode: 'yaml' | 'visual') => void;
   onCloseValidationErrors: () => void;
   onSelectAction: (path: { phaseIndex: number; topicIndex: number; actionIndex: number }) => void;
@@ -235,16 +236,16 @@ const EditorContent: React.FC<EditorContentProps> = ({
                   />
                 )}
 
-                <TextArea
+                <CodeMirror
                   value={fileContent}
                   onChange={onContentChange}
                   placeholder="Edit YAML content..."
+                  extensions={[yamlLang()]}
+                  height="600px"
                   style={{
-                    width: '100%',
-                    minHeight: '600px',
-                    fontFamily: 'Monaco, Consolas, monospace',
                     fontSize: '14px',
                   }}
+                  theme="light"
                 />
               </div>
             ) : (
