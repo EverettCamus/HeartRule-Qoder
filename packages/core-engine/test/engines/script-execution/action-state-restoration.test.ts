@@ -138,10 +138,11 @@ describe('ScriptExecutor Action State Restoration', () => {
     expect(result1.currentAction?.maxRounds).toBe(2);
 
     // 验证：actionState 应该被序列化
-    expect(result1.metadata.actionState).toBeDefined();
-    expect(result1.metadata.actionState.actionId).toBe('say_hello');
-    expect(result1.metadata.actionState.currentRound).toBe(1);
-    expect(result1.metadata.actionState.maxRounds).toBe(2);
+    const actionState = result1.metadata.actionState!;
+    expect(actionState).toBeDefined();
+    expect(actionState.actionId).toBe('say_hello');
+    expect(actionState.currentRound).toBe(1);
+    expect(actionState.maxRounds).toBe(2);
   });
 
   it('第2轮：应该恢复 action 状态并继续执行（currentRound 应该从1递增到2）', async () => {
