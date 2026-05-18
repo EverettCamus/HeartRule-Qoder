@@ -1,13 +1,11 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import { eq, and, desc, like, or, ne, SQL } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
-import { db } from '../db/index.js';
-import { projects, projectDrafts, scriptFiles, projectVersions } from '../db/schema.js';
 import { ProjectInitializer } from '../services/project-initializer.js';
+import { ProjectRepository } from '../services/project-repository.js';
 
 // Schema定义
 const createProjectSchema = z.object({
@@ -43,53 +41,17 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         includeDeprecated?: string;
       };
 
-      // 构建查询条件
-      const conditions: SQL[] = [];
-
-      // 状态过滤：默认不包含 deprecated 状态
-      if (status && status !== 'all') {
-        conditions.push(eq(projects.status, status as any));
-      } else if (includeDeprecated !== 'true') {
-        // 默认过滤掉 deprecated 状态
-        conditions.push(ne(projects.status, 'deprecated'));
-      }
-
-      if (author) {
-        conditions.push(eq(projects.author, author));
-      }
-      if (search) {
-        conditions.push(
-          or(like(projects.projectName, `%${search}%`), like(projects.description, `%${search}%`))!
-        );
-      }
-
-      const result =
-        conditions.length > 0
-          ? await db
-              .select()
-              .from(projects)
-              .where(and(...conditions)!)
-              .orderBy(desc(projects.updatedAt))
-          : await db.select().from(projects).orderBy(desc(projects.updatedAt));
-
-      // 为每个工程附加文件数量
-      const projectsWithFileCount = await Promise.all(
-        result.map(async (project) => {
-          const files = await db
-            .select()
-            .from(scriptFiles)
-            .where(eq(scriptFiles.projectId, project.id));
-
-          return {
-            ...project,
-            fileCount: files.length,
-          };
-        })
-      );
+      const repo = new ProjectRepository();
+      const result = await repo.listProjects({
+        status,
+        search,
+        author,
+        includeDeprecated: includeDeprecated === 'true',
+      });
 
       return reply.send({
         success: true,
-        data: projectsWithFileCount,
+        data: result,
       });
     } catch (error) {
       fastify.log.error(error);
@@ -104,8 +66,9 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/projects/:id', async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
+      const repo = new ProjectRepository();
 
-      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      const project = await repo.findProjectById(id);
 
       if (!project) {
         return reply.status(404).send({
@@ -115,17 +78,13 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // 获取工程文件
-      const files = await db.select().from(scriptFiles).where(eq(scriptFiles.projectId, id));
+      const files = await repo.findScriptFilesByProjectId(id);
 
       // 获取草稿
-      const [draft] = await db.select().from(projectDrafts).where(eq(projectDrafts.projectId, id));
+      const draft = await repo.findDraftByProjectId(id);
 
       // 获取版本历史
-      const versions = await db
-        .select()
-        .from(projectVersions)
-        .where(eq(projectVersions.projectId, id))
-        .orderBy(desc(projectVersions.publishedAt));
+      const versions = await repo.findVersionsByProjectId(id);
 
       return reply.send({
         success: true,
@@ -149,23 +108,19 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/projects', async (request, reply) => {
     try {
       const body = createProjectSchema.parse(request.body);
+      const repo = new ProjectRepository();
 
       // 创建工程
-      const [newProject] = await db
-        .insert(projects)
-        .values({
-          projectName: body.projectName,
-          description: body.description,
-          engineVersion: body.engineVersion,
-          engineVersionMin: body.engineVersionMin,
-          author: body.author,
-          tags: body.tags,
-          status: 'draft',
-        })
-        .returning();
+      const newProject = await repo.createProject({
+        projectName: body.projectName,
+        description: body.description,
+        engineVersion: body.engineVersion,
+        engineVersionMin: body.engineVersionMin,
+        author: body.author,
+        tags: body.tags,
+      });
 
       // 创建默认文件
-      // Read default global.yaml from project-defaults
       let globalVars: any = { variables: [] };
       try {
         const globalYamlPath = path.resolve(
@@ -179,52 +134,61 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         console.warn(`[API] ⚠️  Default global.yaml not found: ${e.message}, using empty`);
       }
 
-      const defaultFiles = [
-        { fileType: 'global', fileName: 'global.yaml', fileContent: globalVars },
-        { fileType: 'roles', fileName: 'roles.yaml', fileContent: { roles: [] } },
-        { fileType: 'skills', fileName: 'skills.yaml', fileContent: { skills: [] } },
-      ];
-
-      await db.insert(scriptFiles).values(
-        defaultFiles.map((file) => ({
+      await repo.insertScriptFiles([
+        {
           projectId: newProject.id,
-          fileType: file.fileType as any,
-          fileName: file.fileName,
-          fileContent: file.fileContent,
-        }))
-      );
+          fileType: 'global',
+          fileName: 'global.yaml',
+          fileContent: globalVars,
+        },
+        {
+          projectId: newProject.id,
+          fileType: 'roles',
+          fileName: 'roles.yaml',
+          fileContent: { roles: [] },
+        },
+        {
+          projectId: newProject.id,
+          fileType: 'skills',
+          fileName: 'skills.yaml',
+          fileContent: { skills: [] },
+        },
+      ]);
 
       // 创建初始草稿
-      await db.insert(projectDrafts).values({
-        projectId: newProject.id,
+      await repo.upsertDraft(newProject.id, {
         draftFiles: {},
         updatedBy: body.author,
-        validationStatus: 'unknown',
       });
 
       // 初始化默认模板到数据库
       try {
-        // 使用 config/prompt-defaults 作为模板源
         const systemTemplatesPath = path.resolve(__dirname, '../../../../config/prompt-defaults');
-
         const templateFiles = await fs.readdir(systemTemplatesPath);
+
+        const templates: Array<{
+          projectId: string;
+          fileType: string;
+          fileName: string;
+          fileContent: any;
+          filePath: string;
+        }> = [];
 
         for (const fileName of templateFiles) {
           if (!fileName.endsWith('.md')) continue;
-
-          const filePath = path.join(systemTemplatesPath, fileName);
-          const content = await fs.readFile(filePath, 'utf-8');
-          const virtualPath = `_system/config/default/${fileName}`;
-
-          await db.insert(scriptFiles).values({
+          const content = await fs.readFile(path.join(systemTemplatesPath, fileName), 'utf-8');
+          templates.push({
             projectId: newProject.id,
             fileType: 'template',
-            fileName: fileName,
-            filePath: virtualPath,
+            fileName,
             fileContent: { content },
+            filePath: `_system/config/default/${fileName}`,
           });
-
           console.log(`[API]   ✅ Imported template: ${fileName}`);
+        }
+
+        if (templates.length > 0) {
+          await repo.insertScriptFiles(templates);
         }
       } catch (templateError: any) {
         console.warn(`[API]   ⚠️  System templates not found: ${templateError.message}`);
@@ -232,7 +196,6 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
 
       // 初始化工程目录结构和模板文件
       try {
-        // 不再需要workspacePath参数
         const initializer = new ProjectInitializer();
 
         const initResult = await initializer.initializeProject({
@@ -247,34 +210,41 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
 
         console.log(`[API] ✅ Project directory initialized: ${newProject.id}`);
 
-        // 将生成的示例脚本导入到数据库
         if (initResult.generatedScripts.length > 0) {
           console.log(
             `[API] Importing ${initResult.generatedScripts.length} sample scripts to database`
           );
 
+          const yaml = await import('js-yaml');
+          const generatedFiles: Array<{
+            projectId: string;
+            fileType: string;
+            fileName: string;
+            fileContent: any;
+            yamlContent: string;
+          }> = [];
+
           for (const script of initResult.generatedScripts) {
             try {
-              // 解析YAML内容为JSON
-              const yaml = await import('js-yaml');
               const parsedContent = yaml.load(script.content);
-
-              await db.insert(scriptFiles).values({
+              generatedFiles.push({
                 projectId: newProject.id,
                 fileType: script.fileType,
                 fileName: script.fileName,
                 fileContent: parsedContent,
                 yamlContent: script.content,
               });
-
               console.log(`[API]   ✅ Imported: ${script.fileName}`);
             } catch (parseError: any) {
               console.error(`[API]   ⚠️ Failed to import ${script.fileName}:`, parseError.message);
             }
           }
+
+          if (generatedFiles.length > 0) {
+            await repo.insertScriptFiles(generatedFiles);
+          }
         }
       } catch (initError: any) {
-        // 工程目录初始化失败不影响数据库记录创建
         console.error(`[API] ⚠️ Project directory initialization failed:`, initError);
         fastify.log.warn(
           `Project directory initialization failed for ${newProject.id}: ${initError.message}`
@@ -307,14 +277,9 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const body = updateProjectSchema.parse(request.body);
 
-      const [updated] = await db
-        .update(projects)
-        .set({
-          ...body,
-          updatedAt: new Date(),
-        })
-        .where(eq(projects.id, id))
-        .returning();
+      const repo = new ProjectRepository();
+      await repo.updateProject(id, body);
+      const updated = await repo.findProjectById(id);
 
       if (!updated) {
         return reply.status(404).send({
@@ -348,21 +313,17 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       const { id } = request.params as { id: string };
 
-      const [archived] = await db
-        .update(projects)
-        .set({
-          status: 'archived',
-          updatedAt: new Date(),
-        })
-        .where(eq(projects.id, id))
-        .returning();
-
-      if (!archived) {
+      const repo = new ProjectRepository();
+      const project = await repo.findProjectById(id);
+      if (!project) {
         return reply.status(404).send({
           success: false,
           error: 'Project not found',
         });
       }
+
+      await repo.updateProject(id, { status: 'archived' });
+      const archived = await repo.findProjectById(id);
 
       return reply.send({
         success: true,
@@ -382,10 +343,9 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       const { id } = request.params as { id: string };
       const { operator, reason } = request.body as { operator?: string; reason?: string };
+      const repo = new ProjectRepository();
 
-      // 获取当前工程
-      const [project] = await db.select().from(projects).where(eq(projects.id, id));
-
+      const project = await repo.findProjectById(id);
       if (!project) {
         return reply.status(404).send({
           success: false,
@@ -393,7 +353,6 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      // 记录作废信息到 metadata
       const currentMetadata = (project.metadata as Record<string, any>) || {};
       const deprecationHistory = [
         ...(currentMetadata.deprecationHistory || []),
@@ -405,21 +364,17 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         },
       ];
 
-      const [deprecated] = await db
-        .update(projects)
-        .set({
-          status: 'deprecated',
-          metadata: {
-            ...currentMetadata,
-            deprecationHistory,
-            deprecatedAt: new Date().toISOString(),
-            deprecatedBy: operator || 'unknown',
-            deprecationReason: reason || '',
-          },
-          updatedAt: new Date(),
-        })
-        .where(eq(projects.id, id))
-        .returning();
+      await repo.updateProject(id, {
+        status: 'deprecated',
+        metadata: {
+          ...currentMetadata,
+          deprecationHistory,
+          deprecatedAt: new Date().toISOString(),
+          deprecatedBy: operator || 'unknown',
+          deprecationReason: reason || '',
+        },
+      });
+      const deprecated = await repo.findProjectById(id);
 
       return reply.send({
         success: true,
@@ -439,10 +394,9 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       const { id } = request.params as { id: string };
       const { operator } = request.body as { operator?: string };
+      const repo = new ProjectRepository();
 
-      // 获取当前工程
-      const [project] = await db.select().from(projects).where(eq(projects.id, id));
-
+      const project = await repo.findProjectById(id);
       if (!project) {
         return reply.status(404).send({
           success: false,
@@ -450,7 +404,6 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      // 检查是否是已作废状态
       if (project.status !== 'deprecated') {
         return reply.status(400).send({
           success: false,
@@ -458,7 +411,6 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      // 记录恢复信息到 metadata
       const currentMetadata = (project.metadata as Record<string, any>) || {};
       const deprecationHistory = [
         ...(currentMetadata.deprecationHistory || []),
@@ -469,20 +421,16 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         },
       ];
 
-      const [restored] = await db
-        .update(projects)
-        .set({
-          status: 'draft', // 恢复为草稿状态
-          metadata: {
-            ...currentMetadata,
-            deprecationHistory,
-            restoredAt: new Date().toISOString(),
-            restoredBy: operator || 'unknown',
-          },
-          updatedAt: new Date(),
-        })
-        .where(eq(projects.id, id))
-        .returning();
+      await repo.updateProject(id, {
+        status: 'draft',
+        metadata: {
+          ...currentMetadata,
+          deprecationHistory,
+          restoredAt: new Date().toISOString(),
+          restoredBy: operator || 'unknown',
+        },
+      });
+      const restored = await repo.findProjectById(id);
 
       return reply.send({
         success: true,
@@ -502,10 +450,9 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       const { id } = request.params as { id: string };
       const { author } = request.body as { author: string };
+      const repo = new ProjectRepository();
 
-      // 获取原工程
-      const [originalProject] = await db.select().from(projects).where(eq(projects.id, id));
-
+      const originalProject = await repo.findProjectById(id);
       if (!originalProject) {
         return reply.status(404).send({
           success: false,
@@ -513,44 +460,33 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      // 创建新工程
-      const [newProject] = await db
-        .insert(projects)
-        .values({
-          projectName: `${originalProject.projectName}（副本）`,
-          description: originalProject.description,
-          engineVersion: originalProject.engineVersion,
-          engineVersionMin: originalProject.engineVersionMin,
-          author: author || originalProject.author,
-          tags: originalProject.tags,
-          status: 'draft',
-        })
-        .returning();
+      const newProject = await repo.createProject({
+        projectName: `${originalProject.projectName}（副本）`,
+        description: originalProject.description,
+        engineVersion: originalProject.engineVersion,
+        engineVersionMin: originalProject.engineVersionMin,
+        author: author || originalProject.author,
+        tags: originalProject.tags as string[],
+      });
 
       // 复制文件
-      const originalFiles = await db
-        .select()
-        .from(scriptFiles)
-        .where(eq(scriptFiles.projectId, id));
-
+      const originalFiles = await repo.findScriptFilesByProjectId(id);
       if (originalFiles.length > 0) {
-        await db.insert(scriptFiles).values(
+        await repo.insertScriptFiles(
           originalFiles.map((file) => ({
             projectId: newProject.id,
             fileType: file.fileType,
             fileName: file.fileName,
             fileContent: file.fileContent,
-            yamlContent: file.yamlContent,
+            yamlContent: file.yamlContent ?? undefined,
           }))
         );
       }
 
       // 创建草稿
-      await db.insert(projectDrafts).values({
-        projectId: newProject.id,
+      await repo.upsertDraft(newProject.id, {
         draftFiles: {},
         updatedBy: author || originalProject.author,
-        validationStatus: 'unknown',
       });
 
       return reply.status(201).send({
@@ -570,12 +506,8 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/projects/:id/files', async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
-
-      const files = await db
-        .select()
-        .from(scriptFiles)
-        .where(eq(scriptFiles.projectId, id))
-        .orderBy(scriptFiles.fileType);
+      const repo = new ProjectRepository();
+      const files = await repo.findScriptFilesByProjectId(id);
 
       return reply.send({
         success: true,
@@ -594,11 +526,8 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/projects/:id/files/:fileId', async (request, reply) => {
     try {
       const { id, fileId } = request.params as { id: string; fileId: string };
-
-      const [file] = await db
-        .select()
-        .from(scriptFiles)
-        .where(and(eq(scriptFiles.projectId, id), eq(scriptFiles.id, fileId))!);
+      const repo = new ProjectRepository();
+      const file = await repo.findProjectFileById(id, fileId);
 
       if (!file) {
         return reply.status(404).send({
@@ -629,16 +558,14 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         fileName: string;
         fileContent: any;
       };
+      const repo = new ProjectRepository();
 
-      const [newFile] = await db
-        .insert(scriptFiles)
-        .values({
-          projectId: id,
-          fileType: fileType as any,
-          fileName,
-          fileContent,
-        })
-        .returning();
+      const newFile = await repo.createProjectFile({
+        projectId: id,
+        fileType,
+        fileName,
+        fileContent,
+      });
 
       return reply.status(201).send({
         success: true,
@@ -663,31 +590,24 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         yamlContent?: string;
       };
 
-      // 🚨 关键修复：确保fileContent格式统一为{content: "..."}
       let normalizedFileContent = fileContent;
       if (fileContent && yamlContent) {
-        // 如果同时提供了yamlContent，将fileContent包装为{content: yamlContent}
         normalizedFileContent = { content: yamlContent };
         console.log(
           `[PUT /projects/${id}/files/${fileId}] 🔧 Normalizing fileContent with yamlContent`
         );
       } else if (fileContent && typeof fileContent === 'object' && !fileContent.content) {
-        // 如果fileContent是对象但没有content字段，保持原样（可能是template）
         console.log(
           `[PUT /projects/${id}/files/${fileId}] ℹ️ fileContent is object without 'content' field, keeping as-is`
         );
       }
 
-      const [updated] = await db
-        .update(scriptFiles)
-        .set({
-          ...(fileName && { fileName }),
-          ...(normalizedFileContent && { fileContent: normalizedFileContent }),
-          ...(yamlContent !== undefined && { yamlContent }),
-          updatedAt: new Date(),
-        })
-        .where(and(eq(scriptFiles.projectId, id), eq(scriptFiles.id, fileId))!)
-        .returning();
+      const repo = new ProjectRepository();
+      const updated = await repo.updateProjectFile(id, fileId, {
+        fileName,
+        fileContent: normalizedFileContent,
+        yamlContent,
+      });
 
       if (!updated) {
         return reply.status(404).send({
@@ -713,13 +633,11 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete('/projects/:id/files/:fileId', async (request, reply) => {
     try {
       const { id, fileId } = request.params as { id: string; fileId: string };
+      const repo = new ProjectRepository();
 
-      const deleted = await db
-        .delete(scriptFiles)
-        .where(and(eq(scriptFiles.projectId, id), eq(scriptFiles.id, fileId))!)
-        .returning();
+      const deleted = await repo.deleteProjectFile(id, fileId);
 
-      if (deleted.length === 0) {
+      if (!deleted) {
         return reply.status(404).send({
           success: false,
           error: 'File not found',
@@ -728,7 +646,7 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
 
       return reply.send({
         success: true,
-        data: deleted[0],
+        data: deleted,
       });
     } catch (error) {
       fastify.log.error(error);
@@ -743,19 +661,15 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/projects/:id/template-schemes', async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
+      const repo = new ProjectRepository();
 
-      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      const project = await repo.findProjectById(id);
       if (!project) {
         return reply.status(404).send({ success: false, error: 'Project not found' });
       }
 
-      // 查询模板文件，提取唯一的 filePath 层级
-      const templateFiles = await db
-        .select()
-        .from(scriptFiles)
-        .where(and(eq(scriptFiles.projectId, id), eq(scriptFiles.fileType, 'template')));
+      const templateFiles = await repo.findTemplateFiles(id);
 
-      // 解析 filePath 提取方案名
       const schemeMap = new Map<
         string,
         { name: string; description: string; isDefault: boolean }
@@ -764,9 +678,8 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
       for (const file of templateFiles) {
         if (!file.filePath) continue;
         const parts = file.filePath.split('/');
-        // 格式: _system/config/default/xxx.md 或 _system/config/custom/scheme_name/xxx.md
         if (parts.length >= 4 && parts[0] === '_system' && parts[1] === 'config') {
-          const layer = parts[2]; // 'default' or 'custom'
+          const layer = parts[2];
           if (layer === 'default') {
             if (!schemeMap.has('default')) {
               schemeMap.set('default', {
@@ -800,8 +713,9 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/projects/:id/template-schemes/:schemeName/files', async (request, reply) => {
     try {
       const { id, schemeName } = request.params as { id: string; schemeName: string };
+      const repo = new ProjectRepository();
 
-      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      const project = await repo.findProjectById(id);
       if (!project) {
         return reply.status(404).send({ success: false, error: 'Project not found' });
       }
@@ -811,16 +725,7 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
           ? '_system/config/default/%'
           : `_system/config/custom/${schemeName}/%`;
 
-      const templateFiles = await db
-        .select()
-        .from(scriptFiles)
-        .where(
-          and(
-            eq(scriptFiles.projectId, id),
-            eq(scriptFiles.fileType, 'template'),
-            like(scriptFiles.filePath, pathPattern)
-          )
-        );
+      const templateFiles = await repo.findTemplateFilesByPathLike(id, pathPattern);
 
       const files = templateFiles.map((file) => ({
         name: path.basename(file.filePath!),
@@ -848,8 +753,9 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         schemeName: string;
         templatePath: string;
       };
+      const repo = new ProjectRepository();
 
-      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      const project = await repo.findProjectById(id);
       if (!project) {
         return reply.status(404).send({ success: false, error: 'Project not found' });
       }
@@ -859,17 +765,7 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
           ? `_system/config/default/${templatePath}`
           : `_system/config/custom/${schemeName}/${templatePath}`;
 
-      const [templateFile] = await db
-        .select()
-        .from(scriptFiles)
-        .where(
-          and(
-            eq(scriptFiles.projectId, id),
-            eq(scriptFiles.fileType, 'template'),
-            eq(scriptFiles.filePath, filePath)
-          )
-        )
-        .limit(1);
+      const templateFile = await repo.findTemplateFileByExactPath(id, filePath);
 
       if (!templateFile) {
         return reply.status(404).send({ success: false, error: 'Template not found' });
@@ -900,8 +796,9 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         templatePath: string;
       };
       const { content } = request.body as { content: string };
+      const repo = new ProjectRepository();
 
-      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      const project = await repo.findProjectById(id);
       if (!project) {
         return reply.status(404).send({ success: false, error: 'Project not found' });
       }
@@ -911,33 +808,17 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
           ? `_system/config/default/${templatePath}`
           : `_system/config/custom/${schemeName}/${templatePath}`;
 
-      let [templateFile] = await db
-        .select()
-        .from(scriptFiles)
-        .where(
-          and(
-            eq(scriptFiles.projectId, id),
-            eq(scriptFiles.fileType, 'template'),
-            eq(scriptFiles.filePath, filePath)
-          )
-        )
-        .limit(1);
+      let templateFile = await repo.findTemplateFileByExactPath(id, filePath);
 
-      // 🚨 关键修复：如果模板不存在，尝试从系统模板目录创建
       if (!templateFile) {
         console.log(`[PUT Template] Template not found in DB, attempting to create: ${filePath}`);
 
         try {
-          // 从 config/prompt-defaults 读取默认模板内容
-          const systemTemplatesPath = path.resolve(
-            __dirname,
-            '../../../../config/prompt-defaults'
-          );
+          const systemTemplatesPath = path.resolve(__dirname, '../../../../config/prompt-defaults');
           const systemFilePath = path.join(systemTemplatesPath, templatePath);
 
-          let initialContent = content; // 使用请求中的content作为初始内容
+          let initialContent = content;
 
-          // 如果系统默认模板存在，优先使用它作为初始化
           if (schemeName !== 'default') {
             try {
               const defaultContent = await fs.readFile(systemFilePath, 'utf-8');
@@ -950,20 +831,15 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
             }
           }
 
-          // 创建新模板记录
-          const [newTemplate] = await db
-            .insert(scriptFiles)
-            .values({
-              projectId: id,
-              fileType: 'template',
-              fileName: templatePath,
-              filePath: filePath,
-              fileContent: { content: initialContent },
-            })
-            .returning();
+          templateFile = await repo.createProjectFile({
+            projectId: id,
+            fileType: 'template',
+            fileName: templatePath,
+            filePath,
+            fileContent: { content: initialContent },
+          });
 
           console.log(`[PUT Template] ✅ Created template: ${filePath}`);
-          templateFile = newTemplate;
         } catch (createError: any) {
           console.error(`[PUT Template] Failed to create template:`, createError);
           return reply.status(500).send({
@@ -973,13 +849,9 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
 
-      await db
-        .update(scriptFiles)
-        .set({
-          fileContent: { content },
-          updatedAt: new Date(),
-        })
-        .where(eq(scriptFiles.id, templateFile.id));
+      await repo.updateProjectFile(id, templateFile.id, {
+        fileContent: { content },
+      });
 
       fastify.log.info(`Updated template: ${schemeName}/${templatePath}`);
 
@@ -1005,8 +877,9 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
         description?: string;
         copyFrom?: string;
       };
+      const repo = new ProjectRepository();
 
-      const [project] = await db.select().from(projects).where(eq(projects.id, id));
+      const project = await repo.findProjectById(id);
       if (!project) {
         return reply.status(404).send({ success: false, error: 'Project not found' });
       }
@@ -1017,17 +890,10 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
           .send({ success: false, error: 'Cannot use reserved name "default"' });
       }
 
-      const existingFiles = await db
-        .select()
-        .from(scriptFiles)
-        .where(
-          and(
-            eq(scriptFiles.projectId, id),
-            eq(scriptFiles.fileType, 'template'),
-            like(scriptFiles.filePath, `_system/config/custom/${name}/%`)
-          )
-        )
-        .limit(1);
+      const existingFiles = await repo.findTemplateFilesByPathLike(
+        id,
+        `_system/config/custom/${name}/%`
+      );
 
       if (existingFiles.length > 0) {
         return reply.status(400).send({ success: false, error: `Scheme "${name}" already exists` });
@@ -1036,16 +902,7 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
       const sourcePathPattern =
         copyFrom === 'default' ? '_system/config/default/%' : `_system/config/custom/${copyFrom}/%`;
 
-      const sourceFiles = await db
-        .select()
-        .from(scriptFiles)
-        .where(
-          and(
-            eq(scriptFiles.projectId, id),
-            eq(scriptFiles.fileType, 'template'),
-            like(scriptFiles.filePath, sourcePathPattern)
-          )
-        );
+      const sourceFiles = await repo.findTemplateFilesByPathLike(id, sourcePathPattern);
 
       if (sourceFiles.length === 0) {
         return reply
@@ -1053,18 +910,15 @@ const projectsRoutes: FastifyPluginAsync = async (fastify) => {
           .send({ success: false, error: `Source scheme "${copyFrom}" not found` });
       }
 
-      for (const sourceFile of sourceFiles) {
-        const fileName = path.basename(sourceFile.filePath!);
-        const newFilePath = `_system/config/custom/${name}/${fileName}`;
+      const newFiles = sourceFiles.map((sourceFile) => ({
+        projectId: id,
+        fileType: 'template' as string,
+        fileName: path.basename(sourceFile.filePath!),
+        filePath: `_system/config/custom/${name}/${path.basename(sourceFile.filePath!)}`,
+        fileContent: sourceFile.fileContent,
+      }));
 
-        await db.insert(scriptFiles).values({
-          projectId: id,
-          fileType: 'template',
-          fileName: fileName,
-          filePath: newFilePath,
-          fileContent: sourceFile.fileContent,
-        });
-      }
+      await repo.insertScriptFiles(newFiles);
 
       fastify.log.info(`Created template scheme: ${name}`);
 
