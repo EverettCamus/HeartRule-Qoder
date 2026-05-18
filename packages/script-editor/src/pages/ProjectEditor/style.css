@@ -149,7 +149,7 @@
 }
 
 /* CodeMirror editor full width */
-.editor-content .cm-editor {
+.cm-editor {
   width: 100%;
 }
 
