@@ -572,7 +572,9 @@ export class SessionRepository implements ISessionRepository {
           responseTimeMs: e.responseTimeMs,
           finishReason: (e.config as any)?.finish_reason,
           prompt: e.prompt,
-          response: typeof e.response === 'string' ? e.response : JSON.stringify(e.response),
+          response:
+            (e.response as any)?.text ??
+            (typeof e.response === 'string' ? e.response : JSON.stringify(e.response)),
         })),
       };
 
