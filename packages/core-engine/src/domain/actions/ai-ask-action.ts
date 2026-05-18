@@ -187,11 +187,17 @@ export class AiAskAction extends BaseAction {
     // 调用 LLM 生成下一轮问题或决定退出
     const llmResult = await this.generateQuestionFromTemplate(context, AskTemplateType.MULTI_ROUND);
 
-    // 提取 LLM 输出的原始数据
+    // 提取 LLM 输出的原始数据（JSON parse 可能失败，因 llmRawOutput 在 parseMultiRoundOutput 降级时是原始不可解析文本）
     const llmOutput: Partial<EnhancedAskLLMOutput> = llmResult.metadata?.llmRawOutput
-      ? EnhancedAskLLMOutputSchema.parse(
-          JSON.parse(this.cleanJsonOutput(llmResult.metadata.llmRawOutput))
-        )
+      ? (() => {
+          try {
+            return EnhancedAskLLMOutputSchema.parse(
+              JSON.parse(this.cleanJsonOutput(llmResult.metadata.llmRawOutput))
+            );
+          } catch {
+            return {};
+          }
+        })()
       : {};
 
     // 使用ExitDecisionEngine进行综合决策
