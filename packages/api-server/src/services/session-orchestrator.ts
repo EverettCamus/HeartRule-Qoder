@@ -10,6 +10,7 @@ import {
   Session,
   ScriptExecutor,
   type TemplateProvider,
+  type MemoryRepository,
   createLogger,
 } from '@heartrule/core-engine';
 import { VariableScope } from '@heartrule/shared-types';
@@ -30,6 +31,7 @@ import {
 const logger = createLogger('SessionOrchestrator');
 
 export class SessionOrchestrator {
+  private memoryRepository?: MemoryRepository;
   private scriptExecutor: ScriptExecutor;
   private templateProvider: TemplateProvider;
   private repository: ISessionRepository;
@@ -45,11 +47,13 @@ export class SessionOrchestrator {
   > = new Map();
 
   constructor(
+    memoryRepository?: MemoryRepository,
     scriptExecutor?: ScriptExecutor,
     repository?: ISessionRepository,
     templateProvider?: TemplateProvider,
     responseBuilder?: SessionResponseBuilder
   ) {
+    this.memoryRepository = memoryRepository;
     this.scriptExecutor = scriptExecutor || container.getScriptExecutor();
     this.templateProvider = templateProvider || new DatabaseTemplateProvider();
     this.repository = repository || new SessionRepository();
@@ -283,6 +287,21 @@ export class SessionOrchestrator {
       const prevHistoryLength = session.conversationHistory.length;
       session = await this.executeScript(script, sessionId, session, null);
 
+      // Phase 0: 会话启动时调用 recall（仅记录日志）
+      if (this.memoryRepository) {
+        const ctx = await this.memoryRepository.recall(
+          sessionData.userId,
+          '用户核心问题、关键事件、治疗进展'
+        );
+        logger.debug('🧠 [Memory] recall at session start:', {
+          userId: sessionData.userId,
+          worldFacts: ctx.worldFacts.length,
+          experiences: ctx.experiences.length,
+          opinions: ctx.opinions.length,
+          hasSummary: !!ctx.observationSummary,
+        });
+      }
+
       if (session.metadata.sessionConfig) {
         const currentMetadata = (sessionData.metadata as Record<string, any>) || {};
         const updatedMetadata = {
@@ -296,6 +315,8 @@ export class SessionOrchestrator {
       await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevHistoryLength);
       await this.saveVariableSnapshots(session);
       await this.repository.persistSession(session, globalVariables);
+
+      await this.maybeReflect(sessionData.userId, session);
 
       const result = this.responseBuilder.buildSessionResponseFromSession(
         session,
@@ -357,9 +378,34 @@ export class SessionOrchestrator {
       const prevHistoryLength = session.conversationHistory.length;
       session = await this.executeScript(script, sessionId, session, userInput);
 
+      // Phase 0: 每轮对话后异步 retain（仅记录日志）
+      if (this.memoryRepository) {
+        const roundMessages = session.conversationHistory.slice(prevHistoryLength);
+        this.memoryRepository
+          .retain(
+            sessionData.userId,
+            roundMessages.map((m) => ({
+              role: m.role,
+              content: m.content,
+              timestamp: new Date(),
+            }))
+          )
+          .then(() => {
+            logger.debug('🧠 [Memory] retain completed:', {
+              userId: sessionData.userId,
+              messageCount: roundMessages.length,
+            });
+          })
+          .catch((err) => {
+            logger.warn('🧠 [Memory] retain failed:', err.message);
+          });
+      }
+
       await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevHistoryLength);
       await this.saveVariableSnapshots(session);
       await this.repository.persistSession(session, globalVariables);
+
+      await this.maybeReflect(sessionData.userId, session);
 
       const result = this.responseBuilder.buildSessionResponseFromSession(
         session,
@@ -612,5 +658,20 @@ export class SessionOrchestrator {
       this.prevVariableSnapshots,
       true
     );
+  }
+
+  private async maybeReflect(userId: string, session: Session): Promise<void> {
+    if (!this.memoryRepository) return;
+    if (session.executionStatus !== 'completed') return;
+
+    try {
+      const result = await this.memoryRepository.reflect(userId);
+      logger.debug('🧠 [Memory] reflect completed:', {
+        userId,
+        summary: result.summary,
+      });
+    } catch (err: any) {
+      logger.warn('🧠 [Memory] reflect failed:', err.message);
+    }
   }
 }

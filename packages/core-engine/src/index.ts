@@ -117,6 +117,8 @@ export * from './application/actions/action-registry.js';
 // 具体动作执行器实现
 export * from './domain/actions/ai-say-action.js'; // AI 讲解/介绍动作执行器
 export * from './domain/actions/ai-ask-action.js'; // AI 追问/提问动作执行器
+// Domain Ports
+export * from './domain/ports/memory-repository.port.js';
 
 // =============================================================================
 // Application Layer - Application Services (应用层 - 应用服务接口)

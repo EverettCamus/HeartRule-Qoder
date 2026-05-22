@@ -295,6 +295,7 @@ ExitDecisionEngine → "check if evidence chain is complete"
 6. **U-Shaped Thinking** — Bridge concrete situations with abstract strategies
 7. **Co-evolutionary** — Human creates/oversees, AI executes/amplifies, feedback loop
 8. **Planning-Execution Separation** — 90% deterministic execution (low-head), 10% LLM strategy (high-head) at key nodes
+9. **Code-vs-Script Boundary** — Code (`core-engine` + `api-server`) implements the **consulting abstraction layer**: domain-neutral ports (MemoryRepository), engine orchestration, variable scoping, LLM invocation. YAML scripts + templates implement **domain-specific consulting**: extraction prompts, recall queries, document templates, knowledge base entries. When designing, always ask: "Is this common to ALL consulting domains, or specific to one?" If specific — it belongs in scripts, not code.
 
 **See** `docs-archive/misc/HeartRule设计哲学v2.md` for full philosophical framework (in Chinese).
 
