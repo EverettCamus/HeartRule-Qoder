@@ -29,6 +29,7 @@
     "@fastify/websocket": "^10.0.0",
     "@heartrule/core-engine": "workspace:*",
     "@heartrule/shared-types": "workspace:*",
+    "@vectorize-io/hindsight-client": "0.6.2",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.0",
     "drizzle-orm": "^0.29.3",

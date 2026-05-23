@@ -378,6 +378,57 @@ export abstract class BaseAction {
   }
 
   /**
+   * Format MemoryContext from metadata into a markdown string for prompt injection.
+   * Returns empty string if no memory context is available.
+   */
+  protected formatMemoryContext(context: ActionContext): string {
+    const mc = context.metadata?.memoryContext as
+      | {
+          worldFacts?: Array<{ content: string }>;
+          experiences?: Array<{ content: string }>;
+          opinions?: Array<{ content: string; confidence: number }>;
+          observationSummary?: string;
+        }
+      | undefined;
+
+    if (!mc) return '';
+
+    const hasContent =
+      (mc.worldFacts?.length ?? 0) > 0 ||
+      (mc.experiences?.length ?? 0) > 0 ||
+      (mc.opinions?.length ?? 0) > 0 ||
+      !!mc.observationSummary;
+
+    if (!hasContent) return '';
+
+    const lines: string[] = [];
+
+    if (mc.worldFacts?.length) {
+      lines.push('## 已知事实');
+      for (const f of mc.worldFacts) lines.push(`- ${f.content}`);
+    }
+
+    if (mc.experiences?.length) {
+      lines.push('\n## 历史经历');
+      for (const e of mc.experiences) lines.push(`- ${e.content}`);
+    }
+
+    if (mc.opinions?.length) {
+      lines.push('\n## 判断与推论');
+      for (const o of mc.opinions) {
+        lines.push(`- ${o.content} (置信度: ${Math.round(o.confidence * 100)}%)`);
+      }
+    }
+
+    if (mc.observationSummary) {
+      lines.push('\n## 综合观察');
+      lines.push(mc.observationSummary);
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
    * 清理 LLM 输出的 JSON 文本（移除 Markdown 代码块标记）
    */
   protected cleanJsonOutput(text: string): string {

@@ -53,7 +53,7 @@ export class SessionOrchestrator {
     templateProvider?: TemplateProvider,
     responseBuilder?: SessionResponseBuilder
   ) {
-    this.memoryRepository = memoryRepository;
+    this.memoryRepository = memoryRepository || container.getMemoryRepository();
     this.scriptExecutor = scriptExecutor || container.getScriptExecutor();
     this.templateProvider = templateProvider || new DatabaseTemplateProvider();
     this.repository = repository || new SessionRepository();
@@ -289,16 +289,17 @@ export class SessionOrchestrator {
 
       // Phase 0: 会话启动时调用 recall（仅记录日志）
       if (this.memoryRepository) {
-        const ctx = await this.memoryRepository.recall(
+        const memoryContext = await this.memoryRepository.recall(
           sessionData.userId,
           '用户核心问题、关键事件、治疗进展'
         );
-        logger.debug('🧠 [Memory] recall at session start:', {
+        session.metadata.memoryContext = memoryContext;
+        logger.info('🧠 [Memory] recall at session start:', {
           userId: sessionData.userId,
-          worldFacts: ctx.worldFacts.length,
-          experiences: ctx.experiences.length,
-          opinions: ctx.opinions.length,
-          hasSummary: !!ctx.observationSummary,
+          worldFacts: memoryContext.worldFacts.length,
+          experiences: memoryContext.experiences.length,
+          opinions: memoryContext.opinions.length,
+          hasSummary: !!memoryContext.observationSummary,
         });
       }
 

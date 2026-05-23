@@ -553,6 +553,7 @@ export class AiSayAction extends BaseAction {
       topic_content: this.extractTopicContent(context),
       current_round: this.currentRound,
       max_rounds: this.maxRounds,
+      memory_context: this.formatMemoryContext(context),
     };
   }
 

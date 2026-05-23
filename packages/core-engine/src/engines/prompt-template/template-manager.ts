@@ -271,6 +271,7 @@ export class PromptTemplateManager {
       'topic_content',
       'current_round',
       'max_rounds',
+      'memory_context',
     ];
     return systemVariables.includes(varName);
   }

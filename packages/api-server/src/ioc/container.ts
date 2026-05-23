@@ -15,11 +15,12 @@
  */
 
 import { LLMOrchestrator, ScriptExecutor } from '@heartrule/core-engine';
-import type { ILLMProvider } from '@heartrule/core-engine';
+import type { ILLMProvider, MemoryRepository } from '@heartrule/core-engine';
 
 import { DeepSeekProvider } from '../adapters/outbound/llm/deepseek-provider.js';
 import { OpenAIProvider } from '../adapters/outbound/llm/openai-provider.js';
 import { VolcanoDeepSeekProvider } from '../adapters/outbound/llm/volcano-provider.js';
+import { HindsightMemoryAdapter } from '../adapters/outbound/memory/hindsight-adapter.js';
 
 /**
  * 依赖注入容器
@@ -32,6 +33,7 @@ export class DependencyContainer {
   private llmProvider: ILLMProvider;
   private llmOrchestrator: LLMOrchestrator;
   private scriptExecutor: ScriptExecutor;
+  private memoryRepository: MemoryRepository;
 
   private constructor() {
     // 1. 根据环境变量选择 LLM Provider
@@ -53,6 +55,9 @@ export class DependencyContainer {
 
     // 3. 创建 ScriptExecutor（注入 LLMOrchestrator）
     this.scriptExecutor = new ScriptExecutor(this.llmOrchestrator);
+
+    // 4. 创建 MemoryRepository (Hindsight adapter)
+    this.memoryRepository = new HindsightMemoryAdapter();
 
     console.log('[DependencyContainer] ✅ Container initialized:', {
       llmProvider: this.getLLMProviderName(),
@@ -190,6 +195,13 @@ export class DependencyContainer {
    */
   getScriptExecutor(): ScriptExecutor {
     return this.scriptExecutor;
+  }
+
+  /**
+   * 获取 MemoryRepository（单例）
+   */
+  getMemoryRepository(): MemoryRepository {
+    return this.memoryRepository;
   }
 }
 

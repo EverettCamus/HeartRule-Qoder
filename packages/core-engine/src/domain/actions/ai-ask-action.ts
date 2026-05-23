@@ -617,6 +617,7 @@ export class AiAskAction extends BaseAction {
       current_round: this.currentRound,
       max_rounds: this.maxRounds,
       collected_variables: collectedVariables,
+      memory_context: this.formatMemoryContext(context),
     };
   }
 

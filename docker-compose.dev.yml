@@ -39,6 +39,25 @@ services:
     networks:
       - heartrule-network
 
+  # Hindsight — AI memory system (vector + graph + metadata)
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:latest
+    container_name: heartrule-hindsight
+    ports:
+      - '${HINDSIGHT_PORT:-8888}:8888'
+    environment:
+      HINDSIGHT_HOST: '0.0.0.0'
+      HINDSIGHT_PORT: '8888'
+    volumes:
+      - heartrule-qcoder_hindsight_data:/app/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8888/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - heartrule-network
+
   # Adminer - PostgreSQL管理界面
   adminer:
     image: adminer:latest
@@ -56,6 +75,8 @@ volumes:
   heartrule-qcoder_postgres_data:
     external: true
   heartrule-qcoder_redis_data:
+    external: true
+  heartrule-qcoder_hindsight_data:
     external: true
 
 networks:
