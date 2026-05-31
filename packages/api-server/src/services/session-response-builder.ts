@@ -99,7 +99,7 @@ export class SessionResponseBuilder {
     >,
     includeVariableStore: boolean = false
   ): SessionResponse {
-    const runId = session.metadata.currentRunId || (dbSession as any).currentRunId || undefined;
+    const runId = session.metadata.currentRunId || dbSession.currentRunId || undefined;
     const result: SessionResponse = {
       aiMessage: session.lastAiMessage || '',
       sessionStatus: dbSession.status,

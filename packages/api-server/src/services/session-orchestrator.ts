@@ -11,9 +11,9 @@ import {
   ScriptExecutor,
   type TemplateProvider,
   type MemoryRepository,
+  type SessionPersistenceData,
   createLogger,
 } from '@heartrule/core-engine';
-import { VariableScope } from '@heartrule/shared-types';
 import { v4 as uuidv4 } from 'uuid';
 import yaml from 'yaml';
 
@@ -62,60 +62,6 @@ export class SessionOrchestrator {
 
   // ==================== Private: Session Construction ====================
 
-  private createInitialSession(
-    sessionData: SessionData,
-    globalVariables: Record<string, any>,
-    conversationHistory: any[],
-    overrides: Record<string, any> = {}
-  ): Session {
-    const session = new Session({
-      sessionId: sessionData.id,
-      userId: sessionData.userId,
-      scriptId: sessionData.scriptId,
-      status: (sessionData.status as any) || 'active',
-      executionStatus: (sessionData.executionStatus as any) || 'running',
-      variables: {
-        ...globalVariables,
-        ...((sessionData.variables as Record<string, unknown>) || {}),
-      },
-      conversationHistory,
-    });
-
-    // Populate variableStore.global with loaded global variables
-    if (session.variableStore) {
-      if (!session.variableStore.global) session.variableStore.global = {};
-      for (const [key, value] of Object.entries(globalVariables)) {
-        session.variableStore.global[key] = {
-          value,
-          type: typeof value,
-          source: 'global_init',
-          lastUpdated: new Date().toISOString(),
-          scope: VariableScope.GLOBAL,
-        };
-      }
-    }
-
-    // Apply overrides
-    if (overrides.projectId) {
-      session.metadata.projectId = overrides.projectId;
-    }
-    if (overrides.sessionConfig) {
-      session.metadata.sessionConfig = overrides.sessionConfig;
-    }
-
-    logger.debug('📋 Initial session:', {
-      sessionId: session.sessionId,
-      status: session.status,
-      executionStatus: session.executionStatus,
-      position: session.position,
-      variables: session.variables,
-      projectId: session.metadata.projectId,
-      sessionConfig: session.metadata.sessionConfig,
-    });
-
-    return session;
-  }
-
   private restoreSession(
     sessionData: SessionData,
     globalVariables: Record<string, any>,
@@ -135,7 +81,7 @@ export class SessionOrchestrator {
       variables: sessionData.variables,
       position: sessionData.position,
       metadata: sessionData.metadata,
-      currentRunId: (sessionData as any).currentRunId,
+      currentRunId: sessionData.currentRunId,
     };
 
     const session = Session.fromSessionData(dataForFactory, {
@@ -255,10 +201,26 @@ export class SessionOrchestrator {
         await this.repository.loadGlobalVariables(script.scriptName, sessionData.userId);
       const conversationHistory = await this.repository.loadConversationHistory(sessionId);
 
-      let session = this.createInitialSession(sessionData, globalVariables, conversationHistory, {
-        ...(sessionData.metadata as Record<string, any>),
-        projectId: script.projectId,
+      const dataForFactory: SessionPersistenceData = {
+        id: sessionData.id,
+        scriptId: sessionData.scriptId,
+        userId: sessionData.userId,
+        status: sessionData.status,
+        executionStatus: sessionData.executionStatus,
+        variables: sessionData.variables,
+        position: sessionData.position,
+        metadata: sessionData.metadata,
+      };
+
+      let session = Session.fromSessionData(dataForFactory, {
+        globalVariables,
+        conversationHistory,
       });
+
+      // Override with script-level projectId (authoritative source)
+      if (script.projectId) {
+        session.metadata.projectId = script.projectId;
+      }
 
       session.metadata.currentRunId = runId;
       session.metadata.globalVariableDefinitions = globalVariableDefinitions;
@@ -284,7 +246,7 @@ export class SessionOrchestrator {
         }
       };
 
-      const prevHistoryLength = session.conversationHistory.length;
+      const prevMsgCount = session.conversationHistory.length;
       session = await this.executeScript(script, sessionId, session, null);
 
       // Phase 0: 会话启动时调用 recall（仅记录日志）
@@ -313,7 +275,7 @@ export class SessionOrchestrator {
         logger.debug('💾 Saved sessionConfig to database:', session.metadata.sessionConfig);
       }
 
-      await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevHistoryLength);
+      await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevMsgCount);
       await this.saveVariableSnapshots(session);
       await this.repository.persistSession(session, globalVariables);
 
@@ -347,6 +309,10 @@ export class SessionOrchestrator {
       const { values: globalVariables, definitions: globalVariableDefinitions } =
         await this.repository.loadGlobalVariables(script.scriptName, sessionData.userId);
 
+      // Capture history length BEFORE saving user message, so retain includes user input
+      const prevConversationHistory = await this.repository.loadConversationHistory(sessionId);
+      const prevMsgCount = prevConversationHistory.length;
+
       await this.repository.saveUserMessage(sessionId, userInput);
 
       const conversationHistory = await this.repository.loadConversationHistory(sessionId);
@@ -376,12 +342,17 @@ export class SessionOrchestrator {
         }
       };
 
-      const prevHistoryLength = session.conversationHistory.length;
       session = await this.executeScript(script, sessionId, session, userInput);
 
-      // Phase 0: 每轮对话后异步 retain（仅记录日志）
+      // Phase 1: 每轮对话后异步 retain 到 Hindsight
       if (this.memoryRepository) {
-        const roundMessages = session.conversationHistory.slice(prevHistoryLength);
+        const roundMessages = session.conversationHistory.slice(prevMsgCount);
+        logger.info('🧠 [Memory] firing retain:', {
+          userId: sessionData.userId,
+          msgCount: roundMessages.length,
+          firstRole: roundMessages[0]?.role,
+          firstContent: roundMessages[0]?.content?.slice(0, 80),
+        });
         this.memoryRepository
           .retain(
             sessionData.userId,
@@ -402,7 +373,7 @@ export class SessionOrchestrator {
           });
       }
 
-      await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevHistoryLength);
+      await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevMsgCount);
       await this.saveVariableSnapshots(session);
       await this.repository.persistSession(session, globalVariables);
 
@@ -642,12 +613,12 @@ export class SessionOrchestrator {
       session.metadata.rerunConfigOverride = configOverride;
     }
 
-    const prevHistoryLength = session.conversationHistory.length;
+    const prevMsgCount = session.conversationHistory.length;
     session = await this.executeScript(script, sessionId, session, null);
 
     this.addRerunVersion(session, targetKey, configOverride, llmConfig);
 
-    await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevHistoryLength);
+    await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevMsgCount);
     await this.saveVariableSnapshots(session);
     await this.repository.persistSession(session, globalVariables);
 

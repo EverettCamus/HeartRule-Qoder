@@ -5,7 +5,7 @@
  * to separate persistence concerns from business orchestration.
  */
 
-import type { Session } from '@heartrule/core-engine';
+import type { Session, SessionPersistenceData } from '@heartrule/core-engine';
 import { createLogger } from '@heartrule/core-engine';
 import { and, eq, count, sql, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
@@ -27,16 +27,7 @@ const logger = createLogger('SessionRepository');
 
 // ---- Types ----
 
-export interface SessionData {
-  id: string;
-  scriptId: string;
-  userId: string;
-  status: string;
-  executionStatus: string;
-  variables: Record<string, unknown> | null;
-  position: Record<string, unknown> | null;
-  metadata: Record<string, any> | null;
-}
+export type { SessionPersistenceData as SessionData } from '@heartrule/core-engine';
 
 export interface ScriptData {
   id: string;
@@ -51,7 +42,7 @@ export interface ScriptData {
 
 export interface ISessionRepository {
   // Reads
-  loadSessionById(sessionId: string): Promise<SessionData>;
+  loadSessionById(sessionId: string): Promise<SessionPersistenceData>;
   loadScriptById(scriptId: string): Promise<ScriptData>;
   loadConversationHistory(sessionId: string): Promise<any[]>;
   loadGlobalVariables(
@@ -126,7 +117,7 @@ export interface ISessionRepository {
     }>
   >;
   getRawMessages(sessionId: string): Promise<any[]>;
-  listUserSessions(userId: string): Promise<SessionData[]>;
+  listUserSessions(userId: string): Promise<SessionPersistenceData[]>;
   getDebugEntries(sessionId: string, runId?: string): Promise<any[]>;
 }
 
@@ -135,7 +126,7 @@ export interface ISessionRepository {
 export class SessionRepository implements ISessionRepository {
   // ==================== Reads ====================
 
-  async loadSessionById(sessionId: string): Promise<SessionData> {
+  async loadSessionById(sessionId: string): Promise<SessionPersistenceData> {
     const session = await db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
     });
@@ -152,7 +143,7 @@ export class SessionRepository implements ISessionRepository {
       executionStatus: session.executionStatus,
     });
 
-    return session as SessionData;
+    return session as SessionPersistenceData;
   }
 
   async loadScriptById(scriptId: string): Promise<ScriptData> {
@@ -778,11 +769,11 @@ export class SessionRepository implements ISessionRepository {
     });
   }
 
-  async listUserSessions(userId: string): Promise<SessionData[]> {
+  async listUserSessions(userId: string): Promise<SessionPersistenceData[]> {
     return db.query.sessions.findMany({
       where: eq(sessions.userId, userId),
       orderBy: (sessions, { desc }) => [desc(sessions.createdAt)],
-    }) as Promise<SessionData[]>;
+    }) as Promise<SessionPersistenceData[]>;
   }
 
   async getDebugEntries(sessionId: string, runId?: string): Promise<any[]> {

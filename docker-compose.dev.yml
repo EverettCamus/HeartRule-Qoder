@@ -48,6 +48,10 @@ services:
     environment:
       HINDSIGHT_HOST: '0.0.0.0'
       HINDSIGHT_PORT: '8888'
+      HINDSIGHT_API_LLM_PROVIDER: deepseek
+      HINDSIGHT_API_LLM_API_KEY: ${HINDSIGHT_API_LLM_API_KEY:-${DEEPSEEK_API_KEY}}
+      HINDSIGHT_API_LLM_MODEL: ${HINDSIGHT_API_LLM_MODEL:-deepseek-v4-flash}
+      HF_ENDPOINT: https://hf-mirror.com
     volumes:
       - heartrule-qcoder_hindsight_data:/app/data
     healthcheck:
