@@ -269,32 +269,6 @@ export const variables = pgTable(
 );
 
 /**
- * 记忆表
- */
-export const memories = pgTable(
-  'memories',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'cascade' }),
-    content: text('content').notNull(),
-    memoryType: varchar('memory_type', { length: 50 }).notNull(),
-    importance: varchar('importance', { length: 10 }).notNull(),
-    // embedding: vector('embedding', { dimensions: 1536 }), // 需要pgvector扩展
-    metadata: jsonb('metadata').notNull().default({}),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
-    accessedAt: timestamp('accessed_at').notNull().defaultNow(),
-    accessCount: varchar('access_count', { length: 10 }).notNull().default('0'),
-  },
-  (table) => {
-    return {
-      sessionIdIdx: index('memories_session_id_idx').on(table.sessionId),
-      typeIdx: index('memories_type_idx').on(table.memoryType),
-      importanceIdx: index('memories_importance_idx').on(table.importance),
-    };
-  }
-);
-
-/**
  * 调试信息表（持久化 LLM 输入输出、执行日志等）
  * 按 phase-topic-action-round 定位，支持多 run 分支
  */
@@ -362,8 +336,6 @@ export type Script = typeof scripts.$inferSelect;
 export type NewScript = typeof scripts.$inferInsert;
 export type Variable = typeof variables.$inferSelect;
 export type NewVariable = typeof variables.$inferInsert;
-export type Memory = typeof memories.$inferSelect;
-export type NewMemory = typeof memories.$inferInsert;
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type ScriptFile = typeof scriptFiles.$inferSelect;

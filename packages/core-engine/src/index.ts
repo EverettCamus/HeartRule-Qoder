@@ -170,9 +170,6 @@ export * from './engines/prompt-template/template-provider.js';
 // TemplateResolver: 模板路径解析器，支持两层方案机制
 export * from './engines/prompt-template/template-resolver.js';
 
-// MemoryEngine: 记忆引擎，管理长期/短期记忆的读写（待实现）
-export * from './engines/memory/index.js';
-
 // YAMLParser: YAML 脚本解析器，支持 Schema 验证
 export * from './engines/script-execution/yaml-parser.js';
 

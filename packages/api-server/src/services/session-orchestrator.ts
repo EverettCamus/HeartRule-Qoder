@@ -309,7 +309,7 @@ export class SessionOrchestrator {
       const { values: globalVariables, definitions: globalVariableDefinitions } =
         await this.repository.loadGlobalVariables(script.scriptName, sessionData.userId);
 
-      // Capture history length BEFORE saving user message, so retain includes user input
+      // Pre-load history to know which AI messages are new (for saveNewAIMessagesFromSession)
       const prevConversationHistory = await this.repository.loadConversationHistory(sessionId);
       const prevMsgCount = prevConversationHistory.length;
 
@@ -342,35 +342,64 @@ export class SessionOrchestrator {
         }
       };
 
+      const prevPosition = session.position;
       session = await this.executeScript(script, sessionId, session, userInput);
 
-      // Phase 1: 每轮对话后异步 retain 到 Hindsight
+      // Phase 2: per-Action retain（非 per-round）
+      // 检测 Action 是否完成，对完成的 Action 做一次完整对话片段的 retain
       if (this.memoryRepository) {
-        const roundMessages = session.conversationHistory.slice(prevMsgCount);
-        logger.info('🧠 [Memory] firing retain:', {
-          userId: sessionData.userId,
-          msgCount: roundMessages.length,
-          firstRole: roundMessages[0]?.role,
-          firstContent: roundMessages[0]?.content?.slice(0, 80),
-        });
-        this.memoryRepository
-          .retain(
-            sessionData.userId,
-            roundMessages.map((m) => ({
-              role: m.role,
-              content: m.content,
-              timestamp: new Date(),
-            }))
-          )
-          .then(() => {
-            logger.debug('🧠 [Memory] retain completed:', {
-              userId: sessionData.userId,
-              messageCount: roundMessages.length,
-            });
-          })
-          .catch((err) => {
-            logger.warn('🧠 [Memory] retain failed:', err.message);
-          });
+        const newPosition = session.position;
+        const prevActionId = (prevPosition as Record<string, any>)?.actionId;
+        const newActionId = (newPosition as Record<string, any>)?.actionId;
+        // Action 前进（跳到新 action）
+        const actionChanged = prevActionId && prevActionId !== newActionId;
+        // Session 完成但 Action 未前进（最后一个 Action 完成时）
+        const sessionEnded =
+          session.executionStatus === 'completed' && prevActionId === newActionId;
+
+        if (actionChanged || sessionEnded) {
+          const snapshots = (session.metadata.actionSnapshots || {}) as Record<string, any>;
+          const retainActionId = actionChanged ? prevActionId : newActionId;
+          const currentSnapshot = snapshots[retainActionId];
+          const nextSnapshot = actionChanged ? snapshots[newActionId] : undefined;
+
+          if (currentSnapshot) {
+            const startIdx: number = currentSnapshot.conversationHistoryLength ?? 0;
+            const endIdx: number = nextSnapshot
+              ? nextSnapshot.conversationHistoryLength
+              : session.conversationHistory.length;
+            const actionMessages = session.conversationHistory.slice(startIdx, endIdx);
+
+            if (actionMessages.length > 0) {
+              logger.info('🧠 [Memory] per-Action retain:', {
+                userId: sessionData.userId,
+                actionId: retainActionId,
+                msgCount: actionMessages.length,
+                trigger: actionChanged ? 'action-changed' : 'session-ended',
+              });
+              this.memoryRepository
+                .retain(
+                  sessionData.userId,
+                  actionMessages.map((m) => ({
+                    role: m.role,
+                    content: m.content,
+                    timestamp: new Date(),
+                  })),
+                  { documentId: retainActionId, tags: ['chat'] }
+                )
+                .then(() => {
+                  logger.debug('🧠 [Memory] retain completed:', {
+                    userId: sessionData.userId,
+                    actionId: retainActionId,
+                  });
+                })
+                .catch((err) => {
+                  logger.warn('🧠 [Memory] retain failed:', err.message);
+                });
+            }
+          }
+        }
+        // 如果 Action 没变且 session 没结束，本轮不 retain
       }
 
       await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevMsgCount);

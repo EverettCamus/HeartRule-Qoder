@@ -15,6 +15,8 @@ import type {
   MemoryContext,
   ReflectionResult,
   MemoryMessage,
+  RetainOptions,
+  RecallOptions,
 } from '@heartrule/core-engine';
 import { createLogger } from '@heartrule/core-engine';
 import { HindsightClient } from '@vectorize-io/hindsight-client';
@@ -32,14 +34,19 @@ export class HindsightMemoryAdapter implements MemoryRepository {
     logger.info('Initialized', { baseUrl: url });
   }
 
-  async retain(userId: string, messages: MemoryMessage[]): Promise<void> {
+  async retain(userId: string, messages: MemoryMessage[], options?: RetainOptions): Promise<void> {
     const content = messages.map((m) => `${m.role}: ${m.content}`).join('\n');
 
-    logger.debug('retain called', { userId, messageCount: messages.length });
+    logger.debug('retain called', {
+      userId,
+      messageCount: messages.length,
+      documentId: options?.documentId,
+    });
 
     try {
       await this.client.retain(userId, content, {
-        tags: ['chat'],
+        tags: options?.tags ?? ['chat'],
+        documentId: options?.documentId,
       });
       logger.debug('retain succeeded', { userId });
     } catch (error: any) {
@@ -47,12 +54,14 @@ export class HindsightMemoryAdapter implements MemoryRepository {
     }
   }
 
-  async recall(userId: string, query: string): Promise<MemoryContext> {
+  async recall(userId: string, query: string, options?: RecallOptions): Promise<MemoryContext> {
     logger.debug('recall called', { userId, query });
 
     try {
       const response = await this.client.recall(userId, query, {
-        maxTokens: 4000,
+        maxTokens: options?.maxTokens ?? 4000,
+        types: options?.types as any,
+        tags: options?.tags,
       });
 
       const worldFacts: Array<{ content: string }> = [];

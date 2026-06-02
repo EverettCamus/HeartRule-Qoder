@@ -49,6 +49,28 @@ export interface ReflectionResult {
 }
 
 /**
+ * retain() 的可选参数
+ */
+export interface RetainOptions {
+  /** 关联到特定 Action 的标识符 */
+  documentId?: string;
+  /** 记忆标签（用于 Hindsight tag 过滤） */
+  tags?: string[];
+}
+
+/**
+ * recall() 的可选参数
+ */
+export interface RecallOptions {
+  /** 召回结果的 token 上限 */
+  maxTokens?: number;
+  /** 事实类型筛选 */
+  types?: Array<'world' | 'experience' | 'observation'>;
+  /** 按标签过滤记忆 */
+  tags?: string[];
+}
+
+/**
  * 记忆仓储领域端口
  *
  * @remarks
@@ -63,23 +85,26 @@ export interface MemoryRepository {
    *
    * @param userId - 用户标识
    * @param messages - 待存入的消息列表
+   * @param _options - 可选参数（documentId, tags）
    */
-  retain(userId: string, messages: MemoryMessage[]): Promise<void>;
+  retain(userId: string, messages: MemoryMessage[], _options?: RetainOptions): Promise<void>;
 
   /**
    * 召回 —— 按查询检索相关记忆
    *
    * @param userId - 用户标识
    * @param query - 自然语言查询（如"用户的核心信念"）
+   * @param _options - 可选参数（maxTokens, types, tags）
    * @returns 结构化的记忆上下文
    */
-  recall(userId: string, query: string): Promise<MemoryContext>;
+  recall(userId: string, query: string, _options?: RecallOptions): Promise<MemoryContext>;
 
   /**
    * 反思 —— 回顾已有记忆，综合形成新观察
    *
    * @param userId - 用户标识
+   * @param query - 可选的反思方向
    * @returns 反思结果摘要
    */
-  reflect(userId: string): Promise<ReflectionResult>;
+  reflect(userId: string, query?: string): Promise<ReflectionResult>;
 }

@@ -3,6 +3,8 @@ import type {
   MemoryContext,
   ReflectionResult,
   MemoryMessage,
+  RetainOptions,
+  RecallOptions,
 } from '../../src/domain/ports/memory-repository.port.js';
 
 /**
@@ -19,12 +21,12 @@ export class FakeMemoryRepository implements MemoryRepository {
   /** 预填充数据：支持在测试中预设特定 userId 的 recall 结果 */
   private prefillData: Map<string, MemoryContext> = new Map();
 
-  async retain(userId: string, messages: MemoryMessage[]): Promise<void> {
+  async retain(userId: string, messages: MemoryMessage[], _options?: RetainOptions): Promise<void> {
     const existing = this.storage.get(userId) || [];
     this.storage.set(userId, [...existing, ...messages]);
   }
 
-  async recall(userId: string, _query: string): Promise<MemoryContext> {
+  async recall(userId: string, _query: string, _options?: RecallOptions): Promise<MemoryContext> {
     const prefill = this.prefillData.get(userId);
     if (prefill) return prefill;
 
@@ -36,7 +38,7 @@ export class FakeMemoryRepository implements MemoryRepository {
     };
   }
 
-  async reflect(_userId: string): Promise<ReflectionResult> {
+  async reflect(_userId: string, _query?: string): Promise<ReflectionResult> {
     this.reflectCallCount++;
     return { summary: '' };
   }
