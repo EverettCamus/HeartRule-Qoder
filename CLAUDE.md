@@ -56,8 +56,8 @@ Located in `packages/core-engine/src/engines/`:
 2. **llm-orchestration** — Multi-provider LLM manager (OpenAI, Volcengine/DeepSeek)
 3. **variable-extraction** — Extracts variables from dialogue (direct/pattern/LLM methods)
 4. **variable-scope** — 4-level hierarchy: global → session → phase → topic
-5. **memory** — Short/medium/long-term memory management
-6. **exit-decision** — Rule-based + LLM semantic exit logic for `ai_ask` actions
+5. **exit-decision** — Rule-based + LLM semantic exit logic for `ai_ask` actions
+6. **prompt-template** — Template loading, validation, variable substitution (2-layer: Custom/Default)
 
 #### Engine Responsibilities & Call Relationships
 
@@ -89,6 +89,64 @@ ScriptExecutor.executeAction()
 - `TemplateProvider` is a port (interface); `DatabaseTemplateProvider` is the adapter
 - Core engine has zero database/HTTP dependencies
 - All state is immutable across engine calls (no side effects)
+
+### Memory System — Domain Port (Not an Engine)
+
+Memory is implemented as a **domain port** (`MemoryRepository`), not a separate engine:
+
+```
+packages/core-engine/src/domain/ports/memory-repository.port.ts
+```
+
+Three operations define the contract:
+
+- **retain(userId, messages, options?)** — Persist conversation messages to long-term memory
+- **recall(userId, query, options?)** — Retrieve relevant memories as structured context
+- **reflect(userId, query?)** — Synthesize new insights from existing memories
+
+The port models memory via a **four-network model** (World/Experience/Opinion/Observation), adapted from the Hindsight memory system. The adapter lives in `api-server`; tests use `FakeMemoryRepository`.
+
+### DDD Bounded Contexts
+
+Per the strategic design (`docs/ddd/strategic-design.md`), the codebase is organized into 5 bounded contexts + 1 generic subdomain:
+
+| Context                   | Type        | Package       | Core Ubiquitous Language                                                |
+| ------------------------- | ----------- | ------------- | ----------------------------------------------------------------------- |
+| **Consulting Session**    | Core Domain | core-engine   | Session, Script, Phase, Topic, Action, Position, ExitDecision           |
+| **Variable System**       | Supporting  | core-engine   | VariableScope, VariableState, ExtractionMethod                          |
+| **Conversational Memory** | Supporting  | core-engine   | retain/recall/reflect, 4-network (World/Experience/Opinion/Observation) |
+| **Prompt Engineering**    | Supporting  | core-engine   | Templates, Substitution, Schemes                                        |
+| **Script Authoring**      | Supporting  | script-editor | Projects, Versions, Drafts, Files                                       |
+| **LLM Integration**       | Generic     | core-engine   | OpenAI, DeepSeek, Volcano (multi-provider)                              |
+
+**Session** is the sole aggregate root in the Consulting Session context.
+
+### Domain Layer Structure
+
+```
+packages/core-engine/src/domain/
+├── actions/          # Action classes (AiSayAction, AiAskAction, AiThinkAction)
+│   └── base-action.ts  # BaseAction abstract class + ActionContext + ActionResult
+├── ports/            # Domain ports (MemoryRepository)
+├── session.ts        # Session entity (state machine)
+├── script.ts         # Script, Phase, Topic value objects
+├── variable.ts       # Variable domain logic
+└── message.ts        # Message value object
+```
+
+### Application Layer
+
+```
+packages/core-engine/src/application/
+├── actions/          # ActionFactory, ActionRegistry
+├── handlers/         # ExecutionResultHandler
+├── monitors/         # Monitor system (AiAskMonitor, AiSayMonitor, MonitorOrchestrator)
+├── orchestration/    # TopicActionOrchestrator (cross-Action orchestration)
+├── orchestrators/    # MonitorOrchestrator
+├── planning/         # TopicPlanner (dynamic topic selection)
+├── state/            # ActionStateManager (serializable Action state snapshots)
+└── ports/            # Outbound ports (ILLMProvider)
+```
 
 ### YAML Script DSL
 
@@ -254,6 +312,9 @@ Infrastructure Layer (external adapters)
 
 HeartRule's core principle: **In a constrained cognitive budget, use low-entropy symbolic structure (YAML + rules) to anchor high-entropy generative intelligence (LLM).**
 
+> Full theoretical framework: `docs/design/heartrule-design-philosophy-v2.md`.
+> This section is the **actionable subset** — use it for daily coding decisions.
+
 ### Three Core Concepts
 
 **1. U-Shaped Thinking** (Concrete → Abstract → Strategy → Concrete)
@@ -285,19 +346,41 @@ TopicPlanner       → "analyze clues, plan next interrogation"
 ExitDecisionEngine → "check if evidence chain is complete"
 ```
 
-### Eight Design Principles
+### Nine Design Principles
 
-1. **Cognitive Anchoring** — Low-entropy symbols (YAML) anchor high-entropy LLM
-2. **Certainty Stratification** — Explicit differentiation of must-lock, can-flex, uncertain zones
-3. **Progressive Rulification** — Add rules as LLM fails; remove as it improves (TDD-style)
-4. **Experience Container** — System supports multi-stream consulting wisdom coexistence
-5. **Entropy Reduction** — Systematic information extraction from dialogue
-6. **U-Shaped Thinking** — Bridge concrete situations with abstract strategies
-7. **Co-evolutionary** — Human creates/oversees, AI executes/amplifies, feedback loop
-8. **Planning-Execution Separation** — 90% deterministic execution (low-head), 10% LLM strategy (high-head) at key nodes
-9. **Code-vs-Script Boundary** — Code (`core-engine` + `api-server`) implements the **consulting abstraction layer**: domain-neutral ports (MemoryRepository), engine orchestration, variable scoping, LLM invocation. YAML scripts + templates implement **domain-specific consulting**: extraction prompts, recall queries, document templates, knowledge base entries. When designing, always ask: "Is this common to ALL consulting domains, or specific to one?" If specific — it belongs in scripts, not code.
+Ordered by coding frequency — principles you'll use every day come first.
 
-**See** `docs-archive/misc/HeartRule设计哲学v2.md` for full philosophical framework (in Chinese).
+**1. Code-vs-Script Boundary** — When adding _any_ logic, ask: "Is this common to ALL consulting domains, or specific to one?"
+Code (`core-engine` + `api-server`) implements the **consulting abstraction layer**: domain-neutral ports, engine orchestration, variable scoping, LLM invocation.
+YAML scripts + templates implement **domain-specific consulting**: extraction prompts, recall queries, document templates, knowledge base entries.
+If specific → scripts. If universal → code.
+
+**2. Planning-Execution Separation** — 90% execution (scripted, fast), 10% planning (LLM-driven, at key nodes).
+**Apply by**: when adding logic, decide — does this fire on every turn (head-down execution) or only at decision points like topic boundaries, crisis signals, impasse (head-up planning)?
+
+**3. Progressive Rulification** — Rules are patches for LLM failures, not cages.
+**Apply by**: let the LLM try first. Add a rule only where it _consistently_ fails. Remove rules as LLM capability improves. TDD-style: red (LLM fails) → green (add minimal rule) → refactor (simplify as LLM improves).
+
+**4. Three Decision Zones** — Classify every design choice into one of three zones:
+
+- **Must Determine** — safety, ethics, core flow → lock with rules
+- **Can Be Flexible** — personalization, context adaptation → let LLM free
+- **Uncertain** — edge cases → build feedback loops, let system learn
+
+**5. Cognitive Anchoring** — Low-entropy symbols (YAML, structured variables) anchor high-entropy LLM output.
+**Apply by**: every LLM call must have a structured output contract (JSON schema, typed variables, extraction config).
+
+**6. U-Shaped Thinking** — Concrete user input → abstract concept → professional strategy → concrete response.
+**Apply by**: when writing templates, encode the full U-path: the LLM must go through abstraction before generating a response. Don't let it jump directly from input to output.
+
+**7. Entropy Reduction** — Every engine interaction should extract structured information from unstructured dialogue.
+**Apply by**: VariableExtractor, TopicPlanner, ExitDecisionEngine all serve this function. When adding a new engine or action, ask: "What low-entropy signal does this extract from high-entropy conversation?"
+
+**8. Experience Container** — The system hosts multiple consulting approaches (scripts) simultaneously.
+**Apply by**: never hardcode consulting logic in TypeScript. Different domains/streams coexist as independent YAML scripts. Design for coexistence, not unification.
+
+**9. Co-evolutionary** — Human creates scripts, AI executes, data feeds back, scripts improve.
+**Apply by**: every feature needs a feedback channel. When building, ask: "How will a human know if this worked? How will they improve it?"
 
 ### API Server
 
@@ -329,6 +412,27 @@ Fastify server in `packages/api-server/src/`:
 - core-engine remains fully stateless and testable
 - Database schema holds: `sessions` (position, variables, metadata), `messages` (full history), `variables` (snapshots)
 
+## Test Structure
+
+Tests live in two locations:
+
+| Location                         | Purpose                                               |
+| -------------------------------- | ----------------------------------------------------- |
+| `**/__tests__/` (alongside code) | Unit tests co-located with source                     |
+| `packages/core-engine/test/`     | Integration, regression, eval, and unit tests by type |
+
+```
+packages/core-engine/test/
+├── unit/          # Unit tests by layer (domain, application, engines)
+├── integration/   # Cross-engine integration tests
+├── regression/    # Bug-fix regression tests
+├── eval/          # LLM response quality evals
+├── monitoring/    # Monitor system tests
+└── helpers/       # Test doubles (FakeMemoryRepository, etc.)
+```
+
+Vitest config in root `vitest.config.ts` excludes `script-editor/` and `e2e/` from unit test runs. E2E tests use Playwright separately (`pnpm test:e2e`).
+
 ## Code Style
 
 - ESLint + Prettier enforced via pre-commit hooks (Husky + lint-staged)
@@ -336,3 +440,18 @@ Fastify server in `packages/api-server/src/`:
 - Unused variables must be prefixed with `_`
 - Import order: builtin → external → internal → parent → sibling → index
 - `printWidth=100`, `singleQuote`, `trailingComma=es5`, 2-space indent
+
+## Active Design Documents
+
+Key architecture documents for ongoing and planned work:
+
+| Document                                         | Topic                                                                  |
+| ------------------------------------------------ | ---------------------------------------------------------------------- |
+| `docs/design/topic-unit-modeling.md`             | Core domain model: topic queue, action atoms, consciousness adjustment |
+| `docs/design/script-engine-design-principles.md` | DSL syntax design principles (linearity, no engineering, determinism)  |
+| `docs/design/consciousness-system.md`            | Consciousness layer design (triggers, interventions)                   |
+| `docs/design/memory-framework.md`                | Full memory system design (Hindsight integration)                      |
+| `docs/design/variable-memory-bridge.md`          | Variable ↔ Memory responsibility boundary                              |
+| `docs/design/ai-ask-memory-recall.md`            | Memory recall within ai_ask actions                                    |
+| `docs/ddd/strategic-design.md`                   | Bounded contexts and domain relationships                              |
+| `docs/ddd/context-map.md`                        | Context mapping diagrams                                               |
