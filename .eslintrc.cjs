@@ -51,6 +51,7 @@ module.exports = {
   ignorePatterns: [
     'dist',
     'node_modules',
+    'scripts',
     '*.config.js',
     '*.config.ts',
     'drizzle',
