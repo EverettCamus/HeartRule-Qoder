@@ -1,5 +1,9 @@
 # 矛盾表述检测意识脚本
 # 用于检测用户对话中的矛盾表述，触发咨询师关注
+#
+# 存档 (Archived) — 早期配置格式实验，作为格式参考。
+# 配置格式规范已整合到: docs/design/consciousness-system.md §4
+# 存档日期: 2026-07-09
 
 metadata:
   name: '矛盾表述检测'
