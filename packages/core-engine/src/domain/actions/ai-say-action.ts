@@ -19,6 +19,8 @@
 
 import path from 'path';
 
+import { z } from 'zod';
+
 import { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
 import { PromptTemplateManager, TemplateResolver } from '../../engines/prompt-template/index.js';
 
@@ -60,6 +62,77 @@ interface MainLineOutput {
   };
   should_exit?: boolean;
 }
+
+/**
+ * Type coercion helpers（处理 LLM 常见类型不一致）
+ *
+ * DeepSeek Flash 等模型可能在 JSON 中返回：
+ * - exit: true (boolean) 而非 "true" (string)
+ * - safety_check.passed: "true" (string) 而非 true (boolean)
+ * - concern: "null" (string) 而非 null
+ */
+const BoolToStringSchema = z.preprocess(
+  (val) => (typeof val === 'boolean' ? (val ? 'true' : 'false') : val),
+  z.string().optional()
+);
+
+const BoolLikeSchema = z.preprocess((val) => {
+  if (typeof val === 'boolean') return val;
+  if (val === 'true') return true;
+  if (val === 'false') return false;
+  return val;
+}, z.boolean().optional());
+
+const NullableStringSchema = z.preprocess(
+  (val) => (val === 'null' ? null : val),
+  z.string().nullable().optional()
+);
+
+/**
+ * MainLineOutput 运行时校验 Schema
+ *
+ * 策略与 EnhancedAskLLMOutputSchema 一致：
+ * - 对已知字段做类型强制（处理 LLM 类型不一致）
+ * - .catchall() 保留任意动态字段
+ * - 所有字段均为 optional（safeParse 失败时降级到原始 JSON.parse）
+ */
+export const MainLineOutputSchema = z
+  .object({
+    content: z.string().optional(),
+    exit: BoolToStringSchema,
+    exit_reason: z.string().optional(),
+    brief: z.string().optional(),
+    assessment: z.string().optional(),
+    progress: z.string().optional(),
+    safety_check: z
+      .object({
+        passed: BoolLikeSchema,
+        concern: NullableStringSchema,
+      })
+      .optional(),
+    metadata: z
+      .object({
+        emotional_tone: z.string().optional(),
+        crisis_signal: z.boolean().optional(),
+      })
+      .optional(),
+    // 旧格式（向后兼容）
+    EXIT: z.string().optional(),
+    BRIEF: z.string().optional(),
+    metrics: z.record(z.any()).optional(),
+    progress_suggestion: z.string().optional(),
+    safety_risk: z
+      .object({
+        detected: z.boolean(),
+        risk_type: z.string().nullable(),
+        confidence: z.enum(['high', 'medium', 'low']),
+        reason: z.string().nullable(),
+      })
+      .optional(),
+    response: z.record(z.string()).optional(),
+    should_exit: z.boolean().optional(),
+  })
+  .catchall(z.unknown());
 
 export class AiSayAction extends BaseAction {
   static actionType = 'ai_say';
@@ -602,7 +675,25 @@ export class AiSayAction extends BaseAction {
 
       try {
         cleanedResponse = this.applyParseStrategy(rawResponse, strategy);
-        const output = JSON.parse(cleanedResponse) as MainLineOutput;
+        const parsedJson = JSON.parse(cleanedResponse);
+
+        // 运行时 Schema 校验：处理 LLM 类型不一致（与 ai-ask-action 策略一致）
+        const schemaResult = MainLineOutputSchema.safeParse(parsedJson);
+
+        let output: MainLineOutput;
+        let schemaWarning: string | undefined;
+
+        if (schemaResult.success) {
+          output = schemaResult.data as MainLineOutput;
+        } else {
+          // Schema 验证失败不致命：降级使用原始 JSON.parse 结果
+          // 关键字段（content, exit）在大多数情况下仍然存在且可用
+          console.warn(
+            `[AiSayAction] Schema验证失败，降级使用原始JSON: ${schemaResult.error.message}`
+          );
+          schemaWarning = schemaResult.error.message;
+          output = parsedJson as MainLineOutput;
+        }
 
         if (parseAttempt > 1) {
           console.warn(
@@ -613,8 +704,13 @@ export class AiSayAction extends BaseAction {
         return {
           output,
           cleanedResponse,
-          parseError:
-            parseAttempt > 1
+          parseError: schemaWarning
+            ? {
+                retryCount: parseAttempt,
+                strategies: RETRY_STRATEGIES.slice(0, parseAttempt),
+                finalError: schemaWarning,
+              }
+            : parseAttempt > 1
               ? {
                   retryCount: parseAttempt,
                   strategies: RETRY_STRATEGIES.slice(0, parseAttempt),

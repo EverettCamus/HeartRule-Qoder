@@ -1,4 +1,4 @@
-import { generateText, streamText } from 'ai';
+import { generateObject, generateText, streamText } from 'ai';
 import type { LanguageModel } from 'ai';
 
 import type {
@@ -139,6 +139,28 @@ export class LLMOrchestrator {
 export abstract class BaseLLMProvider implements ILLMProvider {
   protected config: LLMConfig;
 
+  /**
+   * JSON 输出保障指标（用于监控和排查非 JSON 输出问题）
+   *
+   * 跟踪路径：
+   *   请求 → generateObject (API 强制 JSON)
+   *        → 成功: jsonEnforceSuccess++
+   *        → 失败: jsonEnforceFallback++ → generateText (兜底)
+   *   普通请求 → generateText: regularCalls++
+   */
+  protected metrics = {
+    /** 启用 JSON 强制模式的调用总数 */
+    jsonEnforceCalls: 0,
+    /** generateObject 成功次数（API 返回合法 JSON） */
+    jsonEnforceSuccess: 0,
+    /** generateObject 失败后回退到 generateText 的次数 */
+    jsonEnforceFallback: 0,
+    /** 普通 generateText 调用次数（无 JSON 强制） */
+    regularCalls: 0,
+    /** 首次记录时间（ISO timestamp） */
+    since: new Date().toISOString(),
+  };
+
   constructor(config: LLMConfig) {
     this.config = {
       temperature: 0.7,
@@ -148,6 +170,28 @@ export abstract class BaseLLMProvider implements ILLMProvider {
       presencePenalty: 0.0,
       ...config,
     };
+  }
+
+  /**
+   * 获取当前 JSON 输出保障指标快照
+   */
+  getMetrics(): Readonly<typeof this.metrics> {
+    return { ...this.metrics };
+  }
+
+  /**
+   * 输出指标摘要（用于定期日志上报）
+   */
+  logMetrics(): void {
+    const m = this.metrics;
+    const total = m.jsonEnforceCalls;
+    if (total === 0) return;
+    const successRate = ((m.jsonEnforceSuccess / total) * 100).toFixed(1);
+    console.warn(
+      `[LLM Metrics] JSON enforce: ${m.jsonEnforceSuccess}/${total} success (${successRate}%), ` +
+        `fallback: ${m.jsonEnforceFallback}, regular: ${m.regularCalls}, ` +
+        `since: ${m.since}`
+    );
   }
 
   abstract getModel(modelName?: string): LanguageModel;
@@ -162,20 +206,55 @@ export abstract class BaseLLMProvider implements ILLMProvider {
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => abortController.abort(), 25000);
 
+    // 当请求 JSON 输出时，使用 generateObject 来确保 API 层面强制 JSON
+    // generateText 的 responseFormat 参数在 ai@3.4.33 中被 silently ignored
+    // （prepareCallSettings 不提取它，mode.type 始终为 "regular"）
+    // 导致 @ai-sdk/openai@0.0.20 永远不会发送 response_format: { type: "json_object" }
+    // 使用 generateObject 可以设置 mode.type = "object-json"，从而真正发送该参数
+    const needsJsonEnforcement = mergedConfig.responseFormat?.type === 'json_object';
+
+    if (needsJsonEnforcement) {
+      this.metrics.jsonEnforceCalls++;
+    } else {
+      this.metrics.regularCalls++;
+    }
+
     try {
-      const result = await generateText({
-        model,
-        prompt,
-        temperature: mergedConfig.temperature,
-        maxTokens: mergedConfig.maxTokens,
-        topP: mergedConfig.topP,
-        frequencyPenalty: mergedConfig.frequencyPenalty,
-        presencePenalty: mergedConfig.presencePenalty,
-        ...(mergedConfig.responseFormat ? { responseFormat: mergedConfig.responseFormat } : {}),
-        abortSignal: abortController.signal,
-      });
+      const result = needsJsonEnforcement
+        ? await generateObject({
+            model,
+            prompt,
+            output: 'no-schema',
+            mode: 'json',
+            temperature: mergedConfig.temperature,
+            maxTokens: mergedConfig.maxTokens,
+            topP: mergedConfig.topP,
+            frequencyPenalty: mergedConfig.frequencyPenalty,
+            presencePenalty: mergedConfig.presencePenalty,
+            abortSignal: abortController.signal,
+          })
+        : await generateText({
+            model,
+            prompt,
+            temperature: mergedConfig.temperature,
+            maxTokens: mergedConfig.maxTokens,
+            topP: mergedConfig.topP,
+            frequencyPenalty: mergedConfig.frequencyPenalty,
+            presencePenalty: mergedConfig.presencePenalty,
+            abortSignal: abortController.signal,
+          });
 
       clearTimeout(timeoutId);
+
+      if (needsJsonEnforcement) {
+        this.metrics.jsonEnforceSuccess++;
+      }
+
+      // generateObject 返回 { object: parsed_json }，需要序列化为 text
+      // generateText 返回 { text: string }
+      const responseText = needsJsonEnforcement
+        ? JSON.stringify((result as any).object)
+        : (result as any).text;
 
       // 提取实际发送给 LLM 的 prompt
       // Vercel AI SDK 会将 prompt 字符串包装成 messages 数组
@@ -210,7 +289,7 @@ export abstract class BaseLLMProvider implements ILLMProvider {
       const debugInfo: LLMDebugInfo = {
         prompt: actualPrompt, // 使用实际发送的 prompt
         response: {
-          text: result.text,
+          text: responseText,
           finishReason: result.finishReason,
           usage: result.usage,
           // 完整的响应对象
@@ -224,11 +303,59 @@ export abstract class BaseLLMProvider implements ILLMProvider {
       };
 
       return {
-        text: result.text,
+        text: responseText,
         debugInfo,
       };
     } catch (error: any) {
       clearTimeout(timeoutId);
+
+      // JSON enforced mode 失败时，回退到 generateText 作为兜底
+      // generateObject 可能在 LLM 返回非 JSON 时抛出 NoObjectGeneratedError
+      if (needsJsonEnforcement) {
+        this.metrics.jsonEnforceFallback++;
+        try {
+          console.warn(
+            `[LLM] generateObject failed (${error.message}), falling back to generateText`
+          );
+          this.logMetrics();
+          const fallbackResult = await generateText({
+            model,
+            prompt,
+            temperature: mergedConfig.temperature,
+            maxTokens: mergedConfig.maxTokens,
+            topP: mergedConfig.topP,
+            frequencyPenalty: mergedConfig.frequencyPenalty,
+            presencePenalty: mergedConfig.presencePenalty,
+            abortSignal: abortController.signal,
+          });
+
+          const responseTimeMs = Date.now() - startTime;
+          const debugInfo: LLMDebugInfo = {
+            prompt,
+            response: {
+              text: fallbackResult.text,
+              finishReason: fallbackResult.finishReason,
+              usage: fallbackResult.usage,
+              raw: fallbackResult,
+            },
+            model: mergedConfig.model,
+            config: mergedConfig,
+            timestamp,
+            tokensUsed: fallbackResult.usage?.totalTokens,
+            responseTimeMs,
+          };
+
+          return {
+            text: fallbackResult.text,
+            debugInfo,
+          };
+        } catch (fallbackError: any) {
+          if (fallbackError.name === 'AbortError') {
+            throw new Error(`LLM request timeout after 25 seconds. Model: ${mergedConfig.model}`);
+          }
+          throw fallbackError;
+        }
+      }
 
       // 增强错误信息
       if (error.name === 'AbortError') {
@@ -243,6 +370,11 @@ export abstract class BaseLLMProvider implements ILLMProvider {
     const model = this.getModel(config?.model);
     const mergedConfig = { ...this.config, ...config };
 
+    // ⚠️ JSON 强制输出缺口：
+    // streamText 同样无法将 responseFormat 送达 DeepSeek API。
+    // 当前生产环境未使用流式 JSON 输出（chat.ts 的 /api/chat/stream 是 mock 实现），
+    // 因此优先度较低。当需要流式 JSON 时，请使用 streamObject 替代 streamText，
+    // 参考 generateObject 的用法：streamObject({ ..., output: 'no-schema', mode: 'json' })
     const result = await streamText({
       model,
       prompt,
