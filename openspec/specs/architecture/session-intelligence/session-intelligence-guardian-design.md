@@ -1,5 +1,9 @@
 # Session Layer Intelligent Guardian Design Document
 
+> **⚠️ 已废弃 (Deprecated)**
+> 本方案于 2026-03 月设计，后被「主线+意识」架构方案取代。
+> 替代文档: [`docs/design/consciousness-system.md`](../../../../docs/design/consciousness-system.md)
+
 **Version**: 1.0  
 **Last Updated**: March 11, 2026  
 **Based on Analysis**: layer-implementation-guide.md Section 4 + Existing Session Implementation Analysis  

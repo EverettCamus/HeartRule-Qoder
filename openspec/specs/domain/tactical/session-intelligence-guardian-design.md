@@ -1,13 +1,15 @@
 ---
 document_id: docs-design-session-intelligence-guardian-design-md
 authority: domain-expert
-status: active
+status: deprecated
 version: 1.0.0
 last_updated: 2026-03-12
+deprecated_date: 2026-07-09
+superseded_by: docs/design/consciousness-system.md
 source: docs
 path: design/session-intelligence-guardian-design.md
-tags: [ddd, tactical-design, session-management, intelligence]
-search_priority: high
+tags: [ddd, tactical-design, session-management, intelligence, deprecated]
+search_priority: low
 ---
 
 # Session层智能守护设计文档
