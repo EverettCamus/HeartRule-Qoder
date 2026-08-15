@@ -5,6 +5,7 @@ import type {
   MemoryMessage,
   RetainOptions,
   RecallOptions,
+  ReflectOptions,
 } from '../../src/domain/ports/memory-repository.port.js';
 
 /**
@@ -38,7 +39,11 @@ export class FakeMemoryRepository implements MemoryRepository {
     };
   }
 
-  async reflect(_userId: string, _query?: string): Promise<ReflectionResult> {
+  async reflect(
+    _userId: string,
+    _query?: string,
+    _options?: ReflectOptions
+  ): Promise<ReflectionResult> {
     this.reflectCallCount++;
     return { summary: '' };
   }

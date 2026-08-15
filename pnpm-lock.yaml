@@ -78,8 +78,8 @@ importers:
         specifier: workspace:*
         version: link:../shared-types
       '@vectorize-io/hindsight-client':
-        specifier: 0.6.2
-        version: 0.6.2
+        specifier: 0.9.1
+        version: 0.9.1
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
@@ -1914,8 +1914,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@vectorize-io/hindsight-client@0.6.2':
-    resolution: {integrity: sha512-bymmlMWI1z0zOjgY+wRMLudNxzqcW20VHMtyV3QLhwJm63NeQN/nEZ4plWPR0p28DffaUM5nk2VSxzQljN+Mow==}
+  '@vectorize-io/hindsight-client@0.9.1':
+    resolution: {integrity: sha512-BoYMvdQkFe5699cutsg6qQ3NYZoxKjs/HcgwM5IqQuXZa1K85is3JhvdZ0ALE8E9YD1FKLLy3qpBbSO7PFwwoA==}
 
   '@vitejs/plugin-react@4.7.0':
     resolution: {integrity: sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==}
@@ -6824,7 +6824,7 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
 
-  '@vectorize-io/hindsight-client@0.6.2': {}
+  '@vectorize-io/hindsight-client@0.9.1': {}
 
   '@vitejs/plugin-react@4.7.0(vite@5.4.21(@types/node@20.19.27))':
     dependencies:

@@ -105,6 +105,53 @@ describe('BaseAction.formatMemoryContext', () => {
     expect(result).toContain('置信度: 30%');
   });
 
+  it('annotates source channel/credibility/time on entries (决策 4)', () => {
+    const result = action.testFormatMemoryContext(
+      makeContext({
+        memoryContext: {
+          worldFacts: [
+            {
+              content: 'PHQ-9 得分：15',
+              sourceChannel: 'scale',
+              sourceCredibility: 'high',
+              occurredStart: '2026-01-15',
+            },
+          ],
+          experiences: [
+            {
+              content: '第1次会谈讨论家庭关系',
+              sourceChannel: 'dialogue',
+              sourceCredibility: 'medium',
+            },
+          ],
+          opinions: [],
+          observationSummary: '',
+        },
+      })
+    );
+    // worldFacts：来源/可信度/时间标注
+    expect(result).toContain('来源: 量表 · 可信度: 高 · 2026-01-15');
+    expect(result).toContain('PHQ-9 得分：15');
+    // experiences：来源/可信度标注
+    expect(result).toContain('来源: 对话 · 可信度: 中');
+    expect(result).toContain('第1次会谈讨论家庭关系');
+  });
+
+  it('keeps content bare when entry has no source annotations', () => {
+    const result = action.testFormatMemoryContext(
+      makeContext({
+        memoryContext: {
+          worldFacts: [{ content: '用户报告工作压力' }],
+          experiences: [],
+          opinions: [],
+          observationSummary: '',
+        },
+      })
+    );
+    expect(result).toContain('- 用户报告工作压力');
+    expect(result).not.toContain('（');
+  });
+
   it('handles null/undefined memoryContext gracefully', () => {
     expect(action.testFormatMemoryContext(makeContext({ memoryContext: null }))).toBe('');
     expect(action.testFormatMemoryContext(makeContext({ memoryContext: undefined }))).toBe('');

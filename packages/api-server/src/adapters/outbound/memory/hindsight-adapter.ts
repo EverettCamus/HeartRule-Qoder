@@ -8,7 +8,11 @@
  * - 使用 Hindsight 的领域中立默认值（提取事实、识别实体、时间信息）
  * - 领域特定的提取维度由 Phase 2+ 的 recall 查询内容体现
  *
- * 四网络映射：RecallResult.type → worldFacts/experiences/opinions/observationSummary
+ * 数据模型校准（见 docs/design/decisions/004-memory-model-calibration.md）：
+ * - recall 只映射 world/experience/observation 三类型（SDK 无 opinion fact type）
+ * - opinions 由 HeartRule 自建层（reflect + response_schema）产出，Phase 0/1 为空
+ * - reflect 用 response_schema 拿结构化输出（决策 2），否则回退 markdown 摘要
+ * - retain 透传 metadata 承载来源标注（决策 4）
  */
 import type {
   MemoryRepository,
@@ -17,6 +21,7 @@ import type {
   MemoryMessage,
   RetainOptions,
   RecallOptions,
+  ReflectOptions,
 } from '@heartrule/core-engine';
 import { createLogger } from '@heartrule/core-engine';
 import { HindsightClient } from '@vectorize-io/hindsight-client';
@@ -41,12 +46,14 @@ export class HindsightMemoryAdapter implements MemoryRepository {
       userId,
       messageCount: messages.length,
       documentId: options?.documentId,
+      metadata: options?.metadata,
     });
 
     try {
       await this.client.retain(userId, content, {
         tags: options?.tags ?? ['chat'],
         documentId: options?.documentId,
+        metadata: options?.metadata,
       });
       logger.debug('retain succeeded', { userId });
     } catch (error: any) {
@@ -62,37 +69,56 @@ export class HindsightMemoryAdapter implements MemoryRepository {
         maxTokens: options?.maxTokens ?? 4000,
         types: options?.types as any,
         tags: options?.tags,
+        tagsMatch: options?.tagsMatch,
+        preferObservations: options?.preferObservations,
+        includeSourceFacts: options?.includeSourceFacts,
+        budget: options?.budget,
+        queryTimestamp: options?.queryTimestamp,
       });
 
-      const worldFacts: Array<{ content: string }> = [];
-      const experiences: Array<{ content: string }> = [];
-      const opinions: Array<{ content: string; confidence: number }> = [];
+      const worldFacts: MemoryContext['worldFacts'] = [];
+      const experiences: MemoryContext['experiences'] = [];
       const observationTexts: string[] = [];
 
       for (const result of response.results) {
+        const entry = {
+          content: result.text,
+          sourceChannel: result.metadata?.source_channel as
+            | 'dialogue'
+            | 'clinical_note'
+            | 'scale'
+            | 'knowledge'
+            | undefined,
+          sourceCredibility: result.metadata?.source_credibility as
+            | 'high'
+            | 'medium'
+            | 'low'
+            | undefined,
+          occurredStart: result.occurred_start ?? undefined,
+          occurredEnd: result.occurred_end ?? undefined,
+        };
+
         switch (result.type) {
           case 'world':
-            worldFacts.push({ content: result.text });
+            worldFacts.push(entry);
             break;
           case 'experience':
-            experiences.push({ content: result.text });
-            break;
-          case 'opinion':
-            opinions.push({ content: result.text, confidence: 0.5 });
+            experiences.push(entry);
             break;
           case 'observation':
             observationTexts.push(result.text);
             break;
           default:
             // Without a type, classify by content context — put in experiences as safest default
-            experiences.push({ content: result.text });
+            experiences.push(entry);
         }
       }
 
       const context: MemoryContext = {
         worldFacts,
         experiences,
-        opinions,
+        // opinions 来自 HeartRule 自建层（reflect + response_schema），Phase 0/1 为空
+        opinions: [],
         observationSummary: observationTexts.join('\n'),
       };
 
@@ -100,7 +126,6 @@ export class HindsightMemoryAdapter implements MemoryRepository {
         userId,
         worldFacts: worldFacts.length,
         experiences: experiences.length,
-        opinions: opinions.length,
         hasSummary: observationTexts.length > 0,
       });
 
@@ -111,18 +136,42 @@ export class HindsightMemoryAdapter implements MemoryRepository {
     }
   }
 
-  async reflect(userId: string): Promise<ReflectionResult> {
-    logger.debug('reflect called', { userId });
+  async reflect(
+    userId: string,
+    query?: string,
+    options?: ReflectOptions
+  ): Promise<ReflectionResult> {
+    logger.debug('reflect called', { userId, query, hasSchema: !!options?.responseSchema });
 
     try {
       const response = await this.client.reflect(
         userId,
-        '回顾所有对话，综合分析来访者的状态、进展和模式'
+        query ?? '回顾所有对话，综合分析来访者的状态、进展和模式',
+        {
+          responseSchema: options?.responseSchema,
+          factTypes: options?.factTypes,
+        }
       );
 
-      logger.debug('reflect succeeded', { userId });
+      const structured = response.structured_output as
+        | {
+            updatedOpinions?: Array<{ content: string; confidence: number }>;
+            newObservations?: string[];
+            contradictions?: Array<{ factA: string; factB: string; analysis: string }>;
+          }
+        | undefined;
 
-      return { summary: response.text };
+      logger.debug('reflect succeeded', {
+        userId,
+        hasStructured: !!structured,
+      });
+
+      return {
+        summary: response.text,
+        ...(structured?.updatedOpinions && { updatedOpinions: structured.updatedOpinions }),
+        ...(structured?.newObservations && { newObservations: structured.newObservations }),
+        ...(structured?.contradictions && { contradictions: structured.contradictions }),
+      };
     } catch (error: any) {
       logger.error('reflect failed', { userId, error: error.message });
       return { summary: '' };

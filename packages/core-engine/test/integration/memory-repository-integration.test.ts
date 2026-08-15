@@ -184,10 +184,18 @@ describe('MemoryRepository 集成测试', () => {
 
     it('MemoryContext 四字段在测试数据中应能合理填充', async () => {
       const fullContext: MemoryContext = {
-        worldFacts: [{ content: 'GAD 诊断 (2026-01-15)' }, { content: 'PHQ-9 得分：15' }],
+        worldFacts: [
+          {
+            content: 'GAD 诊断',
+            sourceChannel: 'clinical_note',
+            sourceCredibility: 'high',
+            occurredStart: '2026-01-15',
+          },
+          { content: 'PHQ-9 得分：15', sourceChannel: 'scale', sourceCredibility: 'high' },
+        ],
         experiences: [
-          { content: '首次会谈：描述工作压力导致失眠' },
-          { content: '第2次会谈：提及童年被严格管教经历' },
+          { content: '首次会谈：描述工作压力导致失眠', sourceChannel: 'dialogue' },
+          { content: '第2次会谈：提及童年被严格管教经历', sourceChannel: 'dialogue' },
         ],
         opinions: [
           { content: '完美主义倾向根深蒂固', confidence: 0.85 },
@@ -203,6 +211,11 @@ describe('MemoryRepository 集成测试', () => {
       expect(result.experiences.length).toBeGreaterThanOrEqual(2);
       expect(result.opinions.length).toBeGreaterThanOrEqual(2);
       expect(result.observationSummary.length).toBeGreaterThan(50);
+      // 来源标注元数据（决策 4）随条目流动
+      expect(result.worldFacts[0].sourceChannel).toBe('clinical_note');
+      expect(result.worldFacts[0].sourceCredibility).toBe('high');
+      expect(result.worldFacts[0].occurredStart).toBe('2026-01-15');
+      expect(result.experiences[0].sourceChannel).toBe('dialogue');
     });
   });
 });

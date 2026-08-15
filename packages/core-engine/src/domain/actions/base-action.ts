@@ -382,10 +382,23 @@ export abstract class BaseAction {
    * Returns empty string if no memory context is available.
    */
   protected formatMemoryContext(context: ActionContext): string {
+    // MemoryEntry 来源标注字段（决策 4）：sourceChannel / sourceCredibility / occurredStart
     const mc = context.metadata?.memoryContext as
       | {
-          worldFacts?: Array<{ content: string }>;
-          experiences?: Array<{ content: string }>;
+          worldFacts?: Array<{
+            content: string;
+            sourceChannel?: string;
+            sourceCredibility?: 'high' | 'medium' | 'low';
+            occurredStart?: string;
+            occurredEnd?: string;
+          }>;
+          experiences?: Array<{
+            content: string;
+            sourceChannel?: string;
+            sourceCredibility?: 'high' | 'medium' | 'low';
+            occurredStart?: string;
+            occurredEnd?: string;
+          }>;
           opinions?: Array<{ content: string; confidence: number }>;
           observationSummary?: string;
         }
@@ -401,16 +414,50 @@ export abstract class BaseAction {
 
     if (!hasContent) return '';
 
+    const SOURCE_LABELS: Record<string, string> = {
+      dialogue: '对话',
+      clinical_note: '临床记录',
+      scale: '量表',
+      knowledge: '知识库',
+    };
+    const CREDIBILITY_LABELS: Record<string, string> = {
+      high: '高',
+      medium: '中',
+      low: '低',
+    };
+
+    // 证据溯源（类型Ⅳ）：条目后附来源渠道/可信度/发生时间，供 LLM 权衡证据强度
+    const formatEntry = (entry: {
+      content: string;
+      sourceChannel?: string;
+      sourceCredibility?: string;
+      occurredStart?: string;
+      occurredEnd?: string;
+    }): string => {
+      const annotations: string[] = [];
+      if (entry.sourceChannel) {
+        annotations.push(`来源: ${SOURCE_LABELS[entry.sourceChannel] ?? entry.sourceChannel}`);
+      }
+      if (entry.sourceCredibility) {
+        annotations.push(
+          `可信度: ${CREDIBILITY_LABELS[entry.sourceCredibility] ?? entry.sourceCredibility}`
+        );
+      }
+      if (entry.occurredStart) annotations.push(entry.occurredStart);
+      if (annotations.length === 0) return entry.content;
+      return `${entry.content}（${annotations.join(' · ')}）`;
+    };
+
     const lines: string[] = [];
 
     if (mc.worldFacts?.length) {
       lines.push('## 已知事实');
-      for (const f of mc.worldFacts) lines.push(`- ${f.content}`);
+      for (const f of mc.worldFacts) lines.push(`- ${formatEntry(f)}`);
     }
 
     if (mc.experiences?.length) {
       lines.push('\n## 历史经历');
-      for (const e of mc.experiences) lines.push(`- ${e.content}`);
+      for (const e of mc.experiences) lines.push(`- ${formatEntry(e)}`);
     }
 
     if (mc.opinions?.length) {

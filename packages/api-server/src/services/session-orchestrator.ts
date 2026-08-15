@@ -385,7 +385,15 @@ export class SessionOrchestrator {
                     content: m.content,
                     timestamp: new Date(),
                   })),
-                  { documentId: retainActionId, tags: ['chat'] }
+                  {
+                    documentId: retainActionId,
+                    tags: ['chat'],
+                    // 来源标注（决策 4）：对话 retain 统一标注渠道与可信度，供证据溯源
+                    metadata: {
+                      source_channel: 'dialogue',
+                      source_credibility: 'high',
+                    },
+                  }
                 )
                 .then(() => {
                   logger.debug('🧠 [Memory] retain completed:', {
