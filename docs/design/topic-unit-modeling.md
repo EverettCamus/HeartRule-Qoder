@@ -1,3 +1,8 @@
+---
+status: active
+last_updated: 2026-08-15
+---
+
 # 话题单元建模：咨询过程的核心领域模型
 
 > **文档定位**：定义 HeartRule AI 咨询引擎的核心领域模型——咨询过程如何被建模为话题单元的队列执行。本文回答"咨询过程是什么"——比设计哲学（为什么）具体，比 DSL 语法设计（怎么写）抽象，位于两者之间的领域建模层。
@@ -63,11 +68,9 @@ HeartRule 的核心领域模型就是这个过程的直接映射：
 
 ---
 
-**不变量一（运行时同构）：队列条目只有一种运行时类型。**
+**不变量一（无嵌套执行）：所有话题一律串行摊开，不存在话题内调用另一个话题的机制。**
 
-无论来源是会谈脚本、咨询技术脚本还是意识层临时创建（`source: 'main' | 'technique' | 'ad_hoc'`，见 §3.4），入队后的条目同构——执行引擎眼中只有队列条目及其 `actions` 序列，不存在"来源"这个维度。技术脚本的"调用"是**实例化 + 入队**，不是"调用-返回"：没有调用栈，没有子程序语义，"返回"是队列顺序的自然结果。
-
-由判断二推出：话题就是复用的粒度，被复用的技术进入队列后没有理由携带不同的运行时语义。
+由判断二——话题是复用的最小粒度——直接推出：被复用的技术进入队列时，它就是一个普通话题条目，顺序排在当前话题之后（或紧急插入时冻结当前话题、移到队首之后），别无特殊待遇。因此，无论来源是会谈脚本、咨询技术脚本还是意识层临时创建（`source: 'main' | 'technique' | 'ad_hoc'`，见 §3.4），入队后一律同构——执行引擎眼中只有队列条目及其 `actions` 序列，不存在"来源"这个维度。技术脚本的"调用"是**实例化 + 入队**，不是"调用-返回"：没有调用栈，没有子程序语义，"返回"是队列顺序的自然结果。
 
 **不变量二（唯一编排结构）：话题队列是唯一的编排数据结构。**
 
@@ -79,7 +82,7 @@ HeartRule 的核心领域模型就是这个过程的直接映射：
 
 **不变量三（唯一修改者）：意识层是唯一的队列修改者。**
 
-主线执行引擎只做一件事：取队首话题，执行其 Action 序列，完成后取下一个。它不思考"下一步该做什么"，不判断"当前策略是否失效"，不决定"是否需要插入安抚话题"。所有队列修改——插入、取消、重排、深度切换、权重调整——都由意识层发起。
+主线执行引擎只做一件事：取队首话题，执行其 Action 序列，完成后取下一个。它不思考"下一步该做什么"，不判断"当前策略是否失效"，不决定"是否需要插入安抚话题"。所有队列修改——插入、取消、重排、深度切换、紧急度调整——都由意识层发起。
 
 一个显式豁免：expand_by 展开（见 §3.2）是脚本声明的**兑现**——由主线引擎在列表变量就绪时执行，属于队列生成的延续，不属于修改。不变量三只约束对既定计划的**偏离性调整**。
 
@@ -94,7 +97,7 @@ HeartRule 的核心领域模型就是这个过程的直接映射：
 │  │Topic₀│  │Topic₁│  │Topic₂│  │Topic₃│  │Topic₄│  ... │
 │  └──────┘  └──────┘  └──────┘  └──────┘  └──────┘     │
 │      ▲                                                  │
-│      │  队列操作（插入/取消/重排/调整深度/变更权重）      │
+│      │  队列操作（插入/取消/重排/调整深度/变更紧急度）      │
 │      │                                                  │
 │  ┌───┴──────────────┐    ┌──────────────────────┐       │
 │  │    意识层         │    │    主线执行引擎        │       │
@@ -137,20 +140,28 @@ HeartRule 的核心领域模型就是这个过程的直接映射：
 
 ```yaml
 topic:
-  id: trigger_exploration
-  goal: '识别焦虑发作的核心触发模式'
+  topic_id: trigger_exploration
+  topic_goal: '识别焦虑发作的核心触发模式'
   actions:
-    - type: ai_ask
-      prompt: '最近一次焦虑发作是在什么情境下发生的？'
+    - action_type: ai_ask
+      action_id: ask_recent_episode
+      config:
+        content: '最近一次焦虑发作是在什么情境下发生的？'
 
-    - type: ai_think
-      prompt: '结合用户之前的陈述，分析这次发作的可能触发模式'
+    - action_type: ai_think
+      action_id: analyze_trigger_pattern
+      config:
+        content: '结合用户之前的陈述，分析这次发作的可能触发模式'
 
-    - type: ai_say
-      prompt: '将分析结果用非专业语言解释给用户，并邀请他确认'
+    - action_type: ai_say
+      action_id: explain_pattern
+      config:
+        content: '将分析结果用非专业语言解释给用户，并邀请他确认'
 
-    - type: ai_ask
-      prompt: '这个模式在其他情境下也出现过吗？'
+    - action_type: ai_ask
+      action_id: ask_other_contexts
+      config:
+        content: '这个模式在其他情境下也出现过吗？'
 ```
 
 ### 2.2 智能动作：最小执行单元
@@ -179,14 +190,18 @@ topic:
 
 ```yaml
 actions:
-  - type: ai_say
+  - action_type: ai_say
+    action_id: stabilization_exercise
     condition: "{{risk_level}} == 'high'"
-    prompt: '我们先做一个稳定化的练习...'
+    config:
+      content: '我们先做一个稳定化的练习...'
 
-  - type: ai_ask
+  - action_type: ai_ask
+    action_id: ask_episode_detail
     condition: "{{risk_level}} != 'high'"
-    prompt: '能具体描述一下最近一次焦虑发作的情境吗？'
-    exit_condition: '{{mentioned_trauma}} == true' # 提到创伤则提前结束
+    config:
+      content: '能具体描述一下最近一次焦虑发作的情境吗？'
+      exit_condition: '{{mentioned_trauma}} == true' # 提到创伤则提前结束
 ```
 
 条件不满足 → 跳过 → 看下一个。满足 → 执行 → 结束后看下一个。始终保持线性阅读体验。
@@ -200,20 +215,20 @@ actions:
 咨询师编写 YAML 脚本，本质上是在定义一个**默认话题计划**。脚本的 Phase → Topic → Action 层次结构，被引擎解析后展开为初始话题队列：
 
 ```
-YAML 脚本                          初始话题队列
-─────────                         ────────────
+YAML 脚本                              初始话题队列
+─────────                             ────────────
 phases:
-  - id: assessment
+  - phase_id: assessment
     topics:
-      - id: chief_complaint       Topic("chief_complaint", weight=10, ...)
+      - topic_id: chief_complaint       Topic("chief_complaint", urgency=10, ...)
         actions: [...]
-      - id: symptom_history       Topic("symptom_history", weight=8, ...)
+      - topic_id: symptom_history       Topic("symptom_history", urgency=8, ...)
         actions: [...]
-  - id: intervention
+  - phase_id: intervention
     topics:
-      - id: cbt_psychoeducation   Topic("cbt_psychoeducation", weight=7, ...)
+      - topic_id: cbt_psychoeducation   Topic("cbt_psychoeducation", urgency=7, ...)
         actions: [...]
-      - id: cognitive_restructure Topic("cognitive_restructure", weight=9, ...)
+      - topic_id: cognitive_restructure Topic("cognitive_restructure", urgency=9, ...)
         actions: [...]
 ```
 
@@ -222,7 +237,7 @@ phases:
 - 话题的唯一标识（`id`）
 - 所属 Phase 信息
 - Action 序列（可含 condition 和 exit_condition）
-- 默认权重
+- 默认紧急度
 - 预设时间估算
 - 可选的深度版本（快速版 / 标准版 / 详细版）
 
@@ -232,14 +247,18 @@ phases:
 
 ```yaml
 topics:
-  - id: explore_caregiver
-    expand_by: '{{caregivers}}' # 指向一个列表变量
-    item_variable: caregiver # 每个元素注入为 {{caregiver}}
+  - topic_id: explore_caregiver
+    expand_by: '{{caregivers}}' # 指向一个列表变量（schema 尚未约定此字段）
+    item_variable: caregiver # 每个元素注入为 {{caregiver}}（schema 尚未约定此字段）
     actions:
-      - type: ai_ask
-        prompt: '你和{{caregiver.name}}的关系是怎样的？'
-      - type: ai_ask
-        prompt: '{{caregiver.name}}对你的成长有什么影响？'
+      - action_type: ai_ask
+        action_id: ask_relationship
+        config:
+          content: '你和{{caregiver.name}}的关系是怎样的？'
+      - action_type: ai_ask
+        action_id: ask_influence
+        config:
+          content: '{{caregiver.name}}对你的成长有什么影响？'
 ```
 
 如果 `{{caregivers}}` 的值为 `["母亲", "父亲", "姐姐"]`，引擎展开为三个话题：
@@ -256,7 +275,7 @@ Topic("explore_caregiver::姐姐", item_context={caregiver: {name: "姐姐", ...
 
 ### 3.3 队列排序
 
-初始队列按脚本声明顺序排列（Phase 内按 Topic 顺序，Phase 间按 Phase 顺序）。权重影响后续的意识层重排——初始队列本身不按权重排序，因为脚本编写顺序已经表达了咨询师的意图。
+初始队列按脚本声明顺序排列（Phase 内按 Topic 顺序，Phase 间按 Phase 顺序）。紧急度影响后续的意识层重排——初始队列本身不按紧急度排序，因为脚本编写顺序已经表达了咨询师的意图。
 
 ### 3.4 咨询技术脚本的队列条目化
 
@@ -268,7 +287,7 @@ Topic("explore_caregiver::姐姐", item_context={caregiver: {name: "姐姐", ...
   ├── source: 'main' | 'technique' | 'ad_hoc'  # 来源标记（用于调试和评估）
   ├── goal: string                  # 话题目标
   ├── actions: Action[]             # Action 序列
-  ├── weight: number                # 动态权重
+  ├── urgency: number               # 动态紧急度
   ├── estimated_duration: number    # 预估时间（分钟）
   ├── depth: 'quick' | 'standard' | 'deep'  # 深度版本
   ├── phase_id: string              # 所属 Phase
@@ -292,7 +311,7 @@ Topic("explore_caregiver::姐姐", item_context={caregiver: {name: "姐姐", ...
 初始队列是**默认计划**，不是**最终流程**。默认计划基于脚本编写时对典型情况的假设——真实对话总是偏离假设。
 
 - **不变的**：主线引擎始终按队列顺序执行，不跳过、不插入、不重排。
-- **可变的**：队列本身（内容、顺序、深度、权重）。
+- **可变的**：队列本身（内容、顺序、深度、紧急度）。
 
 意识层是连接"不变执行引擎"和"可变队列"的桥梁——它观察对话中发生的事，判断默认计划是否需要调整，如果需要，直接修改队列。
 
@@ -305,11 +324,11 @@ Topic("explore_caregiver::姐姐", item_context={caregiver: {name: "姐姐", ...
 | **插入（insert）**        | 在指定位置添加新话题                       | 检测到阻抗 → 在当前话题后插入情绪安抚话题                                    |
 | **紧急插入（interrupt）** | 冻结当前话题，立即执行新话题，完成后恢复   | 用户提及自杀意念 → 冻结当前话题，立即执行危机评估话题                        |
 | **取消（cancel）**        | 移除队列中尚未执行的话题                   | 得知来访者父亲已去世 → 取消所有与该父亲相关的 `explore_caregiver::父亲` 话题 |
-| **重排（reorder）**       | 调整队列中尚未执行话题的顺序               | 检测到时间压力 → 将高权重话题提前，低权重话题后移                            |
+| **重排（reorder）**       | 调整队列中尚未执行话题的顺序               | 检测到时间压力 → 将高紧急度话题提前，低紧急度话题后移                        |
 | **深度切换（depth）**     | 将尚未执行的话题切换为快速版/标准版/详细版 | 时间不足 → 后续话题全部切换为快速版；发现重要线索 → 某个话题扩展为详细版     |
-| **权重调整（weight）**    | 变更话题的权重（影响后续重排决策）         | 基于对话进展动态调整——已部分覆盖的话题降权，新发现的高价值话题升权           |
+| **紧急度调整（urgency）** | 变更话题的紧急度（影响后续重排决策）       | 基于对话进展动态调整——已部分覆盖的话题降紧急度，新发现的高价值话题升紧急度   |
 
-每次操作的目标是同一个数据结构：话题队列。操作之间可能级联——例如取消一个话题后，后续话题自动前移；权重调整后可能触发重排。
+每次操作的目标是同一个数据结构：话题队列。操作之间可能级联——例如取消一个话题后，后续话题自动前移；紧急度调整后可能触发重排。
 
 紧急插入不可嵌套：同一时刻至多一个冻结话题。紧急话题执行中再次触发 interrupt 时，新紧急话题插入当前紧急话题之后，按队列顺序执行（仍是队列语义，非抢占）——这把"队列而非调用栈"的性质锁死在操作定义里（见不变量二）。
 
@@ -324,7 +343,7 @@ Topic("explore_caregiver::姐姐", item_context={caregiver: {name: "姐姐", ...
 | **生效时机**   | 下一轮                            | 可能多轮积累后产出判断                  |
 | **典型发起者** | `process_quality`（流程质量监测） | `strategy_adaptation`（策略调适）       |
 
-队列操作（插入、取消、重排、深度切换、权重调整）属于重量干预——不轻易触发。主线绝大多数时间在"低头执行"当前话题的 Action 序列，意识层在后台积累证据，累积到阈值才出手调整队列。
+队列操作（插入、取消、重排、深度切换、紧急度调整）属于重量干预——不轻易触发。主线绝大多数时间在"低头执行"当前话题的 Action 序列，意识层在后台积累证据，累积到阈值才出手调整队列。
 
 ### 4.4 调整后的队列一致性
 
@@ -500,7 +519,7 @@ HeartRule 设计哲学 v2 (道)
 2. **取消（cancel）** — 避免无效工作
 3. **深度切换（depth）** — 影响后续操作的预估时间
 4. **插入（insert）** — 在重排之前确定队列内容
-5. **权重调整（weight） + 重排（reorder）** — 在内容确定后调整顺序
+5. **紧急度调整（urgency） + 重排（reorder）** — 在内容确定后调整顺序
 
 ---
 
@@ -517,7 +536,7 @@ HeartRule 设计哲学 v2 (道)
 ```
 
 - **展开**：expand_by 声明的 Topic 在列表变量就绪时展开为多个具体条目（变量若依赖会谈中的提取，展开相应延迟，见 §3.2）
-- **入队**：进入话题队列，按权重和声明顺序排列
+- **入队**：进入话题队列，按紧急度和声明顺序排列
 - **等待**：在队列中等待前面的 Topic 执行完毕
 - **激活**：成为队首，主线引擎开始执行其 Action 序列
 - **执行中**：Action 序列逐个执行。此状态下的 Topic 不受队列重排影响（只影响后续 Topic）

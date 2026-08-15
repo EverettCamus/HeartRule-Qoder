@@ -81,5 +81,10 @@ legacy-python/data/*.sqlite
 .worktrees/
 worktrees/
 
+# Claude Code / OpenCode 本地工具状态
+.opencode/
+.claude/worktrees/
+.claude/settings.local.json
+
 # Sisyphus agent working files
 .sisyphus/

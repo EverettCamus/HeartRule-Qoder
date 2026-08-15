@@ -1,3 +1,8 @@
+---
+status: decision-recorded
+last_updated: 2026-08-15
+---
+
 # 变量-记忆桥接设计
 
 > **关联**:

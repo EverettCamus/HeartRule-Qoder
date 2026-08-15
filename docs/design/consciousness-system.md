@@ -1,3 +1,8 @@
+---
+status: active
+last_updated: 2026-08-15
+---
+
 # 意识系统设计
 
 > **关联**:

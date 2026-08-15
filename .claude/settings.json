@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /home/leo/projects/HeartRule-Qoder && git *)",
+      "Bash(cd /home/leo/projects/HeartRule-Qoder/packages/* && git *)",
+      "Bash(cd /home/leo/projects/HeartRule-Qoder && pnpm *)",
+      "Bash(cd /home/leo/projects/HeartRule-Qoder/packages/* && pnpm *)",
+      "Bash(npx *)",
+      "MCP(playwright)"
+    ]
+  },
+  "enabledMcpjsonServers": ["playwright"]
+}
