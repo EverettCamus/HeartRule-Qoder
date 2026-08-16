@@ -1,6 +1,6 @@
 # 设计文档状态索引
 
-> 地图层的一页视图。状态语义见 [开发节奏系统](development-rhythm.md) §4。
+> 地图层的一页视图。状态语义见 [开发节奏系统](development-rhythm.md) §6。
 > `docs/design/` 是混层目录——每篇文档的**层归属**见下表；`docs/ddd/` 独立存放战略设计。
 > 修订规则：`decision-recorded` 文档仅在实现或新证据与之矛盾时才打开修订。
 
