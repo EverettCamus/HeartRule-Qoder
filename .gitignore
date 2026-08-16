@@ -20,7 +20,13 @@ coverage/
 # Playwright E2E 测试
 packages\script-editor\e2e\playwright-report
 packages\script-editor\e2e\test-results
+packages/script-editor/e2e/playwright-report/
+packages/script-editor/e2e/test-results/
+packages/api-server/test-project-id.txt
 .playwright/
+
+# 数据库备份
+backups/
 
 # 环境变量
 .env

@@ -202,6 +202,26 @@ reflect(userId, query, {
 - **降级路径（reflect + responseSchema）客户端完全支持**，无 bypass。
 - **对步骤 1-2 的影响**：端口/适配器修订**不依赖** mental-model-vs-自建表 的最终选择——决策 2 的 reflect+responseSchema 路径两条路都要用。建议本次修订先落地 reflect+responseSchema（修复"reflect 烧 LLM 只拿空 markdown"），opinions 的持久化承载（自建表 vs mental model）作为 Phase 4 决策，由 live PoC（Path A）拍板。
 
+### Live PoC 实测（2026-08-16，server 0.6.2 → 0.9.1 升级后 + DeepSeek）
+
+**升级**：本地镜像过期（`latest` 停在 0.6.2，digest `f0f9e9a`）。`docker compose pull hindsight` 拉到 0.9.1（digest `a0e93736`，远程 `latest` 与 `0.9.1` 同 digest），`up -d --force-recreate hindsight` 重建，数据卷保留。`/version` → `api_version: 0.9.1`。
+
+**实测结果**（`scripts/verify-mental-model.ts`，server 0.9.1 + `HINDSIGHT_API_LLM_PROVIDER=deepseek`）：
+
+| 路径                                              | 0.6.2（升级前）                                                     | 0.9.1（升级后）                                                                                                                       | 根因                                                |
+| ------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Path A：mental model + raw HTTP `response_schema` | 创建成功，`structured_output` 空，content 卡"Generating content..." | 创建成功，refresh 时 **`MentalModelRefreshError: structured output extraction failed`**，`refresh_skipped='structured_output_failed'` | `scope=reflect_structured` 调用 DeepSeek 返回空内容 |
+| Path B：类型化 `createMentalModel`                | `response_schema` 被丢弃                                            | 同左（SDK 层阻断，与 server 版本无关）                                                                                                | `index.js:1784/1881`                                |
+| Path C：reflect + `responseSchema`                | `structured_output` 空，text 可用                                   | **`structured_output` 仍空**，但 text 输出质量高（多轮工具调用综合）                                                                  | 见下方日志                                          |
+
+**根因定位**（容器日志）：0.9.1 server 的 structured 路径用 `scope=reflect_structured` 调用 LLM，而 DeepSeek 在此调用下返回 **`Provider returned empty message content ... finish_reason=length, has_tool_calls=False`**（2 次重试均失败）。对照 `scope=reflect`（普通文本）DeepSeek 正常产出完整 markdown（60s/2805 tokens）。→ **structured_output 可用性是 LLM provider 局限，不是 server 版本问题**（可能：DeepSeek 在该用例下 JSON 输出超长被截断，或不支持 Hindsight 的 structured JSON 模式）。
+
+**对决策的影响**：
+
+- 升级到 0.9.1 是**必要前提**（0.6.2 上 structured 路径根本不存在），但**不等于 structured_output 可用**。
+- 决策 2/6 的"reflect+responseSchema → `structured_output`"落地**当前受 DeepSeek 阻断**。待验证项（Phase 4 前）：换 OpenAI provider 重测、简化 `response_schema`、或调大 structured 调用的 max_tokens。
+- 适配器现状（`summary = response.text` 回退）**正确兜底**：Phase 0/1 用 markdown summary，`structured_output` 空时 `updatedOpinions` 等字段留空——不阻塞 `ai-ask-memory-recall`（该链路只用 `MemoryContext` 文本）。
+
 ## 实施顺序
 
 0. **评估 ➕ 决策 6（mental models）**——类型/运行时级评估已完成（见上节）。live PoC 脚本 `scripts/verify-mental-model.ts` 已就绪，待 Docker + `DEEPSEEK_API_KEY` 就绪后跑一次 Path A 拍板"自建表 vs mental model 管线"。**此步不阻塞步骤 1-2**：reflect+responseSchema 两条路径都要用，本次先落地它。

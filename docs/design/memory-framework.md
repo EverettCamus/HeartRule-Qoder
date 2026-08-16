@@ -799,11 +799,11 @@ Hindsight 将记忆组织为四个认知分类网络，并提供三个核心操�
 
 **三个操作**:
 
-| 操作        | 触发时机                   | 在咨询中的应用                                                                                                                                           |
-| ----------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **retain**  | 每个 Action 结束后 (异步)  | 从该 Action 的完整对话中提取事实/事件/情绪 → 实体解析 → 分类存储到 world/experience/observation（opinions 不在 retain 中产生）                           |
-| **recall**  | 会话启动时 / AI 需要背景时 | 语义 + BM25 检索（v0.9.1 可选图谱/时间臂）→ 返回 world/experience/observation → 注入 LLM 上下文；opinions 由 HeartRule 自建层加载                        |
-| **reflect** | 会话结束后 / 关键节点      | 用 query + `response_schema` 做结构化反思 → `structured_output` 产出综合判断（observations 由 Hindsight consolidate 产生；opinions 由 HeartRule 持久化） |
+| 操作        | 触发时机                   | 在咨询中的应用                                                                                                                                                                                                                                                                                                                                     |
+| ----------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **retain**  | 每个 Action 结束后 (异步)  | 从该 Action 的完整对话中提取事实/事件/情绪 → 实体解析 → 分类存储到 world/experience/observation（opinions 不在 retain 中产生）                                                                                                                                                                                                                     |
+| **recall**  | 会话启动时 / AI 需要背景时 | 语义 + BM25 检索（v0.9.1 可选图谱/时间臂）→ 返回 world/experience/observation → 注入 LLM 上下文；opinions 由 HeartRule 自建层加载                                                                                                                                                                                                                  |
+| **reflect** | 会话结束后 / 关键节点      | 用 query + `response_schema` 做结构化反思 → `structured_output` 产出综合判断（observations 由 Hindsight consolidate 产生；opinions 由 HeartRule 持久化）。⚠️ **实测限制**：`structured_output` 可用性取决于 LLM provider——server 0.9.1 + DeepSeek 实测返回空（`finish_reason=length`），适配器回退 `text`（详见 `decisions/004`「Live PoC 实测」） |
 
 ### 4.3 分工: Hindsight 提供什么, HeartRule 构建什么
 
