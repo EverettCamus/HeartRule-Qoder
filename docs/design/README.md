@@ -2,6 +2,7 @@
 
 > 地图层的一页视图。状态语义见 [开发节奏系统](development-rhythm.md) §6。
 > `docs/design/` 是混层目录——每篇文档的**层归属**见下表；`docs/ddd/` 独立存放战略设计。
+> `本体` 层 = 引擎侧知识模型（任务/领域/推理三层），与 `地图 · 领域建模`（平台侧 UL）分别维护。
 > 修订规则：`decision-recorded` 文档仅在实现或新证据与之矛盾时才打开修订。
 
 | 文档                                                                  | 层              | 状态              | 已记录决策                                                                                                                                                                                  |
@@ -9,6 +10,7 @@
 | [heartrule-design-philosophy-v2](heartrule-design-philosophy-v2.md)   | 基础哲学        | active            | —                                                                                                                                                                                           |
 | [topic-unit-modeling](topic-unit-modeling.md)                         | 地图 · 领域建模 | active            | —                                                                                                                                                                                           |
 | [ubiquitous-language](ubiquitous-language.md)                         | 地图 · 领域建模 | decision-recorded | —                                                                                                                                                                                           |
+| [ontology](ontology.md)                                               | 本体            | draft             | —                                                                                                                                                                                           |
 | [consciousness-system](consciousness-system.md)                       | 引擎机制        | active            | —                                                                                                                                                                                           |
 | [memory-framework](memory-framework.md)                               | 引擎机制        | decision-recorded | [004 记忆数据模型校准](decisions/004-memory-model-calibration.md)                                                                                                                           |
 | [memory-retrieval-types](memory-retrieval-types.md)                   | 引擎机制        | active            | —                                                                                                                                                                                           |
