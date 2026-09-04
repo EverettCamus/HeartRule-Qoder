@@ -37,12 +37,12 @@ pnpm docker:dev
 
 ## Working Rhythm
 
-> 完整机制见 `docs/design/development-rhythm.md`。四条约定约束每次会话如何与项目协作：
+> 完整机制见 `docs/design/development-rhythm.md`。四条约定约束每次会话如何与项目协作；每条的执行程序编码在项目技能 `.claude/skills/heartrule-*/`（`/skills` 可查看）：
 
-1. **开工先看节奏**：读取 `docs/scrum/sprint-plan.md`（当前 sprint）和 `docs/scrum/backlog.md`（产品待办），在动手前了解"这周做什么"。
-2. **故事 DoD**：一个故事完成 = 测试过 + lint/typecheck 过 + commit + push + 在 sprint-plan.md 标记 done。未满足 DoD 不得宣称"完成"。
-3. **设计封板**：`docs/design/` 下的文档有 `status`（draft/active/decision-recorded/superseded，见 `docs/design/README.md` 索引）。达到 `decision-recorded` 即封板，仅当实现或新证据与之矛盾时才修订。
-4. **智能讨论产出物驱动**：涉及 AI 引擎智能机制（记忆调取、意识触发、队列调整等）的讨论，结束前必须收敛为机制文档 / ADR / spec / backlog 故事（四选一）；未收敛的议题留在 backlog「智能设计议题」分区。
+1. **开工先看节奏**：读取 `docs/scrum/sprint-plan.md`（当前 sprint）和 `docs/scrum/backlog.md`（产品待办），了解"这周做什么"；然后主动提出本会话的工作计划草案（做什么、按什么顺序、预计产出），经人批准后再动手。→ 用 `heartrule-session-start` 技能执行。
+2. **故事 DoD**：一个故事完成 = 测试过 + lint/typecheck 过 + commit + push + 在 sprint-plan.md 标记 done。未满足 DoD 不得宣称"完成"。→ 用 `heartrule-story-flow`（六步）+ `heartrule-accept-story`（DoD 收口）技能执行。
+3. **设计封板**：`docs/design/` 下的文档有 `status`（draft/active/decision-recorded/superseded，见 `docs/design/README.md` 索引）。达到 `decision-recorded` 即封板，仅当实现或新证据与之矛盾时才修订。→ 用 `heartrule-design-docs` 技能执行。
+4. **智能讨论产出物驱动**：涉及 AI 引擎智能机制（记忆调取、意识触发、队列调整等）的讨论，结束前必须收敛为机制文档 / ADR / spec / backlog 故事（四选一）；未收敛的议题留在 backlog「智能设计议题」分区。→ 用 `heartrule-mechanism-flow` 技能执行。
 
 ## Architecture
 

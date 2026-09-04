@@ -9,5 +9,18 @@
       "MCP(playwright)"
     ]
   },
-  "enabledMcpjsonServers": ["playwright"]
+  "enabledMcpjsonServers": ["playwright"],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat .claude/hooks/session-start-pointer.txt"
+          }
+        ]
+      }
+    ]
+  }
 }

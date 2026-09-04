@@ -200,6 +200,8 @@ last_updated: 2026-09-04
 
 ## 9. 每会话开工约定
 
+> 执行载体：本节约定的执行程序编码在项目技能 `.claude/skills/heartrule-*/`（会话启动由 SessionStart hook 注入开工指针；六步/封板/机制收敛/验收各有对应技能，见 CLAUDE.md Working Rhythm）。
+
 Claude Code 在 HeartRule 仓库启动会话时：
 
 1. **先看 `docs/scrum/sprint-plan.md` 和 `docs/scrum/backlog.md`**——知道当前 sprint 做什么、哪些故事 in-progress、池子里有什么；**你有新意图就直接提**，AI 协助写进 backlog 意图区，想清楚了再拆成 epic（§4 表）；然后**主动提出本会话的工作计划草案**（做什么、按什么顺序、预计产出），你批准后再动手（§12 借入的 AI 主动提案）。
