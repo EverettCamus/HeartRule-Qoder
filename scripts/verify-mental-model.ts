@@ -99,7 +99,9 @@ async function main() {
     body: JSON.stringify({
       name: '来访者核心信念',
       source_query: '综合分析该来访者的核心信念、应对模式与情绪模式，形成咨询师判断',
-      max_tokens: 2000,
+      // deepseek-v4 为推理模型，推理 token 计入 max_completion_tokens（结构化提取的硬上限）；
+      // 2000 会在推理阶段耗尽导致 content 为空（finish_reason=length），需留足余量
+      max_tokens: 8000,
       trigger: {
         mode: 'full',
         refresh_after_consolidation: false,
@@ -116,20 +118,24 @@ async function main() {
   console.log('   ✅ 创建成功:', JSON.stringify(createJson));
   const mentalModelId = createJson.mental_model_id;
 
-  // 3. 轮询等待后台 reflect 完成（最多 90s）
+  // 3. 轮询等待后台 reflect 完成（最多 120s；"Generating content..." 是占位符，不算就绪）
   console.log('\n[3] 轮询 mental model 内容生成...');
   let model: any = null;
-  for (let i = 0; i < 30; i++) {
+  let ready = false;
+  for (let i = 0; i < 40; i++) {
     await sleep(3000);
     model = await client.getMentalModel(bankId, mentalModelId, { detail: 'full' });
-    if (model && model.content) {
-      console.log(`   ✅ 内容已生成 (${i * 3}s)`);
+    const content = model?.content ?? '';
+    if (content && !content.startsWith('Generating content')) {
+      ready = true;
+      console.log(`   ✅ 内容已生成 (${(i + 1) * 3}s)`);
       break;
     }
     console.log(`   ⏳ 等待中 (${(i + 1) * 3}s)...`);
   }
-  if (!model?.content) {
-    console.error('   ❌ 超时：mental model 内容未生成');
+  if (!ready) {
+    console.error('   ❌ 超时：mental model 内容未就绪（仍为占位符）。完整状态:');
+    console.error('   ' + JSON.stringify(model, null, 2).split('\n').join('\n   '));
     process.exit(1);
   }
 
@@ -142,6 +148,7 @@ async function main() {
   } else {
     console.log('   ⚠️ structured_output 为空 —— response_schema 未生效或未被存储');
     console.log('   reflect_response 字段:', Object.keys(model?.reflect_response ?? {}));
+    console.log('   is_stale:', model?.is_stale, '| last_refreshed_at:', model?.last_refreshed_at);
   }
   console.log('\n   markdown content 预览:');
   console.log(
@@ -181,7 +188,7 @@ async function main() {
       bankId,
       '综合分析该来访者的核心信念、应对模式与情绪模式，形成咨询师判断',
       {
-        response_schema: OPINION_SCHEMA as any,
+        responseSchema: OPINION_SCHEMA,
       }
     );
     const rso = (reflectResp as any).structured_output;
