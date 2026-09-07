@@ -11,7 +11,7 @@
 
 | 类型      | 故事                                                                                                  | DoD                                              | 状态    |
 | --------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ------- |
-| [feature] | Hindsight 集成收尾：verify-mental-model.ts 对 docker 后端全绿                                         | verify 脚本 exit 0；已 commit+push               | pending |
+| [feature] | Hindsight 集成收尾：verify-mental-model.ts 对 docker 后端全绿                                         | verify 脚本 exit 0；已 commit+push               | done    |
 | [design]  | memory-retrieval-types 封板为 decision-recorded（补 ADR）                                             | frontmatter status 变更 + ADR 落库 + commit+push | pending |
 | [design]  | ai-ask-memory-recall 封板为 decision-recorded（补 ADR）                                               | frontmatter status 变更 + ADR 落库 + commit+push | pending |
 | [feature] | 开发节奏文档修订（rhythm.md 七轮共识 + backlog epic 重排 + sprint-plan + CLAUDE.md 同步）             | 文档修订完 + commit + push                       | done    |
