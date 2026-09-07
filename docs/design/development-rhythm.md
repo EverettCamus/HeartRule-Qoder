@@ -200,7 +200,7 @@ last_updated: 2026-09-04
 
 ## 9. 每会话开工约定
 
-> 执行载体：本节约定的执行程序编码在项目技能 `.claude/skills/heartrule-*/`（会话启动由 SessionStart hook 注入开工指针；六步/封板/机制收敛/验收各有对应技能，见 CLAUDE.md Working Rhythm）。
+> 执行载体：本节约定的执行程序编码在项目技能 `.claude/skills/heartrule-*/`（会话启动由 SessionStart hook 注入开工指针；六步/封板/机制收敛/验收各有对应技能，见 CLAUDE.md Working Rhythm）。技能使用速查见 [skills-usage-guide](skills-usage-guide.md)。
 
 Claude Code 在 HeartRule 仓库启动会话时：
 
