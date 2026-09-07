@@ -5,7 +5,7 @@ description: 新一周 sprint 计划、sprint 末节奏小结、或 backlog 维�
 
 # Sprint 边界（开发节奏系统 §5 时钟 + §10 演进）
 
-**核心原则**：sprint-plan 只放当前一周（历史在 git，不在文件里）；目标从意图区的「活跃」意图来，写成可验证的结果句。节奏依据：`docs/design/development-rhythm.md` §5。
+**核心原则**：sprint-plan 只放当前一周（历史在 git，不在文件里）；目标从意图区的「活跃」意图来，写成可验证的结果句。节奏依据：`docs/process/development-rhythm.md` §5。
 
 ## 何时用
 
@@ -42,7 +42,7 @@ sprint-plan 的**下一个读者是每次开工的 AI 与人**，住所 = `docs/
 
 sprint 末若发现技能族本身有缺口（哪个节奏节点没有被遵守），**回写对应 heartrule skill**——规则是失败的补丁，先让流程跑，反复出问题处才加规则；规则多余时删掉。
 
-另：`docs/design/development-rhythm.md` 改版（尤其章节重编号）后，核对各 heartrule skill 内的 § 引用并同步更新。
+另：`docs/process/development-rhythm.md` 改版（尤其章节重编号）后，核对各 heartrule skill 内的 § 引用并同步更新。
 
 ## 常见违规
 

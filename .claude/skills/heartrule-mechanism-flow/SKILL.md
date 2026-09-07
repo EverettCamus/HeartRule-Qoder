@@ -5,7 +5,7 @@ description: 引擎级需求、[intelligence] story、或讨论引擎智能机�
 
 # 机制讨论收敛（开发节奏系统 §8 专家系统建模）
 
-**核心原则**：引擎智能机制**讨论事件驱动、产出物受排期约束**——每次讨论必须五落点收敛，收敛出的实现 story 一律进 backlog 由 sprint 排期，不许"顺手实现"。节奏依据：`docs/design/development-rhythm.md` §8。
+**核心原则**：引擎智能机制**讨论事件驱动、产出物受排期约束**——每次讨论必须五落点收敛，收敛出的实现 story 一律进 backlog 由 sprint 排期，不许"顺手实现"。节奏依据：`docs/process/development-rhythm.md` §8。
 
 ## 何时用
 

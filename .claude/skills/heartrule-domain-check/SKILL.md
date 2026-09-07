@@ -5,7 +5,7 @@ description: 开始一个 story 的六步流程、或需要检查领域概念与
 
 # 领域概念检查（开发节奏系统 §7 第 1 步）
 
-**核心原则**：每个 story 头脑风暴前先过概念关——概念叫什么、登记了没、属哪个限界上下文、关系定义了没。节奏依据：`docs/design/development-rhythm.md` §7 第 1 步。
+**核心原则**：每个 story 头脑风暴前先过概念关——概念叫什么、登记了没、属哪个限界上下文、关系定义了没。节奏依据：`docs/process/development-rhythm.md` §7 第 1 步。
 
 ## 何时用
 

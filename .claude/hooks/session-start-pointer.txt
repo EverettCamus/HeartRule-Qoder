@@ -1,1 +1,1 @@
-HeartRule 仓库的节奏约定（docs/design/development-rhythm.md §9）要求：会话开工时先读 docs/scrum/sprint-plan.md 与 docs/scrum/backlog.md，主动提出本会话的工作计划草案，经人批准后再动手。该约定的执行程序见项目技能 heartrule-session-start。
+HeartRule 仓库的节奏约定（docs/process/development-rhythm.md §9）要求：会话开工时先读 docs/scrum/sprint-plan.md 与 docs/scrum/backlog.md，主动提出本会话的工作计划草案，经人批准后再动手。该约定的执行程序见项目技能 heartrule-session-start。

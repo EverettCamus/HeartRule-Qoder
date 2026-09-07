@@ -1,7 +1,7 @@
 # 设计文档状态索引
 
-> 地图层的一页视图。状态语义见 [开发节奏系统](development-rhythm.md) §6。
-> `docs/design/` 是混层目录——每篇文档的**层归属**见下表；`docs/ddd/` 独立存放战略设计。
+> 地图层的一页视图。状态语义见 [开发节奏系统](../process/development-rhythm.md) §6。
+> `docs/design/` 是混层目录——每篇文档的**层归属**见下表；`docs/ddd/` 独立存放战略设计。过程/节奏类文档（开发节奏系统、skills 使用说明）已迁至 [`docs/process/`](../process/README.md)（2026-09-07）。
 > `本体` 层 = 引擎侧知识模型（任务/领域/推理三层），与 `地图 · 领域建模`（平台侧 UL）分别维护。
 > `横切约束` 层 = 架构红线清单（§7 第 5 步合规自查的检查依据）。
 > 修订规则：`decision-recorded` 文档仅在实现或新证据与之矛盾时才打开修订。
@@ -20,5 +20,3 @@
 | [topic-queue-implementation](topic-queue-implementation.md)           | 引擎机制        | decision-recorded | [001 话题时间预估](decisions/001-topic-time-estimation.md) · [002 用途与深度](decisions/002-time-application-and-depth.md) · [003 实现机制](decisions/003-time-implementation-mechanism.md) |
 | [script-engine-design-principles](script-engine-design-principles.md) | 引擎机制        | decision-recorded | —                                                                                                                                                                                           |
 | [architecture-constraints](architecture-constraints.md)               | 横切约束        | draft             | —                                                                                                                                                                                           |
-| [development-rhythm](development-rhythm.md)                           | 流程（本文档）  | active            | —                                                                                                                                                                                           |
-| [skills-usage-guide](skills-usage-guide.md)                           | 流程            | active            | —                                                                                                                                                                                           |

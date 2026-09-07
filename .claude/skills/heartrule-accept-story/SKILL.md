@@ -5,7 +5,7 @@ description: 故事实现完成后验收收口、宣称完成前使用（story-f
 
 # 验收 + DoD（开发节奏系统 §7 第 6 步 + §5）
 
-**核心原则**：验收分两类（平台 GWT / 引擎案例对话），DoD 全勾完才 done——**DoD 未满足不得宣称"完成"**（CLAUDE.md 约定第 2 条）。节奏依据：`docs/design/development-rhythm.md` §7 第 6 步、§5 故事类型与 DoD。
+**核心原则**：验收分两类（平台 GWT / 引擎案例对话），DoD 全勾完才 done——**DoD 未满足不得宣称"完成"**（CLAUDE.md 约定第 2 条）。节奏依据：`docs/process/development-rhythm.md` §7 第 6 步、§5 故事类型与 DoD。
 
 ## 何时用
 

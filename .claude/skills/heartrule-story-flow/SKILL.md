@@ -5,7 +5,7 @@ description: 认领或开始 sprint-plan / backlog 中的某个 story、或用�
 
 # 故事六步（开发节奏系统 §7 编排器）
 
-**核心原则**：story 管范围，spec 管设计，plan 管步骤——六步走完才 done。节奏依据：`docs/design/development-rhythm.md` §7。
+**核心原则**：story 管范围，spec 管设计，plan 管步骤——六步走完才 done。节奏依据：`docs/process/development-rhythm.md` §7。
 
 ## 何时用
 

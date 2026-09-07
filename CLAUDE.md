@@ -37,7 +37,7 @@ pnpm docker:dev
 
 ## Working Rhythm
 
-> 完整机制见 `docs/design/development-rhythm.md`。四条约定约束每次会话如何与项目协作；每条的执行程序编码在项目技能 `.claude/skills/heartrule-*/`（`/skills` 可查看）：
+> 完整机制见 `docs/process/development-rhythm.md`。四条约定约束每次会话如何与项目协作；每条的执行程序编码在项目技能 `.claude/skills/heartrule-*/`（`/skills` 可查看）：
 
 1. **开工先看节奏**：读取 `docs/scrum/sprint-plan.md`（当前 sprint）和 `docs/scrum/backlog.md`（产品待办），了解"这周做什么"；然后主动提出本会话的工作计划草案（做什么、按什么顺序、预计产出），经人批准后再动手。→ 用 `heartrule-session-start` 技能执行。
 2. **故事 DoD**：一个故事完成 = 测试过 + lint/typecheck 过 + commit + push + 在 sprint-plan.md 标记 done。未满足 DoD 不得宣称"完成"。→ 用 `heartrule-story-flow`（六步）+ `heartrule-accept-story`（DoD 收口）技能执行。

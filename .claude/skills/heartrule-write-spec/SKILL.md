@@ -5,7 +5,7 @@ description: 头脑风暴通过后为 story 写 spec 时使用（story-flow 第 
 
 # 写 Spec（开发节奏系统 §7 第 3 步）
 
-**核心原则**：spec 是 DDD 战术设计的落点——功能、验收标准、领域模型片段一次写清；plan 阶段不再建模。节奏依据：`docs/design/development-rhythm.md` §7 第 3 步、§6 接缝关系。
+**核心原则**：spec 是 DDD 战术设计的落点——功能、验收标准、领域模型片段一次写清；plan 阶段不再建模。节奏依据：`docs/process/development-rhythm.md` §7 第 3 步、§6 接缝关系。
 
 ## 何时用
 
