@@ -1,6 +1,6 @@
 ---
 name: heartrule-domain-check
-description: 开始一个 story 的六步流程、或需要检查领域概念与 UL/本体的一致性时使用——列出 story 涉及概念，对照 UL 与本体查缺口，按概念归属补齐后输出 domain-check 笔记。
+description: 开始一个 story 的六步流程、或需要检查领域概念与 UL（ubiquitous-language.md）/本体（ontology.md）的一致性时使用——领域概念检查的入口技能。
 ---
 
 # 领域概念检查（开发节奏系统 §7 第 1 步）

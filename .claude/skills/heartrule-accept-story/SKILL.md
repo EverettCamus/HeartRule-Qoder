@@ -1,6 +1,6 @@
 ---
 name: heartrule-accept-story
-description: 故事实现完成后验收收口时使用——平台故事逐项勾选 GWT、引擎故事跑案例对话，再查故事级 DoD（测试/lint/commit/push/sprint 标记），全部满足才允许宣称完成。
+description: 故事实现完成后验收收口、宣称完成前使用（story-flow 第 ⑥ 步），或用户单独要求"验收/收尾某个故事"时使用。
 ---
 
 # 验收 + DoD（开发节奏系统 §7 第 6 步 + §5）
@@ -25,6 +25,7 @@ description: 故事实现完成后验收收口时使用——平台故事逐项�
    - `[feature]`：测试通过 + lint/typecheck 通过 + commit + push + sprint-plan 标记 done
    - `[intelligence]`：五落点收敛（机制文档/ADR/spec/本体更新/backlog 故事）+ 拆出的实现故事进 backlog + commit + push
    - `[design]`：文档达到 `decision-recorded`（必要时补 ADR）+ commit + push
+   - commit/push/合流收尾环节可委托 `superpowers:finishing-a-development-branch`；DoD 只验收结果（已 commit、已 push）。
    - 测试/lint 通过要有**命令输出证据**（衔接 `superpowers:verification-before-completion`）。
 4. 更新 `docs/scrum/sprint-plan.md` 故事行状态为 `done`。
 5. **停下：最终验收由人拍板。**

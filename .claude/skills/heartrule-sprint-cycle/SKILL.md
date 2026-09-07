@@ -1,6 +1,6 @@
 ---
 name: heartrule-sprint-cycle
-description: 新一周 sprint 计划、sprint 末节奏小结、或 backlog 维护时使用——从意图区活跃意图选目标写结果句，按目标选故事定 DoD，覆盖重写 sprint-plan，人确认后才定稿。
+description: 新一周 sprint 计划、sprint 末节奏小结、或 backlog 维护时使用——sprint 边界与 backlog 治理的入口技能。
 ---
 
 # Sprint 边界（开发节奏系统 §5 时钟 + §10 演进）
@@ -41,6 +41,8 @@ sprint-plan 的**下一个读者是每次开工的 AI 与人**，住所 = `docs/
 ## 渐进规则化提醒（§10）
 
 sprint 末若发现技能族本身有缺口（哪个节奏节点没有被遵守），**回写对应 heartrule skill**——规则是失败的补丁，先让流程跑，反复出问题处才加规则；规则多余时删掉。
+
+另：`docs/design/development-rhythm.md` 改版（尤其章节重编号）后，核对各 heartrule skill 内的 § 引用并同步更新。
 
 ## 常见违规
 

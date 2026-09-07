@@ -1,6 +1,6 @@
 ---
 name: heartrule-story-flow
-description: 认领或开始 sprint-plan / backlog 中的某个 story 时使用——按故事类型分叉后走六步流程（领域概念检查→头脑风暴→spec→plan→实现→验收），每个审查门停下等人批准。
+description: 认领或开始 sprint-plan / backlog 中的某个 story、或用户说"开始做 X 故事"时使用——story 从认领到 done 的过程入口，按故事类型分叉。
 ---
 
 # 故事六步（开发节奏系统 §7 编排器）

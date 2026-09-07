@@ -1,6 +1,6 @@
 ---
 name: heartrule-write-spec
-description: 头脑风暴通过后为 story 写 spec 时使用——按 HeartRule 固定节写 spec（GWT 正负例、领域模型片段、人工审查清单），落在 docs/superpowers/specs/，人批准后才算通过。
+description: 头脑风暴通过后为 story 写 spec 时使用（story-flow 第 ③ 步），或用户单独要求"写 spec"时使用。
 ---
 
 # 写 Spec（开发节奏系统 §7 第 3 步）

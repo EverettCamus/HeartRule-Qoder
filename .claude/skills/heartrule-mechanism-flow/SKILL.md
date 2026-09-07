@@ -1,6 +1,6 @@
 ---
 name: heartrule-mechanism-flow
-description: 引擎级需求、[intelligence] story、或讨论引擎智能机制（记忆调取、意识触发、话题队列调整等实现方式）时使用——本体先行（任务层找锚）→ 机制设计 → 案例验证 → 五落点收敛，讨论不许顺手实现。
+description: 引擎级需求、[intelligence] story、或讨论引擎智能机制（记忆调取、意识触发、话题队列调整等实现方式）时使用——机制讨论收敛的入口技能。
 ---
 
 # 机制讨论收敛（开发节奏系统 §8 专家系统建模）

@@ -1,6 +1,6 @@
 ---
 name: heartrule-design-docs
-description: 创建或修改 docs/design、docs/ddd 文档、做架构决策、或处理 [design] 封板故事时使用——管理文档状态机与 README 索引，关键决策落 ADR 后封板停止积累。
+description: 创建或修改 docs/design、docs/ddd 文档且涉及状态或决策、做架构决策、或处理 [design] 封板故事时使用——设计文档状态与封板治理的入口技能。
 ---
 
 # 设计文档治理 / 封板（开发节奏系统 §6 载体与治理）
@@ -13,7 +13,7 @@ description: 创建或修改 docs/design、docs/ddd 文档、做架构决策、�
 - 做架构决策（需要 ADR）
 - `[design]` story（story-flow 类型分叉转来）
 
-**何时不用**：文档内容的具体讨论（`heartrule-mechanism-flow`）；story 执行（`heartrule-story-flow`）。
+**何时不用**：文档内容的具体讨论（`heartrule-mechanism-flow`）；story 执行（`heartrule-story-flow`）；纯措辞修订、不动 status 与决策的小修（改错字、补链接）——直接改，不走状态机流程。
 
 ## 步骤
 

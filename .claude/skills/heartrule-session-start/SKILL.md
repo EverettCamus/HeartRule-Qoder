@@ -1,6 +1,6 @@
 ---
 name: heartrule-session-start
-description: 新会话开工或接到新任务方向时使用——先读 sprint 计划与 backlog 了解当前节奏，再主动提出本会话工作计划草案并等待批准，未批准不动手。
+description: 新会话刚开始、会话中途接到新任务方向、或用户要求对齐本会话计划（"开工""今天做什么"）时使用——会话开工节奏的入口技能，由 SessionStart hook 指向。
 ---
 
 # 开工节奏（开发节奏系统 §9）
