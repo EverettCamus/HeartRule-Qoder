@@ -1,6 +1,6 @@
 # DDD 合规自查报告格式
 
-> story-flow 第 5 步（实现与测试）完成后填写。检查依据：`docs/design/architecture-constraints.md`（**该文件尚不存在**——首次需要时创建并登记进 `docs/design/README.md` 索引，层归属 = 横切约束）。
+> story-flow 第 5 步（实现与测试）完成后填写。检查依据：`docs/design/architecture-constraints.md`（红线清单，按 A–E 组编号逐条对照）。
 
 报告四栏：
 

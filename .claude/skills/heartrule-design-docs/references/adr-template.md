@@ -30,4 +30,4 @@
 - 相关 backlog 故事 / 探索项
 ```
 
-**流程**：AI 起草 → 人批准 → 落 `docs/design/decisions/` → 更新 `docs/design/README.md` 已记录决策列 → 更新架构约束清单（`architecture-constraints.md`，首次需要时创建）。
+**流程**：AI 起草 → 人批准 → 落 `docs/design/decisions/` → 更新 `docs/design/README.md` 已记录决策列 → 更新架构约束清单（`architecture-constraints.md`，红线增删需人确认）。
