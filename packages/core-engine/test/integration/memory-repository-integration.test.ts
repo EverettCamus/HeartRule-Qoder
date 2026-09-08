@@ -35,8 +35,7 @@ class SpyMemoryRepository implements MemoryRepository {
       this.recallData.get(userId) || {
         worldFacts: [],
         experiences: [],
-        opinions: [],
-        observationSummary: '',
+        observations: [],
       }
     );
   }
@@ -109,8 +108,14 @@ describe('MemoryRepository 集成测试', () => {
       const prefill: MemoryContext = {
         worldFacts: [{ content: '用户被诊断为 GAD' }],
         experiences: [{ content: '第1次会谈讨论了工作压力' }],
-        opinions: [{ content: '焦虑来源可能与完美主义有关', confidence: 0.7 }],
-        observationSummary: '用户首次会谈，情绪稳定',
+        observations: [
+          {
+            content: '焦虑来源可能与完美主义有关',
+            proofCount: 2,
+            sourceFactIds: ['fact-a', 'fact-b'],
+          },
+          { content: '用户首次会谈，情绪稳定' },
+        ],
       };
       memoryRepo.setRecallData('user-1', prefill);
 
@@ -118,8 +123,9 @@ describe('MemoryRepository 集成测试', () => {
 
       expect(ctx.worldFacts).toHaveLength(1);
       expect(ctx.worldFacts[0].content).toBe('用户被诊断为 GAD');
-      expect(ctx.opinions[0].confidence).toBe(0.7);
-      expect(ctx.observationSummary).toBeTruthy();
+      expect(ctx.observations).toHaveLength(2);
+      expect(ctx.observations[0].proofCount).toBe(2);
+      expect(ctx.observations[0].sourceFactIds).toEqual(['fact-a', 'fact-b']);
     });
 
     it('retain() 应该能接收消息并记录调用', async () => {
@@ -182,7 +188,7 @@ describe('MemoryRepository 集成测试', () => {
       expect(memoryRepo.reflectCalls).toHaveLength(1);
     });
 
-    it('MemoryContext 四字段在测试数据中应能合理填充', async () => {
+    it('MemoryContext 三字段在测试数据中应能合理填充', async () => {
       const fullContext: MemoryContext = {
         worldFacts: [
           {
@@ -197,20 +203,23 @@ describe('MemoryRepository 集成测试', () => {
           { content: '首次会谈：描述工作压力导致失眠', sourceChannel: 'dialogue' },
           { content: '第2次会谈：提及童年被严格管教经历', sourceChannel: 'dialogue' },
         ],
-        opinions: [
-          { content: '完美主义倾向根深蒂固', confidence: 0.85 },
-          { content: '社交回避可能从职场泛化而来', confidence: 0.6 },
+        observations: [
+          { content: '完美主义倾向根深蒂固', proofCount: 3 },
+          {
+            content: '用户的核心模式：高标准自我要求 → 害怕失败 → 回避 → 自我批评 → 焦虑加重',
+            sourceFactIds: ['fact-1', 'fact-2'],
+          },
         ],
-        observationSummary:
-          '用户的核心模式：高标准自我要求 → 害怕失败 → 回避 → 自我批评 → 焦虑加重。治疗重点是打破这个循环。',
       };
       memoryRepo.setRecallData('user-1', fullContext);
 
       const result = await memoryRepo.recall('user-1', '用户完整画像');
       expect(result.worldFacts.length).toBeGreaterThanOrEqual(2);
       expect(result.experiences.length).toBeGreaterThanOrEqual(2);
-      expect(result.opinions.length).toBeGreaterThanOrEqual(2);
-      expect(result.observationSummary.length).toBeGreaterThan(50);
+      expect(result.observations.length).toBeGreaterThanOrEqual(2);
+      // 证据强度客观信号（ADR 005 决策 3）随条目流动
+      expect(result.observations[0].proofCount).toBe(3);
+      expect(result.observations[1].sourceFactIds).toEqual(['fact-1', 'fact-2']);
       // 来源标注元数据（决策 4）随条目流动
       expect(result.worldFacts[0].sourceChannel).toBe('clinical_note');
       expect(result.worldFacts[0].sourceCredibility).toBe('high');

@@ -8,9 +8,11 @@
  * - 使用 Hindsight 的领域中立默认值（提取事实、识别实体、时间信息）
  * - 领域特定的提取维度由 Phase 2+ 的 recall 查询内容体现
  *
- * 数据模型校准（见 docs/design/decisions/004-memory-model-calibration.md）：
+ * 数据模型校准（见 docs/design/decisions/004-memory-model-calibration.md ·
+ * docs/design/decisions/005-drop-opinions-domain-concept.md）：
  * - recall 只映射 world/experience/observation 三类型（SDK 无 opinion fact type）
- * - opinions 由 HeartRule 自建层（reflect + response_schema）产出，Phase 0/1 为空
+ * - 005 起领域模型不再有 opinions 概念：observation 保结构映射为数组（附 source_fact_ids），
+ *   案例公式化由 mental model 承载（本适配器层，Phase 2+），数值 confidence 不持久化
  * - reflect 用 response_schema 拿结构化输出（决策 2），否则回退 markdown 摘要
  * - retain 透传 metadata 承载来源标注（决策 4）
  */
@@ -78,7 +80,7 @@ export class HindsightMemoryAdapter implements MemoryRepository {
 
       const worldFacts: MemoryContext['worldFacts'] = [];
       const experiences: MemoryContext['experiences'] = [];
-      const observationTexts: string[] = [];
+      const observations: MemoryContext['observations'] = [];
 
       for (const result of response.results) {
         const entry = {
@@ -106,7 +108,13 @@ export class HindsightMemoryAdapter implements MemoryRepository {
             experiences.push(entry);
             break;
           case 'observation':
-            observationTexts.push(result.text);
+            // 保结构映射（ADR 005 决策 1）：不折叠成单字符串，附来源事实 id 供证据溯源（原则 3）
+            observations.push({
+              ...entry,
+              sourceFactIds: result.source_fact_ids ?? undefined,
+              // 注：SDK v0.9.1 recall 结果项未暴露 proof_count（consolidate 存储侧字段），
+              // proofCount 暂不填充；证据充分性可由 sourceFactIds 长度近似判断
+            });
             break;
           default:
             // Without a type, classify by content context — put in experiences as safest default
@@ -117,22 +125,20 @@ export class HindsightMemoryAdapter implements MemoryRepository {
       const context: MemoryContext = {
         worldFacts,
         experiences,
-        // opinions 来自 HeartRule 自建层（reflect + response_schema），Phase 0/1 为空
-        opinions: [],
-        observationSummary: observationTexts.join('\n'),
+        observations,
       };
 
       logger.debug('recall succeeded', {
         userId,
         worldFacts: worldFacts.length,
         experiences: experiences.length,
-        hasSummary: observationTexts.length > 0,
+        observations: observations.length,
       });
 
       return context;
     } catch (error: any) {
       logger.error('recall failed', { userId, query, error: error.message });
-      return { worldFacts: [], experiences: [], opinions: [], observationSummary: '' };
+      return { worldFacts: [], experiences: [], observations: [] };
     }
   }
 
@@ -155,7 +161,6 @@ export class HindsightMemoryAdapter implements MemoryRepository {
 
       const structured = response.structured_output as
         | {
-            updatedOpinions?: Array<{ content: string; confidence: number }>;
             newObservations?: string[];
             contradictions?: Array<{ factA: string; factB: string; analysis: string }>;
           }
@@ -168,7 +173,6 @@ export class HindsightMemoryAdapter implements MemoryRepository {
 
       return {
         summary: response.text,
-        ...(structured?.updatedOpinions && { updatedOpinions: structured.updatedOpinions }),
         ...(structured?.newObservations && { newObservations: structured.newObservations }),
         ...(structured?.contradictions && { contradictions: structured.contradictions }),
       };

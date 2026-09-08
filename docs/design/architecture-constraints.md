@@ -1,6 +1,6 @@
 ---
 status: draft
-last_updated: 2026-09-07
+last_updated: 2026-09-08
 ---
 
 # 架构约束清单（红线）
@@ -42,7 +42,7 @@ last_updated: 2026-09-07
 ## D. 记忆系统
 
 - **D1 记忆是端口不是引擎**：`MemoryRepository`（retain/recall/reflect），实现是 api-server 的 `HindsightMemoryAdapter`。出处：CLAUDE.md Memory System
-- **D2 MemoryContext 四字段来源**：world/experience/observation 来自 recall；opinions 不来自 recall 的 fact type（由自建存储或 mental model 管线承载）。出处：[004 记忆数据模型校准](decisions/004-memory-model-calibration.md) 决策 1/6
+- **D2 MemoryContext 三字段来源（近 1:1 映射）**：`worldFacts/experiences/observations` 来自 recall 的三类 fact type；领域模型不自建 opinions 存储、不持久化数值 confidence；mental model 的常驻公式化判断由适配器/应用层渲染进 `{{memory_context}}`，不引入 MemoryContext 第四字段。出处：[005 移除 opinions 领域概念](decisions/005-drop-opinions-domain-concept.md) 决策 1/2/3 · [004 记忆数据模型校准](decisions/004-memory-model-calibration.md) 决策 1/6
 - **D3 会话不因记忆失败中断**：retain 是 fire-and-forget；recall 失败返回空上下文。出处：[strategic-design](../ddd/strategic-design.md) §1.3
 - **D4 SDK 隔离**：端口不泄漏 Hindsight SDK 类型；预 1.0 API 的耦合收敛在适配器内，适配器负责映射。出处：[004 记忆数据模型校准](decisions/004-memory-model-calibration.md) 决策 6
 - **D5 来源标注经 retain 的 metadata 写入**（`source_channel` / `source_credibility`）。出处：[004 记忆数据模型校准](decisions/004-memory-model-calibration.md) 决策 4

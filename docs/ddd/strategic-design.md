@@ -2,6 +2,7 @@
 
 > **分析范围:** 全工程 (`packages/*`)
 > **分析日期:** 2026-06-05
+> **校准:** 2026-09-08 — Conversational Memory 上下文语言随 ADR 005 更新：三网络（World/Experience/Observation）+ mental model，opinions 概念移除
 > **状态:** 战略设计完成，待重构清单已记录
 
 ---
@@ -33,7 +34,7 @@
 │  │                   │  │                   │  │               │   │
 │  │ Hindsight,        │  │ Projects,         │  │ OpenAI,       │   │
 │  │ retain/recall/    │  │ Versions,         │  │ DeepSeek,     │   │
-│  │ reflect, 4-network│  │ Drafts, Files     │  │ Volcano       │   │
+│  │ reflect, 3-network│  │ Drafts, Files     │  │ Volcano       │   │
 │  └──────────────────┘  └──────────────────┘  └───────────────┘   │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -84,7 +85,7 @@
 
 **端口定义包:** `@heartrule/core-engine` (domain/ports/memory-repository.port.ts)
 **实现包:** `@heartrule/api-server` (adapters/outbound/memory/hindsight-adapter.ts)
-**领域语言:** retain, recall, reflect, World/Experience/Opinion/Observation, MemoryContext
+**领域语言:** retain, recall, reflect, World/Experience/Observation（三网络）+ mental model, MemoryContext
 **端口:** `MemoryRepository`
 **关键不变性:**
 

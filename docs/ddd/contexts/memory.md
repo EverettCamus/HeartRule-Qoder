@@ -1,7 +1,7 @@
 # Memory Context — Tactical DDD Patterns
 
 > **Scope:** Phase 2a 变更涉及的模式
-> **Updated:** 2026-06-05
+> **Updated:** 2026-09-08（ADR 005：recall 返回三网络结构，opinions 概念移除）
 
 ## Domain Layer (core-engine)
 
@@ -20,13 +20,13 @@ MemoryRepository (domain/ports/memory-repository.port.ts)
 
 ### Value Objects
 
-| 类型               | 文件                      | 用途                           |
-| ------------------ | ------------------------- | ------------------------------ |
-| `MemoryMessage`    | port file                 | retain 入参 — 角色+内容+时间戳 |
-| `MemoryContext`    | port file                 | recall 返回值 — 四网络结构     |
-| `ReflectionResult` | port file                 | reflect 返回值                 |
-| `RetainOptions`    | port file (Phase 2a 新增) | retain 可选配置                |
-| `RecallOptions`    | port file (Phase 2a 新增) | recall 可选配置                |
+| 类型               | 文件                      | 用途                                                                |
+| ------------------ | ------------------------- | ------------------------------------------------------------------- |
+| `MemoryMessage`    | port file                 | retain 入参 — 角色+内容+时间戳                                      |
+| `MemoryContext`    | port file                 | recall 返回值 — 三网络结构（world/experience/observation，ADR 005） |
+| `ReflectionResult` | port file                 | reflect 返回值                                                      |
+| `RetainOptions`    | port file (Phase 2a 新增) | retain 可选配置                                                     |
+| `RecallOptions`    | port file (Phase 2a 新增) | recall 可选配置                                                     |
 
 - **正确方向:** ✅ 所有类型在领域端口文件中定义，无外部依赖
 

@@ -383,6 +383,7 @@ export abstract class BaseAction {
    */
   protected formatMemoryContext(context: ActionContext): string {
     // MemoryEntry 来源标注字段（决策 4）：sourceChannel / sourceCredibility / occurredStart
+    // observations 带 proofCount/sourceFactIds（ADR 005 决策 1）—— 证据强度客观信号
     const mc = context.metadata?.memoryContext as
       | {
           worldFacts?: Array<{
@@ -399,8 +400,15 @@ export abstract class BaseAction {
             occurredStart?: string;
             occurredEnd?: string;
           }>;
-          opinions?: Array<{ content: string; confidence: number }>;
-          observationSummary?: string;
+          observations?: Array<{
+            content: string;
+            sourceChannel?: string;
+            sourceCredibility?: 'high' | 'medium' | 'low';
+            occurredStart?: string;
+            occurredEnd?: string;
+            proofCount?: number;
+            sourceFactIds?: string[];
+          }>;
         }
       | undefined;
 
@@ -409,8 +417,7 @@ export abstract class BaseAction {
     const hasContent =
       (mc.worldFacts?.length ?? 0) > 0 ||
       (mc.experiences?.length ?? 0) > 0 ||
-      (mc.opinions?.length ?? 0) > 0 ||
-      !!mc.observationSummary;
+      (mc.observations?.length ?? 0) > 0;
 
     if (!hasContent) return '';
 
@@ -427,14 +434,17 @@ export abstract class BaseAction {
     };
 
     // 证据溯源（类型Ⅳ）：条目后附来源渠道/可信度/发生时间，供 LLM 权衡证据强度
-    const formatEntry = (entry: {
-      content: string;
-      sourceChannel?: string;
-      sourceCredibility?: string;
-      occurredStart?: string;
-      occurredEnd?: string;
-    }): string => {
-      const annotations: string[] = [];
+    const formatEntry = (
+      entry: {
+        content: string;
+        sourceChannel?: string;
+        sourceCredibility?: string;
+        occurredStart?: string;
+        occurredEnd?: string;
+      },
+      extraAnnotations: string[] = []
+    ): string => {
+      const annotations: string[] = [...extraAnnotations];
       if (entry.sourceChannel) {
         annotations.push(`来源: ${SOURCE_LABELS[entry.sourceChannel] ?? entry.sourceChannel}`);
       }
@@ -460,16 +470,13 @@ export abstract class BaseAction {
       for (const e of mc.experiences) lines.push(`- ${formatEntry(e)}`);
     }
 
-    if (mc.opinions?.length) {
-      lines.push('\n## 判断与推论');
-      for (const o of mc.opinions) {
-        lines.push(`- ${o.content} (置信度: ${Math.round(o.confidence * 100)}%)`);
-      }
-    }
-
-    if (mc.observationSummary) {
+    if (mc.observations?.length) {
       lines.push('\n## 综合观察');
-      lines.push(mc.observationSummary);
+      for (const o of mc.observations) {
+        // proofCount = 证据强度客观信号（ADR 005 决策 3，替代数值 confidence）
+        const proofNote = typeof o.proofCount === 'number' ? [`支撑证据 ${o.proofCount} 条`] : [];
+        lines.push(`- ${formatEntry(o, proofNote)}`);
+      }
     }
 
     return lines.join('\n');

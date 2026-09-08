@@ -1,17 +1,19 @@
 # 004 — 记忆数据模型校准（Hindsight v0.6.2 → v0.9.1）
 
+> **⚠️ 修订（2026-09-08 · [ADR 005](./005-drop-opinions-domain-concept.md) 生效）**：本文档决策 1/6 已被 005 修订——**"自建 opinions 存储 / 自建表兜底"结论全部关闭**：HeartRule 领域模型删除 opinions 概念（MemoryContext 三字段化），不自建 opinions 表，不持久化数值 confidence。下方「重核记录」与正文保留原样，作为 2026-08-14 当时决策的历史记录；**最新效力层 = 文末「修订记录（2026-09-08）」+ ADR 005**。
+
 ## 重核记录（2026-08-14）
 
 2026-08-14，`@vectorize-io/hindsight-client` 从 **v0.6.2** 升级到 **v0.9.1**（精确锁定，见 `packages/api-server/package.json`）。本文档基于 v0.9.1 真实类型定义（`node_modules/@vectorize-io/hindsight-client/dist/index.d.ts`）逐条重核，每条决策标注状态：**✅ 在 0.9.1 下依然成立 / ⚠️ 需要修订 / ➕ 新增**。
 
-| 决策                       | 状态                            | 要点                                                                                                                          |
-| -------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| 决策 1：Opinion 自建存储   | ✅ 前提成立（需配套 ➕ 决策 6） | opinion 仍非 recall/reflect fact type；`confidence` 仍不存在                                                                  |
-| 决策 2：reflect 结构化产出 | ✅ v0.9.1 直接支持              | `responseSchema` → `structured_output` 已是一等能力                                                                           |
-| 决策 3：时间推理降级       | ⚠️ 需要修订                     | v0.9.1 新增 `enable_temporal_retrieval` + `query_timestamp`（查询侧时间检索），降级结论过时                                   |
-| 决策 4：来源标注 metadata  | ✅ 依然成立                     | retain `metadata` 与 `RecallResult.metadata` 均在                                                                             |
-| 决策 5：端口 options 对齐  | ⚠️ 需要修订                     | recall/reflect options 大幅扩充（tagsMatch/tagGroups/minScores/preferObservations/includeSourceFacts/budget/queryTimestamp…） |
-| ➕ 决策 6：Mental Models   | ➕ 新增                         | v0.9.1 新增 mental model 第一类 API，冲击决策 1 的"自建 opinions 表"                                                          |
+| 决策                       | 状态                                                 | 要点                                                                                                                          |
+| -------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 决策 1：Opinion 自建存储   | ✅ 前提成立（需配套 ➕ 决策 6）→ **结论被 005 关闭** | opinion 仍非 recall/reflect fact type；`confidence` 仍不存在。005 后不自建存储，直接删除 opinions 概念（见修订记录）          |
+| 决策 2：reflect 结构化产出 | ✅ v0.9.1 直接支持                                   | `responseSchema` → `structured_output` 已是一等能力                                                                           |
+| 决策 3：时间推理降级       | ⚠️ 需要修订                                          | v0.9.1 新增 `enable_temporal_retrieval` + `query_timestamp`（查询侧时间检索），降级结论过时                                   |
+| 决策 4：来源标注 metadata  | ✅ 依然成立                                          | retain `metadata` 与 `RecallResult.metadata` 均在                                                                             |
+| 决策 5：端口 options 对齐  | ⚠️ 需要修订                                          | recall/reflect options 大幅扩充（tagsMatch/tagGroups/minScores/preferObservations/includeSourceFacts/budget/queryTimestamp…） |
+| ➕ 决策 6：Mental Models   | ➕ 新增 → **兜底路径被 005 关闭**                    | v0.9.1 新增 mental model 第一类 API，冲击决策 1 的"自建 opinions 表"。005 后 mental model 为案例公式化唯一承载（见修订记录）  |
 
 ## 背景
 
@@ -244,3 +246,35 @@ reflect(userId, query, {
 - `memory-retrieval-types.md` §2.3/§3.2 — 九轴模型的时间/图谱轴降级
 - `memory-repository.port.ts` / `hindsight-adapter.ts` — 端口与适配器同步修订
 - `ai-ask-memory-recall.md` §3.3 — 快通道 LLM 升级预算矛盾
+
+---
+
+## 修订记录（2026-09-08 · ADR 005 生效）
+
+2026-09-08 进一步核查上游 git 仓库史实后（证据与时间线见 [005-drop-opinions-domain-concept.md](./005-drop-opinions-domain-concept.md)），本 ADR 决策 1/6 的结论被替换。**重核记录与正文保留原样**（作为 2026-08-14 决策时的历史记录），本修订记录为最新效力层。
+
+### 史实补正
+
+本 ADR 2026-08-14 结论"opinion 不是 Hindsight fact type，无 confidence 字段"在 v0.6.2/v0.9.1 下成立，但未核实更早版本。上游 opinion **曾是一等存储类型**：
+
+| 时间                | 上游动作                                                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ≤v0.4.x             | opinion 是一等存储类型（带 `confidence_score` 列），reflect 可产出、graph/clear 可过滤                                                                       |
+| 2026-01-15          | 迁移 `i4d5e6f7g8h9_delete_opinions`：opinion 不再是独立 fact type，"now represented through mental model observations"                                       |
+| 2026-04-02          | 迁移 `g2h3i4j5k6l7_remove_opinion_fact_type`：删 opinion 索引/约束/行，**drop `confidence_score` 列**（"was only used for opinions, always NULL otherwise"） |
+| v0.9.0 (2026-08-07) | spec 中 opinion 残留描述全部清除                                                                                                                             |
+
+→ "判断该由什么承载"上游早已回答：**observation**（原子信念：auto-consolidate + 证据引文 + proof count + refine 演化）+ **mental model**（常驻公式化：source_query 定义、后台随证据重写、读取零 LLM）；数值 confidence 因无标定被弃用，用 proof count + refine 历史替代。
+
+### 决策 1 修订（原"自建存储"→ 关闭）
+
+- 原结论：`MemoryContext` 保持四字段，opinions 数据来源改为"HeartRule 自建的独立存储"（opinions 表）。
+- 修订（ADR 005 决策 1）：删除 `MemoryContext.opinions` 字段与 `observationSummary` 单字符串字段（折叠损失），改为 `observations: ObservationEntry[]`（带 `proofCount`/`sourceFactIds`）；**不自建 opinions 表**。
+- 原理由中"事实 vs 判断的领域区分是对的"仍成立，但该区分由 observation 的 grounding 语义承载（observation 带来源事实引用、raw fact 不带），不靠第二类型。
+- 注意：本 ADR「实施顺序」步骤 0 中"拍板'自建表 vs mental model 管线'"已提前拍板——**不再自建**。
+
+### 决策 6 修订（原"自建表作为降级路径"→ 关闭兜底）
+
+- 原结论：优先考察 mental model 承载，保留自建 opinions 表作为降级兜底；"两种路径的领域端口契约（`MemoryContext.opinions`）不变"。
+- 修订（ADR 005 决策 2）：mental model 为**案例公式化唯一承载**（`createMentalModel` + `source_query` + `refreshAfterConsolidation`/`is_stale`），**关闭自建表兜底**；且领域端口契约随之变更（`MemoryContext.opinions` 删除，mental model 内容由适配器/应用层渲染进 `{{memory_context}}`，不重新引入第四字段）。
+- 依据：上游史实核查表明上游已按同一方向演进（opinion 职能整体拆至 observation + mental model）——自建表即重复一个上游已删除的概念。mental model 的 content 为 markdown 文本（非 structured），不受 004「Live PoC 实测」定位的 structured_output provider 限制；结构化补充走 `reflect_response`。

@@ -260,8 +260,7 @@ export class SessionOrchestrator {
           userId: sessionData.userId,
           worldFacts: memoryContext.worldFacts.length,
           experiences: memoryContext.experiences.length,
-          opinions: memoryContext.opinions.length,
-          hasSummary: !!memoryContext.observationSummary,
+          observations: memoryContext.observations.length,
         });
       }
 

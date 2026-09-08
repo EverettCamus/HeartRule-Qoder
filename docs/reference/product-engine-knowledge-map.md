@@ -2,7 +2,7 @@
 
 > 面向"游戏化心理陪伴产品"的两层知识框架：引擎层（通用AI咨询基础设施）与产品层（青少年心理陪伴的领域应用）。
 >
-> 最后更新: 2026-07-14
+> 最后更新: 2026-09-08（记忆系统段落随 ADR 005 校准：三网络 + mental model，opinions 移除）
 
 ---
 
@@ -61,7 +61,7 @@
 
 引擎现状：
 
-- `MemoryRepository` port 已定义（retain / recall / reflect），四网络模型（World / Experience / Opinion / Observation）
+- `MemoryRepository` port 已定义（retain / recall / reflect），三网络模型（World / Experience / Observation）+ mental model（ADR 005，opinions 已移除）
 - Hindsight 集成完整设计（`docs/design/memory-framework.md`），预估 12 周
 - Variable-Memory bridge 设计（`docs/design/variable-memory-bridge.md`）
 - AiAsk 中 recall 集成设计（`docs/design/ai-ask-memory-recall.md`）
@@ -72,7 +72,7 @@
 1. **人脑记忆的多系统模型 — Tulving, Squire**
    - Episodic memory（情节记忆：具体经历）vs Semantic memory（语义记忆：抽象知识）
    - Memory reconsolidation（记忆再巩固）：每次 recall 时记忆被重新编码，可被更新
-   - 与引擎的映射：Experience = episodic, World = semantic, Opinion = 情感标记, Observation = 元认知
+   - 与引擎的映射：Experience = episodic, World = semantic, Observation = consolidate 出的信念（带证据），mental model = 常驻公式化判断（含元认知式的工作假设）
    - 关键洞察：reflect 操作不是在"生成新记忆"，而是在模拟 reconsolidation — 从多处记忆合成新 insight
 
 2. **GraphRAG — 向量检索 + 知识图谱混合**
@@ -83,7 +83,7 @@
 
 3. **记忆衰减与巩固策略**
    - 什么记忆应被强化（多次 recall 命中、与多个 experience 关联的）
-   - 什么记忆应被衰减（过时的、被新 evidence 修正的、低置信度的 Opinion）
+   - 什么记忆应被衰减（过时的、被新 evidence 反向修正的 observation——refine 方向 weakened、或标记 is_stale 的 mental model）
    - 这是认知模型问题，不是纯技术问题
 
 **落地目标：** 实现 Hindsight adapter + MemoryService（session-start recall → per-action retain → session-end reflect）

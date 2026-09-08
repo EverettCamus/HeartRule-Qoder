@@ -113,20 +113,20 @@ Three operations define the contract:
 - **recall(userId, query, options?)** — Retrieve relevant memories as structured context
 - **reflect(userId, query?)** — Synthesize new insights from existing memories
 
-The port models memory via a **four-network model** (World/Experience/Opinion/Observation), adapted from the Hindsight memory system. The adapter lives in `api-server`; tests use `FakeMemoryRepository`.
+The port models memory via **three fact types** (World/Experience/Observation), adapted from the Hindsight memory system; Hindsight mental models carry standing formulations (ADR 005 — no opinions concept, no numeric confidence). The adapter lives in `api-server`; tests use `FakeMemoryRepository`.
 
 ### DDD Bounded Contexts
 
 Per the strategic design (`docs/ddd/strategic-design.md`), the codebase is organized into 5 bounded contexts + 1 generic subdomain:
 
-| Context                   | Type        | Package       | Core Ubiquitous Language                                                |
-| ------------------------- | ----------- | ------------- | ----------------------------------------------------------------------- |
-| **Consulting Session**    | Core Domain | core-engine   | Session, Script, Phase, Topic, Action, Position, ExitDecision           |
-| **Variable System**       | Supporting  | core-engine   | VariableScope, VariableState, ExtractionMethod                          |
-| **Conversational Memory** | Supporting  | core-engine   | retain/recall/reflect, 4-network (World/Experience/Opinion/Observation) |
-| **Prompt Engineering**    | Supporting  | core-engine   | Templates, Substitution, Schemes                                        |
-| **Script Authoring**      | Supporting  | script-editor | Projects, Versions, Drafts, Files                                       |
-| **LLM Integration**       | Generic     | core-engine   | OpenAI, DeepSeek, Volcano (multi-provider)                              |
+| Context                   | Type        | Package       | Core Ubiquitous Language                                                          |
+| ------------------------- | ----------- | ------------- | --------------------------------------------------------------------------------- |
+| **Consulting Session**    | Core Domain | core-engine   | Session, Script, Phase, Topic, Action, Position, ExitDecision                     |
+| **Variable System**       | Supporting  | core-engine   | VariableScope, VariableState, ExtractionMethod                                    |
+| **Conversational Memory** | Supporting  | core-engine   | retain/recall/reflect, 3 fact types (World/Experience/Observation) + mental model |
+| **Prompt Engineering**    | Supporting  | core-engine   | Templates, Substitution, Schemes                                                  |
+| **Script Authoring**      | Supporting  | script-editor | Projects, Versions, Drafts, Files                                                 |
+| **LLM Integration**       | Generic     | core-engine   | OpenAI, DeepSeek, Volcano (multi-provider)                                        |
 
 **Session** is the sole aggregate root in the Consulting Session context.
 

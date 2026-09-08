@@ -9,10 +9,12 @@
  * - 本文件：定义接口契约（Port）—— 领域层只关心"需要记忆能力"
  * - api-server/adapters/：提供具体实现（HindsightMemoryAdapter）
  *
- * 数据模型校准（见 docs/design/decisions/004-memory-model-calibration.md）：
- * - World/Experience/Observation 来自 Hindsight recall 的三类 fact type
- * - Opinions 是 HeartRule 自建层（reflect + response_schema 产出，mental model 或自建表承载）——
- *   opinion 不是 Hindsight recall 的 fact type，RecallResult 无 confidence 字段
+ * 数据模型校准（见 docs/design/decisions/004-memory-model-calibration.md ·
+ * docs/design/decisions/005-drop-opinions-domain-concept.md）：
+ * - World/Experience/Observation 三类 fact type 均来自 Hindsight recall
+ * - 005 起领域模型不再有 opinions 概念（上游 2026 年初已删除该类型）——归纳判断由
+ *   observation 承载（带 proofCount/sourceFactIds），案例公式化由 mental model 承载（适配器层），
+ *   数值 confidence 不持久化
  * - 来源/时间元数据通过 retain 的 metadata 写入、recall 读回（决策 4）
  */
 
@@ -43,22 +45,30 @@ export interface MemoryEntry {
 }
 
 /**
+ * observation 的结构化补充（ADR 005 决策 1/3）—— 证据强度客观信号替代数值 confidence
+ */
+export interface ObservationEntry extends MemoryEntry {
+  /** 上游 proof count —— 支撑该观察的证据条数（recall 结果 proofCount 透传） */
+  proofCount?: number;
+  /** 来源事实 id（v0.9.1 includeSourceFacts）—— 推论与证据可互查（原则 3） */
+  sourceFactIds?: string[];
+}
+
+/**
  * 从会谈记忆中召回的上下文
  *
  * @remarks
- * worldFacts/experiences/observationSummary 来自 Hindsight recall；
- * opinions 来自 HeartRule 自建层（reflect + response_schema，mental model 或自建表承载）。
- * 领域四字段抽象保留，数据来源已拆分（决策 1/6）。
+ * 三类字段均来自 Hindsight recall（world/experience/observation）；
+ * 案例公式化（咨询师工作假设）由 Hindsight mental model 承载，不落本端口
+ * （ADR 005 决策 2 —— 适配器/应用层将其内容渲染进 {{memory_context}}）。
  */
 export interface MemoryContext {
   /** 确定的客观事实（诊断/案由/用药/证据）—— recall type=world */
   worldFacts: MemoryEntry[];
   /** 来访者/当事人亲历的第一人称事件 —— recall type=experience */
   experiences: MemoryEntry[];
-  /** 咨询师/律师的主观判断，含信心分数 —— 来自自建层（Phase 4 前可能为空） */
-  opinions: Array<{ content: string; confidence: number }>;
-  /** 综合摘要画像 —— recall type=observation */
-  observationSummary: string;
+  /** 原子信念/归纳判断 —— recall type=observation，含证据溯源 */
+  observations: ObservationEntry[];
 }
 
 /**
@@ -66,15 +76,14 @@ export interface MemoryContext {
  *
  * @remarks
  * 结构化字段来自 reflect 的 `response_schema → structured_output`（决策 2），
- * 非 SDK 原生 markdown。Phase 0 简化只填充 `summary`；
- * updatedOpinions / newObservations / contradictions 是 Phase 4 的完整形态。
+ * 非 SDK 原生 markdown。observation 综合与 mental model 演化由 Hindsight 自动完成
+ * （consolidate / refreshAfterConsolidation），不落在 reflect 返回值中（ADR 005 决策 2）。
+ * Phase 0 简化只填充 `summary`；newObservations / contradictions 是 Phase 4 的完整形态。
  */
 export interface ReflectionResult {
   /** 反思摘要（markdown） */
   summary: string;
-  /** 观点更新（Phase 4） */
-  updatedOpinions?: Array<{ content: string; confidence: number }>;
-  /** 新观察（Phase 4） */
+  /** 反思中新形成的综合观察（Phase 4） */
   newObservations?: string[];
   /** 矛盾检测结果（Phase 4） */
   contradictions?: Array<{ factA: string; factB: string; analysis: string }>;
@@ -102,7 +111,7 @@ export interface RetainOptions {
 export interface RecallOptions {
   /** 召回结果的 token 上限 */
   maxTokens?: number;
-  /** 事实类型筛选（SDK 无 opinion 类型，决策 1） */
+  /** 事实类型筛选（recall 仅三类 fact type，无 opinion —— ADR 004/005） */
   types?: Array<'world' | 'experience' | 'observation'>;
   /** 按标签过滤记忆 */
   tags?: string[];

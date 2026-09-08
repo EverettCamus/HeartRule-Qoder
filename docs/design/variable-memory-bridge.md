@@ -1,6 +1,6 @@
 ---
 status: decision-recorded
-last_updated: 2026-08-15
+last_updated: 2026-09-08
 ---
 
 # 变量-记忆桥接设计
@@ -11,8 +11,10 @@ last_updated: 2026-08-15
 > - 关联：[recall 快慢通道设计](ai-ask-memory-recall.md) — 变量通过 recall 通道检索记忆
 > - 关联：[意识系统设计](consciousness-system.md) — 意识同时依赖变量和记忆两个数据源
 >
-> **版本**: v0.1.0
+> **版本**: v0.1.1
 > **日期**: 2026-06-03
+>
+> ⚠️ **校准（2026-09-08 · ADR 005 生效）**：Hindsight 已删除 opinion 类型（2026 年初起），职能拆至 observation（自动 consolidate 的原子信念 + 证据）与 mental model（常驻公式化判断）。本文原"Hindsight Opinion"承接与"confidence 分数对比"的合并策略一并修订——临床判断的动态承载改为 observation + mental model，比较信号改为可核验的客观证据信号，无数值 confidence（见 `decisions/004` 决策 1/6 修订与 `decisions/005` 决策 1/3）。
 
 ---
 
@@ -20,7 +22,7 @@ last_updated: 2026-08-15
 
 Phase 1 完成后，Hindsight 已经可以跨会话 retain/recall/reflect。但变量系统和记忆系统之间的职责边界尚未明确界定。当前存在以下问题：
 
-1. **同一信息存两处**：用户在会谈中说「我从小就觉得永远不够好」→ Hindsight retain 记住了 → ai_think 又把它提取出来存进了全局变量 `核心信念`。下次会话，变量被读取——但如果 Hindsight 里的判断已经更新（reflect 调整了信心或结论），变量里的版本就是过期的。
+1. **同一信息存两处**：用户在会谈中说「我从小就觉得永远不够好」→ Hindsight retain 记住了 → ai_think 又把它提取出来存进了全局变量 `核心信念`。下次会话，变量被读取——但如果 Hindsight 里的判断已更新（observation 被 refine、mental model 被后台重写），变量里的版本就是过期的。
 
 2. **变量类型混杂**：全局变量既有操作参数（`咨询师名`、`session_count`），也有语义结论（`核心信念`、`主要压力源`）。后者本质上是记忆的衍生品，不应该独立存储。
 
@@ -40,12 +42,12 @@ Phase 1 完成后，Hindsight 已经可以跨会话 retain/recall/reflect。但�
 
 ### 2.2 变量不该存什么（应交由记忆）
 
-| 不该存                     | 应交由              | 原因                                                       |
-| -------------------------- | ------------------- | ---------------------------------------------------------- |
-| 用户描述焦虑的完整叙事     | Hindsight recall()  | 变量只需知道"情绪问题是焦虑"，不需要记焦虑的具体表现       |
-| 信念形成的童年经历详情     | Hindsight recall()  | 变量只需"核心信念 = 我不够好"，经历在记忆中，需要时 recall |
-| PHQ-9 得分变化的趋势分析   | Hindsight reflect() | 变量只需最新得分，趋势是记忆系统的综合能力                 |
-| 咨询师跨会话形成的临床判断 | Hindsight Opinion   | 判断是动态演化的，变量的值应该是调用时从记忆获取的最新版本 |
+| 不该存                     | 应交由                               | 原因                                                                                                                  |
+| -------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| 用户描述焦虑的完整叙事     | Hindsight recall()                   | 变量只需知道"情绪问题是焦虑"，不需要记焦虑的具体表现                                                                  |
+| 信念形成的童年经历详情     | Hindsight recall()                   | 变量只需"核心信念 = 我不够好"，经历在记忆中，需要时 recall                                                            |
+| PHQ-9 得分变化的趋势分析   | Hindsight reflect()                  | 变量只需最新得分，趋势是记忆系统的综合能力                                                                            |
+| 咨询师跨会话形成的临床判断 | Hindsight observation + mental model | 判断随证据动态演化（observation consolidate/refine、mental model 后台重写），变量的值应该是调用时从记忆获取的最新版本 |
 
 ### 2.3 边界规则
 
@@ -113,7 +115,7 @@ Action N 执行:
 
 ### 4.2 双路径：同步 LLM + 异步 Hindsight
 
-只靠 LLM piggyback 有一个弱点：LLM 在生成回复时主要注意力在"当前要问用户什么"，对被动评估的变量可能关注不足。Hindsight recall 虽然异步，但返回的是结构化、经过四网络分类的记忆，准确度更高。
+只靠 LLM piggyback 有一个弱点：LLM 在生成回复时主要注意力在"当前要问用户什么"，对被动评估的变量可能关注不足。Hindsight recall 虽然异步，但返回的是结构化、经过三网络分类（world/experience/observation）的记忆，准确度更高。
 
 **双路径设计**：
 
@@ -129,18 +131,19 @@ Action N 执行时:
   ┌─────────────────────────────────────────────────────┐
   │ 路径 2 (异步): Hindsight recall                     │
   │   发起 recall("核心信念") 等查询                     │
-  │   → 结果回来后比较信心和时效                         │
-  │   → 如果 Hindsight 的版本更新或信心更高，覆盖         │
+  │   → 结果回来后比较证据强度与时效                     │
+  │   → 如果 Hindsight 的观察更新/证据更充分，覆盖        │
   │   → 标记 source: 'hindsight_recall'                 │
   │   → 作为长期记忆的校准锚点                           │
   └─────────────────────────────────────────────────────┘
 ```
 
-**合并策略**：异步结果返回时，比较 `lastUpdated` 时间戳和信心分数：
+**合并策略**：异步结果返回时，用证据强度的客观信号比较（ADR 005 决策 3——记忆层不持久化数值 confidence，只用可核验信号）：
 
 ```
-if (hindsightResult.confidence > piggybackResult.confidence ||
-    hindsightResult.lastUpdated > piggybackResult.lastUpdated) {
+if (hindsightObservation 比 piggyback 值更新鲜（recall 时间戳 / 条目时间线）||
+    hindsightObservation 证据更充分（sourceFactIds 更多 / refine 方向 strengthened）||
+    对应 mental model 标记 is_stale（提示旧公式化已过期，需以新证据覆盖）) {
   覆盖变量值，source = 'hindsight_recall'
 }
 ```
@@ -312,12 +315,13 @@ lookAheadVariables(actionN+1)
 扩展 `VariableValue` 类型，增加来源追踪字段：
 
 ```typescript
+// ADR 005 决策 3：不保留 confidence: number ——
+// 证据强度由 recall 命中的 observation 信号（新鲜度 / proofCount / refine 方向）+ mental model is_stale 表达
 interface VariableValue {
   value: unknown;
   type: VariableType;
   lastUpdated: string;
   source: 'user_input' | 'llm_extraction' | 'llm_piggyback' | 'hindsight_recall';
-  confidence?: number;
   refreshQuery?: string;
   scope: VariableScope;
 }
@@ -426,15 +430,15 @@ phases:
 
 ## 7. 设计决策记录
 
-| 决策                      | 选择                                       | 理由                                                                                      |
-| ------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| 变量收缩范围              | 仅设计文档，不立即实施                     | 需要先审计现有脚本中的全局变量使用情况                                                    |
-| 变量刷新策略              | Piggyback（蹭已有 LLM 调用）               | 边际成本 ~0.1 倍 LLM 调用 vs 独立 ai_think 的 1 倍                                        |
-| 刷新时机                  | Action N 执行时刷新 Action N+1 的变量      | 确保变量在被使用前已更新；per-action retain 在秒级完成，时间窗口充裕                      |
-| 双路径                    | 同步 LLM piggyback + 异步 Hindsight recall | LLM 保证及时性（下一 action 立即可用），Hindsight 保证准确性（结构化记忆 > LLM 被动评估） |
-| Look-ahead 深度           | 仅看下一个 action                          | 降低解析复杂度；多看几个 action 的收益递减                                                |
-| 分支处理                  | 收集所有分支的变量                         | 变量数量少（1-5），全量收集不造成显著成本；避免路径预测错误                               |
-| Hindsight 本 session 使用 | 支持                                       | Per-action retain 是异步快速的，不需要等跨 session                                        |
-| autoRefresh 默认          | `true`                                     | 大多数变量需要保持新鲜；固定信息（人口学、量表得分）显式关闭                              |
-| 合并策略                  | Hindsight 的信心/时效优于 LLM 时覆盖       | LLM piggyback 是"快速但不一定准确"，Hindsight 是"稍慢但结构化"                            |
-| 全局变量审计              | 后续 YAML 脚本层面做                       | 不涉及代码改动，由咨询师在脚本工程中标记                                                  |
+| 决策                      | 选择                                                                    | 理由                                                                                                           |
+| ------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 变量收缩范围              | 仅设计文档，不立即实施                                                  | 需要先审计现有脚本中的全局变量使用情况                                                                         |
+| 变量刷新策略              | Piggyback（蹭已有 LLM 调用）                                            | 边际成本 ~0.1 倍 LLM 调用 vs 独立 ai_think 的 1 倍                                                             |
+| 刷新时机                  | Action N 执行时刷新 Action N+1 的变量                                   | 确保变量在被使用前已更新；per-action retain 在秒级完成，时间窗口充裕                                           |
+| 双路径                    | 同步 LLM piggyback + 异步 Hindsight recall                              | LLM 保证及时性（下一 action 立即可用），Hindsight 保证准确性（结构化记忆 > LLM 被动评估）                      |
+| Look-ahead 深度           | 仅看下一个 action                                                       | 降低解析复杂度；多看几个 action 的收益递减                                                                     |
+| 分支处理                  | 收集所有分支的变量                                                      | 变量数量少（1-5），全量收集不造成显著成本；避免路径预测错误                                                    |
+| Hindsight 本 session 使用 | 支持                                                                    | Per-action retain 是异步快速的，不需要等跨 session                                                             |
+| autoRefresh 默认          | `true`                                                                  | 大多数变量需要保持新鲜；固定信息（人口学、量表得分）显式关闭                                                   |
+| 合并策略                  | Hindsight 的客观证据信号更优时覆盖（ADR 005 决策 3，无数值 confidence） | LLM piggyback 是"快速但不一定准确"，Hindsight 是"稍慢但结构化"；证据强度用 proofCount / 新鲜度 / is_stale 判断 |
+| 全局变量审计              | 后续 YAML 脚本层面做                                                    | 不涉及代码改动，由咨询师在脚本工程中标记                                                                       |

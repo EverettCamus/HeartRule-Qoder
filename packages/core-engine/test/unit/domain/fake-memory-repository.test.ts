@@ -54,32 +54,38 @@ describe('FakeMemoryRepository', () => {
       const prefill: MemoryContext = {
         worldFacts: [{ content: '被诊断为 GAD' }, { content: '服用舍曲林 50mg/天' }],
         experiences: [{ content: '第3次会谈描述了被领导公开批评的场景' }],
-        opinions: [{ content: '焦虑可能与工作关系中的权力不对等有关', confidence: 0.72 }],
-        observationSummary: '用户在权威场景中表现出明显的回避模式',
+        observations: [
+          {
+            content: '焦虑可能与工作关系中的权力不对等有关',
+            proofCount: 2,
+            sourceFactIds: ['fact-1', 'fact-2'],
+          },
+          { content: '用户在权威场景中表现出明显的回避模式' },
+        ],
       };
       repo.setRecallData('user-1', prefill);
 
       const result = await repo.recall('user-1', '用户的核心焦虑');
       expect(result.worldFacts).toHaveLength(2);
       expect(result.experiences).toHaveLength(1);
-      expect(result.opinions).toHaveLength(1);
-      expect(result.observationSummary).toBe('用户在权威场景中表现出明显的回避模式');
+      expect(result.observations).toHaveLength(2);
+      expect(result.observations[0].proofCount).toBe(2);
+      expect(result.observations[0].sourceFactIds).toEqual(['fact-1', 'fact-2']);
+      expect(result.observations[1].content).toBe('用户在权威场景中表现出明显的回避模式');
     });
 
     it('应该在无预填充数据时返回空上下文', async () => {
       const result = await repo.recall('unknown-user', '任何查询');
       expect(result.worldFacts).toEqual([]);
       expect(result.experiences).toEqual([]);
-      expect(result.opinions).toEqual([]);
-      expect(result.observationSummary).toBe('');
+      expect(result.observations).toEqual([]);
     });
 
     it('应该按 userId 隔离预填充数据', async () => {
       repo.setRecallData('user-1', {
         worldFacts: [{ content: 'user-1的事实' }],
         experiences: [],
-        opinions: [],
-        observationSummary: '',
+        observations: [],
       });
 
       const result1 = await repo.recall('user-1', 'test');

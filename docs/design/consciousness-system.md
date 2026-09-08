@@ -1,6 +1,6 @@
 ---
 status: active
-last_updated: 2026-08-15
+last_updated: 2026-09-08
 ---
 
 # 意识系统设计
@@ -125,7 +125,7 @@ consciousness-system.md  [本文]  ← 意识系统（认知层：从什么角�
 variable-memory-bridge.md       ← 变量与记忆桥接（集成层：变量如何从记忆取值）
 ```
 
-本文不重复 recall 的通道机制（见 recall 文档 §4-5），也不重复记忆的四网络模型（见 memory-framework §4.2）。本文定义意识这一层如何利用它们。
+本文不重复 recall 的通道机制（见 recall 文档 §4-5），也不重复记忆的三网络模型 + mental model 机制（见 memory-framework §4.2）。本文定义意识这一层如何利用它们。
 
 ---
 
@@ -322,7 +322,7 @@ phases:
           enabled: true
           focus: # 该意识关注哪些记忆维度
             - experience # 用户经历
-            - opinion # 已有判断
+            - observation # 沉淀的信念/模式（含证据引文）
           query_hint: '用户情绪表达的变化趋势，情绪触发因素'
         trigger:
           cooldown_rounds: 2 # 每 2 轮最多触发一次
@@ -365,21 +365,21 @@ phases:
 
 ### 3.2 格式字段说明
 
-| 字段                              | 类型                                                       | 说明                                                                               |
-| --------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `id`                              | string                                                     | 意识唯一标识                                                                       |
-| `built_in`                        | boolean                                                    | 是否为内置意识。内置意识始终加载，不绑定 Phase/Topic，不在 YAML 中声明。默认 false |
-| `name`                            | string                                                     | 人类可读名称                                                                       |
-| `description`                     | string                                                     | 该意识从什么角度观察什么                                                           |
-| `prompt_template`                 | string                                                     | 指向 `_system/config/{scheme}/` 下的提示词模板名                                   |
-| `recall.enabled`                  | boolean                                                    | 是否需要先调取记忆上下文                                                           |
-| `recall.focus`                    | string[]                                                   | 关注的记忆类型（experience / opinion / worldFacts / observation）                  |
-| `recall.query_hint`               | string                                                     | 作为 recall 查询的补充方向，与用户原话一起构成 recall 输入                         |
-| `trigger.cooldown_rounds`         | number                                                     | 最小间隔轮数                                                                       |
-| `trigger.min_rounds`              | number                                                     | 至少积累多少轮对话才开始分析                                                       |
-| `context_window`                  | number                                                     | 观察多少轮对话上下文                                                               |
-| `intervention.mode`               | 'feedback' \| 'slow_thinking' \| 'orchestration' \| 'both' | 干预方式：反馈到提示词 / 触发慢思考 / 调整脚本流程 / 反馈+慢思考                   |
-| `intervention.severity_threshold` | 'low' \| 'medium' \| 'high'                                | 低于此严重级别不触发干预                                                           |
+| 字段                              | 类型                                                       | 说明                                                                                                      |
+| --------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `id`                              | string                                                     | 意识唯一标识                                                                                              |
+| `built_in`                        | boolean                                                    | 是否为内置意识。内置意识始终加载，不绑定 Phase/Topic，不在 YAML 中声明。默认 false                        |
+| `name`                            | string                                                     | 人类可读名称                                                                                              |
+| `description`                     | string                                                     | 该意识从什么角度观察什么                                                                                  |
+| `prompt_template`                 | string                                                     | 指向 `_system/config/{scheme}/` 下的提示词模板名                                                          |
+| `recall.enabled`                  | boolean                                                    | 是否需要先调取记忆上下文                                                                                  |
+| `recall.focus`                    | string[]                                                   | 关注的记忆类型（experience / worldFacts / observation；判断类由 mental model 常驻承载，不属 recall 类型） |
+| `recall.query_hint`               | string                                                     | 作为 recall 查询的补充方向，与用户原话一起构成 recall 输入                                                |
+| `trigger.cooldown_rounds`         | number                                                     | 最小间隔轮数                                                                                              |
+| `trigger.min_rounds`              | number                                                     | 至少积累多少轮对话才开始分析                                                                              |
+| `context_window`                  | number                                                     | 观察多少轮对话上下文                                                                                      |
+| `intervention.mode`               | 'feedback' \| 'slow_thinking' \| 'orchestration' \| 'both' | 干预方式：反馈到提示词 / 触发慢思考 / 调整脚本流程 / 反馈+慢思考                                          |
+| `intervention.severity_threshold` | 'low' \| 'medium' \| 'high'                                | 低于此严重级别不触发干预                                                                                  |
 
 ---
 

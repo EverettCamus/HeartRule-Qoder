@@ -1,6 +1,6 @@
 ---
 status: active
-last_updated: 2026-08-15
+last_updated: 2026-09-08
 ---
 
 # 记忆调取机制
@@ -11,8 +11,10 @@ last_updated: 2026-08-15
 > - 关联: [ai_ask 记忆调用](ai-ask-memory-recall.md) — 快/慢双通道检索机制
 > - 关联: [意识系统设计](consciousness-system.md) — 慢通道的触发来源
 >
-> **版本**: v0.3.0
-> **创建**: 2026-07-23 · **更新**: 2026-07-23
+> **版本**: v0.3.1
+> **创建**: 2026-07-23 · **更新**: 2026-09-08
+>
+> **校准**: 2026-09-08 按 [005 去除 Opinions 概念](decisions/005-drop-opinions-domain-concept.md) 修订——client_memory 不再含自建 opinions；判断类内容由 observation（原子信念，带 source_fact_ids）与 mental model（常驻判断，based_on 证据链）承载，溯源/附着表述相应更新
 
 ## 1. 设计思路
 
@@ -79,12 +81,12 @@ last_updated: 2026-08-15
 
 检索目标定义"怎么查"，记忆空间定义"查哪个库"。两者独立——`graph_multihop` 可以遍历用户记忆图谱，也可以遍历知识库概念图谱。
 
-| 取值                      | 存储实现                                                                          | 隔离粒度 |
-| ------------------------- | --------------------------------------------------------------------------------- | -------- |
-| `client_memory`           | Hindsight 三 fact type (world/experience/observation) + 自建 opinions（决策 1/6） | 每用户   |
-| `cross_client_experience` | 咨询师跨客户经验库（独立 pgvector）                                               | 每咨询师 |
-| `domain_knowledge`        | 领域知识库（pgvector + 元数据索引）                                               | 全局共享 |
-| `structured_variables`    | VariableStore + 咨询方案 (treatment_plans 表)                                     | 每用户   |
+| 取值                      | 存储实现                                                                                                                         | 隔离粒度 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `client_memory`           | Hindsight 三 fact type (world/experience/observation)，observation 为自动 consolidate 的信念（ADR 005）；常驻判断走 mental model | 每用户   |
+| `cross_client_experience` | 咨询师跨客户经验库（独立 pgvector）                                                                                              | 每咨询师 |
+| `domain_knowledge`        | 领域知识库（pgvector + 元数据索引）                                                                                              | 全局共享 |
+| `structured_variables`    | VariableStore + 咨询方案 (treatment_plans 表)                                                                                    | 每用户   |
 
 `client_memory` 内部通过 origin 标签区分信息来源：
 
@@ -97,23 +99,23 @@ last_updated: 2026-08-15
 
 ### 2.5 轴 5：后处理 — 查到之后做什么
 
-| 取值          | 说明                                       | LLM |
-| ------------- | ------------------------------------------ | --- |
-| `passthrough` | 透传                                       | 0   |
-| `dedup`       | 按相似度 >80% 去重                         | 0   |
-| `synthesize`  | LLM 综合多条结果，产出 DeepInsight 卡片    | 1-2 |
-| `verify`      | 时效性门控——判断历史结果在当下是否仍然有效 | 0-1 |
-| `trace`       | 图谱边反向追溯——从 Opinion 找到支撑证据链  | 0-1 |
+| 取值          | 说明                                                                                    | LLM |
+| ------------- | --------------------------------------------------------------------------------------- | --- |
+| `passthrough` | 透传                                                                                    | 0   |
+| `dedup`       | 按相似度 >80% 去重                                                                      | 0   |
+| `synthesize`  | LLM 综合多条结果，产出 DeepInsight 卡片                                                 | 1-2 |
+| `verify`      | 时效性门控——判断历史结果在当下是否仍然有效                                              | 0-1 |
+| `trace`       | 证据反向追溯——从 mental model（based_on）/ observation（source_fact_ids）找到支撑证据链 | 0-1 |
 
 ### 2.6 轴 6：注入位置 — 放到上下文的哪个槽位
 
-| 取值               | prompt 渲染                                              |
-| ------------------ | -------------------------------------------------------- |
-| `baseline`         | `## 关于来访者`（会话级常驻）                            |
-| `fast_hits`        | `## 本轮相关记忆`（滚动窗口）                            |
-| `deep_insights`    | `## 深度洞察`（持久洞察）                                |
-| `alert_queue`      | `## 本次会话特别关注`（跨会话提醒）                      |
-| `source_fragments` | 不独立渲染，附着于 Opinion/DeepInsight，生命周期跟随载体 |
+| 取值               | prompt 渲染                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| `baseline`         | `## 关于来访者`（会话级常驻）                                                                       |
+| `fast_hits`        | `## 本轮相关记忆`（滚动窗口）                                                                       |
+| `deep_insights`    | `## 深度洞察`（持久洞察）                                                                           |
+| `alert_queue`      | `## 本次会话特别关注`（跨会话提醒）                                                                 |
+| `source_fragments` | 不独立渲染，附着于 observation（证据引文）/ mental model（based_on）/ DeepInsight，生命周期跟随载体 |
 
 ### 2.7 轴 7：生命周期 — 结果留多久
 
@@ -255,7 +257,7 @@ last_updated: 2026-08-15
 
 类型 Ⅵ 是唯一需要两条独立链路协同的类型——基线加载和当前信号评估走不同的轴组合。
 
-类型 Ⅳ 的 `source_fragments` 不独立渲染，生命周期由所附着的 Opinion/DeepInsight 决定——注入位置标注 `source_fragments` 的同时，生命周期即由载体接管。
+类型 Ⅳ 的 `source_fragments` 不独立渲染，生命周期由所附着的载体决定——observation（证据引文）、mental model（based_on）或 DeepInsight；注入位置标注 `source_fragments` 的同时，生命周期即由载体接管。
 
 **取值落地状态**（v0.9.1 校准，见 `decisions/004`）：`semantic_loose`、`on_behavioral_signal`、`on_external_event`、`cross_client_experience` 仍为"压力测试引入、尚未形成独立类型预设"的取值——脚本可通过直接声明轴取值使用。其中：
 

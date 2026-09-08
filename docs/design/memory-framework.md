@@ -1,6 +1,6 @@
 ---
 status: decision-recorded
-last_updated: 2026-08-15
+last_updated: 2026-09-08
 ---
 
 # HeartRule 咨询引擎记忆框架
@@ -9,10 +9,11 @@ last_updated: 2026-08-15
 >
 > - 上游：[HeartRule 设计哲学 v2](heartrule-design-philosophy-v2.md) — 记忆体系是实现熵减架构（P5）和协同进化（P7）的数据基础设施
 > - 关联：[recall 快慢通道设计](ai-ask-memory-recall.md) · [意识系统设计](consciousness-system.md) · [变量-记忆桥接设计](variable-memory-bridge.md)
+> - 校准：[004 记忆模型校准](decisions/004-memory-model-calibration.md) · [005 去除 Opinions 概念](decisions/005-drop-opinions-domain-concept.md)
 >
 > **文档定位**: HeartRule AI 咨询引擎的完整记忆体系设计，定义五种记忆类型的职责、关系、数据流和实现策略。
-> **版本**: v0.7.0 (草案)
-> **创建日期**: 2026-05-18 · **更新**: 2026-07-15
+> **版本**: v0.8.0 (封板修订)
+> **创建日期**: 2026-05-18 · **更新**: 2026-09-08
 
 ---
 
@@ -107,7 +108,7 @@ AI 咨询引擎的记忆系统服务于两类**人**，而 AI 在其中扮演**�
 
 2. **保真度与时间距离成反比** —— 越靠近当前的对话，保留越高的原文保真度；越远，越可压缩为结构化摘要。不是"全部保留或全部压缩"的二元选择，而是 round → action → topic 逐级衰减：同一 action 最近 N 轮保留原话，同 topic 前面 action 压缩为摘要，更早 topic 只剩关键结论。当信息的时间距离远到压缩保真度不够用时，recall() 的语义检索比低质量压缩更有效。
 
-3. **推论与证据可互查** —— AI 基于记忆做出的任何判断（Opinion、DeepInsight、从记忆派生的变量值），都能反向追溯到支撑它的原始记忆片段。反过来，从任意一条原始记忆，能查到它参与了哪些推论的生成。不出现"这个判断从哪来的"回答不了的情况。
+3. **推论与证据可互查** —— AI 基于记忆做出的任何综合（observation、mental model 的公式化内容、从记忆派生的变量值），都能反向追溯到支撑它的原始记忆片段（observation 带来源事实引用；mental model 带 `based_on`）。反过来，从任意一条原始记忆，能查到它参与了哪些综合的生成。不出现"这个判断从哪来的"回答不了的情况。
 
 ---
 
@@ -220,14 +221,14 @@ AI 咨询引擎的记忆系统服务于两类**人**，而 AI 在其中扮演**�
 
 **当前状态**: 未实现。当前仅通过 `messages` 表存储单会话对话历史，缺少跨会话的语义检索和组织。
 
-| 维度         | 说明                                                                                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **消费者**   | LLM (注入提示词作为上下文)、ai_think (为变量提供值来源)、AI 策略反思 (影响咨询节奏和策略选择)                                                                 |
-| **作用**     | 让第 N 次会谈的 AI 咨询师"知道"前 N-1 次会谈发生了什么，让用户不重复讲述                                                                                      |
-| **查询方式** | 语义搜索 + 图谱遍历 + 时间过滤                                                                                                                                |
-| **更新频率** | 每个 Action 结束后 retain（提取该 Action 完整对话的结构化记忆）；Session 结束时 reflect（综合 Observation + 更新 Opinion 信心）；临床文档填写后也 retain 汇入 |
-| **谁定义**   | AI 自动提取和组织，人类咨询师通过提取提示词影响提取维度                                                                                                       |
-| **存储**     | 向量嵌入 + 知识图谱 + 元数据存储 (具体实现见第 4 节)                                                                                                          |
+| 维度         | 说明                                                                                                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **消费者**   | LLM (注入提示词作为上下文)、ai_think (为变量提供值来源)、AI 策略反思 (影响咨询节奏和策略选择)                                                                         |
+| **作用**     | 让第 N 次会谈的 AI 咨询师"知道"前 N-1 次会谈发生了什么，让用户不重复讲述                                                                                              |
+| **查询方式** | 语义搜索 + 图谱遍历 + 时间过滤                                                                                                                                        |
+| **更新频率** | 每个 Action 结束后 retain（提取该 Action 完整对话的结构化记忆）；Session 结束时 reflect（结构化反思）；consolidate 自动综合 observation；临床文档填写后也 retain 汇入 |
+| **谁定义**   | AI 自动提取和组织，人类咨询师通过提取提示词影响提取维度                                                                                                               |
+| **存储**     | 向量嵌入 + 知识图谱 + 元数据存储 (具体实现见第 4 节)                                                                                                                  |
 
 #### 2.2.1 会谈记忆需要解决的问题
 
@@ -251,13 +252,14 @@ AI 咨询引擎的记忆系统服务于两类**人**，而 AI 在其中扮演**�
     "你之前提到过母亲对你有很高的期望..."
 ```
 
-**B. 事实、经历与判断的认知分离**
+**B. 事实与综合的认知分离**
 
-咨询中需要区分三类非常不同的信息：
+咨询中需要区分两类非常不同的信息（AI 的判断与综合观察属于第二类的归纳产物，见下方说明）：
 
-- **客观事实**: "用户被诊断为 GAD"、"用户服用舍曲林 50mg/天" —— 相对稳定，来自诊断或用户陈述
-- **用户的经历**: "第 3 次会谈中用户详细描述了被领导当众批评的那次经历" —— 用户的第一人称叙述
-- **咨询师的判断**: "用户的核心焦虑与'不被认可'的深层信念有关 (信心: 0.78)" —— 这是咨询师的**工作假设**，需要随着更多证据出现而更新
+- **原始事实 (raw facts)**: "用户被诊断为 GAD"、"用户服用舍曲林 50mg/天"、"第 3 次会谈中用户详细描述了被领导当众批评的那次经历" —— 相对稳定，来自诊断或用户陈述（Hindsight world / experience 两类）
+- **综合观察 (observations)**: "用户的核心焦虑与'不被认可'的深层信念有关" —— 由 Hindsight consolidate 从多条原始事实中自动归纳的**信念**，每条带证据引文与 proof count，随新证据 refine（加强/减弱/扩展）而非覆写
+
+> ⚠️ 校准（v0.9.1+，见 `decisions/005`）：早期设计区分"客观事实 / 用户经历 / 咨询师判断"三类，其中"判断 (opinions)"拟自建带信心分数的独立存储。核查上游史实后确认：Hindsight 曾有一等 opinion 类型，2026 年初起将其职能拆分——**原子信念归入 observation**（自动 consolidate + refine + 证据链），**常驻工作假设归入 mental model**（用户定义问题、后台随证据重写）。HeartRule 跟随该演进，领域模型删除 opinions 概念。"用户陈述的事实 vs AI 归纳的判断"的认知分离由 observation 的 grounding 语义天然保留（observation 带来源事实引用，raw fact 不带）。
 
 当前所有信息混在对话历史和变量中，缺少这种认知清晰度。
 
@@ -275,20 +277,24 @@ AI 咨询引擎的记忆系统服务于两类**人**，而 AI 在其中扮演**�
 
 当 AI 需要理解"用户的社交回避与什么有关"时，不是找一个关键词匹配，而是沿着实体边、因果边、时间边进行多跳发现。
 
-**D. 观点的动态演化**
+**D. 综合的演化（observation refine + mental model 重写）**
 
-咨询师的判断不是一成不变的。随着会谈深入，有些判断应该增强信心，有些应该被质疑或修正：
+咨询师对用户的综合理解不是一成不变的。随着会谈深入，有的归纳应被新证据加强，有的应被质疑或修正。这由两个 Hindsight 机制承载（校准：早期"信心分数动态演化"设计已废弃——LLM 自评数值无标定不可靠，见 `decisions/005` 决策 3）：
+
+- **原子信念（observation）随证据 refine**：新事实 consolidate 时与既有 observation 比对——证据加强则 refine 强化表述并增加引文，相悖证据则削弱或改写，历史保留（refine 而非覆写）。
+- **常驻公式化（mental model）随记忆重写**：工作假设追踪（"这个用户的焦虑根源是什么？当前有哪些支持/反证？"）以 mental model 承载——新记忆 consolidate 后触发刷新（`refreshAfterConsolidation`），`is_stale` 标记"该重新审视了"。
 
 ```
 第2次会谈后:
-  观点: "焦虑主要来源于工作压力" (信心: 0.70)
+  observation: "焦虑主要来源于工作压力" (证据: 3条引文)
 
 第4次会谈:
-  用户详细描述了社交场合中的恐慌 → 观点信心下调: 0.55
+  用户详细描述了社交场合中的恐慌 → consolidate 发现相悖证据 → refine 削弱表述
 
 第5次会谈:
   用户进一步说明社交焦虑是在工作中被领导批评后才开始的
-  → 观点更新: "焦虑根源于工作关系中的权力不对等, 泛化到社交场合" (信心: 0.72)
+  → observation refine: "焦虑根源于工作关系中的权力不对等, 泛化到社交场合" (证据+2)
+  → mental model "焦虑根源公式化" 标记 stale → 随记忆重写
 ```
 
 **E. 叙事连贯性与矛盾发现**
@@ -303,7 +309,9 @@ AI 咨询引擎的记忆系统服务于两类**人**，而 AI 在其中扮演**�
 第8次: (在描述童年时) "...那时候每天放学都不想回家，怕看到我妈的脸色"
 
 → 不视为矛盾，而是: 用户对"关系好"的定义可能需要深入探索
-→ 新观点: "用户可能在'关系好'和'母亲的真实态度'之间存在认知失调 (信心: 0.45)"
+→ 新 observation: "用户可能在'关系好'和'母亲的真实态度'之间存在认知失调"
+   (证据: 上述两条经历) —— 经矛盾检测管线（Phase 4）确认后 retain 为观察，
+   或由案例公式化 mental model 在下次刷新时纳入
 ```
 
 #### 2.2.2 近期工作记忆与长期结构记忆的分工
@@ -314,7 +322,7 @@ AI 咨询引擎的记忆系统服务于两类**人**，而 AI 在其中扮演**�
 同一会话内 (近期工作记忆)               跨会话 (长期结构记忆)
 ─────────────────────────            ─────────────────────────
 {{chat}} 占位符                      recall() 语义检索
-messages 表原始对话                   Hindsight 四网络
+messages 表原始对话                   Hindsight 记忆库（三网络 + mental model）
 保留最近 N 轮完整消息                  提取 + 组织 + 图谱关联
 时间窗口: 本次会话                     时间窗口: 全部历史
 查询方式: 按时间顺序切片                查询方式: 语义搜索 + 图谱遍历
@@ -342,7 +350,7 @@ messages 表 (原始对话记录, 不可篡改)
   ├──→ {{chat}} 占位符 (取最近 N 条, 完整原文)
   │     用途: 让 LLM 知道"刚才在聊什么"
   │
-  └──→ Hindsight retain() (提取事实/实体/观点, 结构化存储)
+  └──→ Hindsight retain() (提取事实/实体, 结构化存储 + 自动 consolidate)
         用途: 让 LLM 知道"这个人是谁, 经历过什么"
 ```
 
@@ -366,7 +374,7 @@ messages 表 (原始对话记录, 不可篡改)
 
   ## 关于来访者
   {{memory_context}}        ← recall("本次会谈到目前为止的关键讨论点")
-  ...                       ← 结构化记忆上下文 (MemoryContext 四字段)
+  ...                       ← 结构化记忆上下文 (MemoryContext 三字段)
 ```
 
 | 占位符               | 内容                   | 来源                              | 时间范围 |
@@ -456,7 +464,7 @@ messages 表 (原始对话记录, 不可篡改)
     │     用途: 展示给用户看、临床审核、合规存档
     │
     └──→ [汇入会谈记忆]
-          内容被 retain 到 World / Opinion / Observation 网络
+          内容被 retain 到 World / Experience / Observation 网络
           用途: AI 在后续会话中通过 recall 获取，无需单独查询文档表
 ```
 
@@ -695,7 +703,7 @@ HeartRule 已用 PostgreSQL，项目 schema 中预留了 `embedding` 向量字�
   │
   └──→ 会话结束时:
           │
-          ├──→ [2.会谈记忆] reflect (结构化反思 → Observation 由 consolidate 产生，Opinion 由自建层持久化)
+          ├──→ [2.会谈记忆] reflect (结构化反思 → 综合判断；observation 由 consolidate 自动产生，案例公式化由 mental model 承载)
           │
           ├──→ [3.临床文档] 生成会谈笔记
           │       └──→ 笔记内容汇入 [2.会谈记忆]
@@ -736,21 +744,22 @@ HeartRule 已用 PostgreSQL，项目 schema 中预留了 `embedding` 向量字�
 
 ### 4.1 选择: 基于 Hindsight
 
-会谈记忆 (2.2) 是整个记忆体系中最复杂的一块。它需要的能力包括：对话中自动提取事实和实体、实体解析与消歧、混合检索（语义 + BM25，v0.9.1 可选图谱/时间检索臂）、查询侧时间检索、以及基于反思的咨询师判断（opinions）。
+会谈记忆 (2.2) 是整个记忆体系中最复杂的一块。它需要的能力包括：对话中自动提取事实和实体、实体解析与消歧、混合检索（语义 + BM25，v0.9.1 可选图谱/时间检索臂）、查询侧时间检索、自动综合（observation consolidate）与常驻公式化（mental model）。
 
 经过对 Mem0、Hindsight 和自建的对比评估，选择 **Hindsight** 作为会谈记忆的实现基础。
 
 **选择理由**:
 
-| 能力                                | 自建预估                 | Hindsight                                                                                                              |
-| ----------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| 对话事实与实体自动提取              | 提示词工程 + 调试: ~2 周 | 内置                                                                                                                   |
-| 实体解析 (批量消歧, 99.5% 查询减少) | 算法 + 调优: ~3 周       | 内置                                                                                                                   |
-| 语义 + BM25 混合检索                | 实现 + 调参: ~2 周       | 内置（v0.9.1 可选 `enableReranking` 交叉编码器重排）                                                                   |
-| 图谱/时间检索臂                     | 建模 + 实现: ~3 周       | v0.9.1 部分支持（`enableGraphRetrieval`/`enableTemporalRetrieval`，遍历深度未在类型层区分）                            |
-| 查询侧时间检索 (recency)            | 设计 + 实现: ~1 周       | v0.9.1 内置（`queryTimestamp` 锚点 + recency 评分）                                                                    |
-| 咨询师观点 (opinions) 动态演化      | 机制设计 + 实现: ~1-2 周 | **不提供**——opinion 非 recall fact type；需 HeartRule 自建（mental model 或 opinions 表，见 `decisions/004` 决策 1/6） |
-| **合计**                            | **~12 周**               | **集成 ~1 周 + opinions 承载 ~1-2 周**                                                                                 |
+| 能力                                | 自建预估                 | Hindsight                                                                                   |
+| ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------- |
+| 对话事实与实体自动提取              | 提示词工程 + 调试: ~2 周 | 内置                                                                                        |
+| 实体解析 (批量消歧, 99.5% 查询减少) | 算法 + 调优: ~3 周       | 内置                                                                                        |
+| 语义 + BM25 混合检索                | 实现 + 调参: ~2 周       | 内置（v0.9.1 可选 `enableReranking` 交叉编码器重排）                                        |
+| 图谱/时间检索臂                     | 建模 + 实现: ~3 周       | v0.9.1 部分支持（`enableGraphRetrieval`/`enableTemporalRetrieval`，遍历深度未在类型层区分） |
+| 查询侧时间检索 (recency)            | 设计 + 实现: ~1 周       | v0.9.1 内置（`queryTimestamp` 锚点 + recency 评分）                                         |
+| 原子信念自动综合与演化              | 机制设计 + 实现: ~1-2 周 | 内置——observation consolidate（去重信念 + 证据引文 + proof count + refine 演化）            |
+| 常驻公式化（案例公式化/工作假设）   | 机制设计 + 实现: ~1-2 周 | 内置——mental model（定义问题 → 后台随证据重写 → 读取零 LLM 成本）                           |
+| **合计**                            | **~12 周**               | **集成 ~1 周 + mental model 配置 ~1 周**                                                    |
 
 **Hindsight 概况**:
 
@@ -758,40 +767,47 @@ HeartRule 已用 PostgreSQL，项目 schema 中预留了 `embedding` 向量字�
 - TypeScript SDK (`@vectorize-io/hindsight-client`) 兼容 Vercel AI SDK (`@vectorize-io/hindsight-ai-sdk`)
 - LongMemEval 准确率 91.4% (SOTA)，已验证
 - v0.9.1（2026-08 从 v0.6.2 升级，仓库当前安装版本），仍在活跃开发中（pre-1.0）
-- 能力校准见 `docs/design/decisions/004-memory-model-calibration.md`：设计初稿基于 v0.5.0 假设，004 已按 v0.9.1 真实类型逐条重核
+- 能力校准见 `docs/design/decisions/004-memory-model-calibration.md`（v0.6.2→v0.9.1 重核）与 `docs/design/decisions/005-drop-opinions-domain-concept.md`（opinions 领域概念去除，职能拆分至 observation + mental model）
 
 **风险缓解**: Hindsight API 在 1.0 之前可能变化，但通过适配层封装，变更影响局限在适配层内部。
 
-### 4.2 Hindsight 的四网络 + 三操作模型
+### 4.2 Hindsight 的三网络 + 两机制 + 三操作模型
 
-Hindsight 将记忆组织为四个认知分类网络，并提供三个核心操作。
+Hindsight 将记忆组织为三个认知分类网络（world / experience / observation），外加 mental model 作为显式公式化机制，并提供三个核心操作。
 
-> ⚠️ **能力校准（v0.9.1，见 `decisions/004` 决策 1/6）**：**Opinion 不是 recall 的 fact type**。SDK 的 `RecallRequest.types` / `ReflectRequest.fact_types` 只有 `world` / `experience` / `observation` 三类，`RecallResult` 无 `confidence` 字段。下图的 Opinion Network 是 **HeartRule 侧通过 reflect/mental model 自建的观点层**，不来自 Hindsight 的 recall 返回。领域字段 `MemoryContext.opinions` 保留，数据来源改为自建（reflect + `response_schema` 产出，mental model 或自建表承载）。
+> ⚠️ **校准（v0.9.1+，见 `decisions/004` 决策 1/6 与 `decisions/005`）**：早期 HeartRule 设计把记忆画成"四网络（含 Opinion）"。上游核查确认：**opinion 曾是 v0.3/v0.4 的一等类型，2026 年初起被删除**，职能拆至 observation（原子信念：auto-consolidate + 证据 + refine）与 mental model（常驻公式化：定义问题、后台重写）。HeartRule 跟随该演进——**领域模型不再有 opinions 概念**，不再自建 opinions 表，不持久化数值 confidence（见 `decisions/005` 决策 1/3）。
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│              Hindsight 四网络模型                           │
+│              Hindsight 存储与机制                           │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
-│  World Network (W)           Opinion Network (O)          │
-│  客观事实                     主观判断                     │
+│  World Facts (raw)               Experience Facts (raw)   │
+│  客观事实/声明                    第一人称经历               │
 │  ┌──────────────────┐        ┌──────────────────┐        │
-│  │ "用户被诊断为GAD" │        │ "焦虑主要来源于    │        │
-│  │ "服用舍曲林50mg"  │        │  工作关系(信0.72)"│        │
-│  │ "2024年3月离婚"   │        │ "核心信念: 不被    │        │
-│  │ "母亲有焦虑史"    │        │  认可(信0.78)"    │        │
-│  └──────────────────┘        └──────────────────┘        │
-│                                                          │
-│  Experience Network (B)       Observation Network (S)     │
-│  亲身经历                     综合摘要                     │
-│  ┌──────────────────┐        ┌──────────────────┐        │
-│  │ "第3次: 用户描述   │        │ "用户-父亲关系     │        │
-│  │  被领导批评的具体  │        │  画像: 疏远、有     │        │
-│  │  场景和身体反应"   │        │  未解决冲突、但     │        │
-│  │ "第5次: 首次主动   │        │  表达了修复意愿"   │        │
-│  │  使用思维记录表"   │        │ "核心应对模式:    │        │
-│  └──────────────────┘        │  回避而非直面"     │        │
+│  │ "用户被诊断为GAD" │        │ "第3次: 用户描述   │        │
+│  │ "服用舍曲林50mg"  │        │  被领导批评的具体  │        │
+│  │ "2024年3月离婚"   │        │  场景和身体反应"   │        │
+│  │ "母亲有焦虑史"    │        │ "第5次: 首次主动   │        │
+│  └──────────────────┘        │  使用思维记录表"   │        │
 │                              └──────────────────┘        │
+│                                                          │
+│        │  retain 提取原始事实            │ consolidate      │
+│        ▼                               ▼ 自动综合          │
+│  ┌──────────────────────────────────────────────┐        │
+│  │  Observations (自动归纳的原子信念)              │        │
+│  │  "焦虑主要来源于工作关系 (证据: N条引文)"       │        │
+│  │  "核心应对模式: 回避而非直面"                   │        │
+│  │  · 去重 · 证据引文 + proof count · refine 演化  │        │
+│  └──────────────────────────────────────────────┘        │
+│        │  source_query 定义问题                          │
+│        ▼  refreshAfterConsolidation 后台重写             │
+│  ┌──────────────────────────────────────────────┐        │
+│  │  Mental Models (显式常驻公式化)                 │        │
+│  │  "该用户焦虑根源的 case formulation"           │        │
+│  │  · 你定义问题, 后台随证据重写                   │        │
+│  │  · 读取零 LLM · is_stale 标记待刷新             │        │
+│  └──────────────────────────────────────────────┘        │
 │                                                          │
 │  三操作: retain (记住) / recall (召回) / reflect (反思)     │
 └──────────────────────────────────────────────────────────┘
@@ -799,11 +815,11 @@ Hindsight 将记忆组织为四个认知分类网络，并提供三个核心操�
 
 **三个操作**:
 
-| 操作        | 触发时机                   | 在咨询中的应用                                                                                                                                                                                                                                                                                                                                     |
-| ----------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **retain**  | 每个 Action 结束后 (异步)  | 从该 Action 的完整对话中提取事实/事件/情绪 → 实体解析 → 分类存储到 world/experience/observation（opinions 不在 retain 中产生）                                                                                                                                                                                                                     |
-| **recall**  | 会话启动时 / AI 需要背景时 | 语义 + BM25 检索（v0.9.1 可选图谱/时间臂）→ 返回 world/experience/observation → 注入 LLM 上下文；opinions 由 HeartRule 自建层加载                                                                                                                                                                                                                  |
-| **reflect** | 会话结束后 / 关键节点      | 用 query + `response_schema` 做结构化反思 → `structured_output` 产出综合判断（observations 由 Hindsight consolidate 产生；opinions 由 HeartRule 持久化）。⚠️ **实测限制**：`structured_output` 可用性取决于 LLM provider——server 0.9.1 + DeepSeek 实测返回空（`finish_reason=length`），适配器回退 `text`（详见 `decisions/004`「Live PoC 实测」） |
+| 操作        | 触发时机                   | 在咨询中的应用                                                                                                                                                                                                                                                                                                                                                         |
+| ----------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **retain**  | 每个 Action 结束后 (异步)  | 从该 Action 的完整对话中提取事实/事件/情绪 → 实体解析 → 分类存储到 world/experience；随后 consolidate 自动综合 observation（原子信念带证据引文）                                                                                                                                                                                                                       |
+| **recall**  | 会话启动时 / AI 需要背景时 | 语义 + BM25 检索（v0.9.1 可选图谱/时间臂）→ 返回 world/experience/observation → 注入 LLM 上下文；案例公式化由 mental model 读出（数据库读，零 LLM）                                                                                                                                                                                                                    |
+| **reflect** | 会话结束后 / 关键节点      | 用 query + `response_schema` 做结构化反思 → `structured_output` 产出综合判断（observation 由 consolidate 产生、refine 演化；mental model 由 refreshAfterConsolidation 重写）。⚠️ **实测限制**：`structured_output` 可用性取决于 LLM provider——server 0.9.1 + DeepSeek 实测返回空（`finish_reason=length`），适配器回退 `text`（详见 `decisions/004`「Live PoC 实测」） |
 
 ### 4.3 分工: Hindsight 提供什么, HeartRule 构建什么
 
@@ -844,8 +860,8 @@ Hindsight 将记忆组织为四个认知分类网络，并提供三个核心操�
 │  │  recall: 语义+BM25 + 图谱/时间臂            │          │
 │  │  reflect: 结构化产出（response_schema）      │          │
 │  │  存储: world / experience / observation      │          │
-│  │  observation: consolidate 综合              │          │
-│  │  opinions: 不提供（HeartRule 自建）           │          │
+│  │  observation: consolidate 自动综合 + refine  │          │
+│  │  mental model: 常驻公式化 (refresh + is_stale)│          │
 │  │  图谱/时间: 检索臂（graph/temporal）         │          │
 │  └────────────────────────────────────────────┘          │
 │                                                          │
@@ -854,12 +870,12 @@ Hindsight 将记忆组织为四个认知分类网络，并提供三个核心操�
 
 **HindsightMemoryAdapter 的职责 (实现 MemoryRepository 端口):**
 
-| 能力                | 说明                                                                                                                                                                                                                                    |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **retain 提取**     | 适配器不内置领域提示词。领域提取维度由 Hindsight **银行级 `strategy`**（配置层设置，非 per-call）+ 调用方构造的 retain 内容体现；`metadata` 透传来源标注（决策 4）                                                                      |
-| **recall 检索参数** | 适配器提供领域中性的合理默认值（`types` 过滤 + `budget`）。领域特定的检索偏好通过 `RecallOptions` 体现（v0.9.1 支持 `tagsMatch`/`tagGroups`/`minScores`/`preferObservations`/`includeSourceFacts`/`budget`/`queryTimestamp`，按需透传） |
-| **reflect 反思**    | 领域反思维度通过 reflect 的 `query` 文本承载 + `response_schema` 结构化产出（决策 2），不依赖 per-call 提示词                                                                                                                           |
-| **领域映射**        | recall 只映射 World/Experience/Observation 三类型到 `MemoryContext` 前三字段；opinions 由自建层加载（决策 1/6）。来源/时间元数据从 `RecallResult.metadata`/时间字段读回（决策 4）                                                       |
+| 能力                | 说明                                                                                                                                                                                                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **retain 提取**     | 适配器不内置领域提示词。领域提取维度由 Hindsight **银行级 `strategy`**（配置层设置，非 per-call）+ 调用方构造的 retain 内容体现；`metadata` 透传来源标注（决策 4）                                                                                                                   |
+| **recall 检索参数** | 适配器提供领域中性的合理默认值（`types` 过滤 + `budget`）。领域特定的检索偏好通过 `RecallOptions` 体现（v0.9.1 支持 `tagsMatch`/`tagGroups`/`minScores`/`preferObservations`/`includeSourceFacts`/`budget`/`queryTimestamp`，按需透传）                                              |
+| **reflect 反思**    | 领域反思维度通过 reflect 的 `query` 文本承载 + `response_schema` 结构化产出（决策 2），不依赖 per-call 提示词                                                                                                                                                                        |
+| **领域映射**        | recall 映射 World/Experience/Observation 三类到 `MemoryContext` 三字段（worldFacts / experiences / observations，见 `decisions/005` 决策 1）。来源/时间元数据从 `RecallResult.metadata`/时间字段读回（决策 4）；mental model 内容由适配器按需读出并入 `{{memory_context}}`（决策 2） |
 
 **构建在 MemoryRepository 之上的领域逻辑 (不在适配层内):**
 
@@ -970,14 +986,13 @@ interface MemoryRepository {
 }
 
 // 领域对象 — 咨询抽象层级的通用认知模型
-// World/Experience/Observation 来自 Hindsight recall（三类 fact type）；
-// Opinions 来自 HeartRule 自建层（reflect + response_schema 产出，mental model 或自建表承载，
-// 见 decisions/004 决策 1/6）——"事实 vs 判断"的领域区分保留，数据来源已拆分。
+// World/Experience/Observation 三类 fact type 均来自 Hindsight recall；
+// observation 承载"归纳信念"（自动 consolidate + refine，带 proof count 与来源事实，
+// 见 decisions/005 决策 1/3）——"事实 vs 判断"的区分由 grounding 语义保留，不靠第二类型。
 interface MemoryContext {
-  worldFacts: Fact[]; // 确定的客观事实 (诊断/案由/用药/证据) — recall type=world
-  experiences: Experience[]; // 来访者/当事人亲历的第一人称事件 — recall type=experience
-  opinions: Opinion[]; // 咨询师/律师的主观判断，含信心分数 — 来自自建层
-  observationSummary: string; // 综合摘要画像 — recall type=observation
+  worldFacts: MemoryEntry[]; // 确定的客观事实 (诊断/案由/用药/证据) — recall type=world
+  experiences: MemoryEntry[]; // 来访者/当事人亲历的第一人称事件 — recall type=experience
+  observations: ObservationEntry[]; // 原子信念/归纳判断 — recall type=observation，含证据溯源
 }
 
 // 每条记忆的来源/时间元数据（决策 4）——由 retain 的 metadata 写入、recall 读回
@@ -989,44 +1004,53 @@ interface MemoryEntry {
   occurredEnd?: string;
 }
 
+// observation 的结构化补充（ADR 005 决策 1）—— 证据强度客观信号替代数值 confidence
+interface ObservationEntry extends MemoryEntry {
+  /** 上游 proof count —— 支撑该观察的证据条数（决策 3） */
+  proofCount?: number;
+  /** 来源事实 id（v0.9.1 includeSourceFacts）—— 推论与证据可互查（原则 3） */
+  sourceFactIds?: string[];
+}
+
 // reflect() 的返回值 — 用 query + response_schema 做结构化反思，来自
 // ReflectResponse.structured_output（决策 2），而非 SDK 原生 markdown。
+// observation 综合与 mental model 演化由 Hindsight 自动完成（consolidate /
+// refreshAfterConsolidation），不落在 reflect 返回值中（ADR 005 决策 2）。
 // 注意：当前端口实现（memory-repository.port.ts）为 Phase 0 简化，只返回
 // { summary: string }；结构化字段是 Phase 4 的完整形态，端口文档需承认这个降级。
 interface ReflectionResult {
-  updatedOpinions: Array<{ opinionId: string; confidenceDelta: number }>;
-  newObservations: string[];
-  contradictions: Array<{ factA: string; factB: string; analysis: string }>;
+  newObservations: string[]; // 反思中新形成的综合观察（Phase 4）
+  contradictions: Array<{ factA: string; factB: string; analysis: string }>; // 矛盾检测（Phase 4）
 }
 ```
 
-**为什么这就是通用模型，不需要按咨询领域定制**: "区分事实和判断"、"区分证据和推论"是咨询类专业服务的底层认知模式，不是心理咨询独有的。心理咨询的诊断和法律的案由都落在 `worldFacts`，咨询师的假设和律师的策略判断都落在 `opinions`。
+**为什么这就是通用模型，不需要按咨询领域定制**: "区分事实和判断"、"区分证据和推论"是咨询类专业服务的底层认知模式，不是心理咨询独有的。心理咨询的诊断和法律的案由都落在 `worldFacts`，咨询师的假设和律师的策略判断作为带证据溯源的 observation 落地；需要随证据长期演化的整体工作假设（案例公式化）由 mental model 承载（ADR 005 决策 2）。
 
 **领域差异性不由代码承载**: 各咨询领域（心理/法律/管理）的差异通过 **YAML 脚本系统的模板和查询构造** 实现——不同领域的人类咨询师编写各自的 recall 查询模板、reflect 反思维度、知识库条目。代码只实现"咨询"共性的抽象层，不做任何单一领域的硬编码。领域特定性**不通过 per-call 提示词注入**（决策 5）：retain 的领域提取维度走 Hindsight 银行级 `strategy`，recall 的领域偏好体现在 query 构造与 `RecallOptions`，reflect 的领域维度体现在 query 文本与 `response_schema`。
 
-`HindsightMemoryAdapter` 将 Hindsight 三类 fact type 映射到 `MemoryContext` 前三字段: world→worldFacts, experience→experiences, observation→observationSummary。**opinions 由自建层加载，不来自 recall**（决策 1/6）。映射不是 1:1——opinions 是领域抽象超出 Hindsight 原生提供的部分，正是 HeartRule 需要自建的部分。
+`HindsightMemoryAdapter` 将 Hindsight 三类 fact type 映射到 `MemoryContext` 三字段: world→worldFacts, experience→experiences, observation→observations（逐条保留 proofCount/sourceFactIds，不折叠成单字符串）。映射近 1:1——领域模型与上游 v0.9.x 对齐后不再需要自建层补缺；mental model 的常驻判断由适配器/应用层渲染进 `{{memory_context}}`（005 决策 2 注意），不重新引入第四字段。
 
 #### 5.2.1.1 跨领域验证: 法律咨询示例
 
-用非心理学领域走通 MemoryContext 四字段，验证抽象的完整性:
+用非心理学领域走通 MemoryContext 三字段，验证抽象的完整性:
 
 **场景**: 离婚财产纠纷调解
 
-| 字段               | 内容                                                                                                                                           |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| worldFacts         | "双方2022年5月登记结婚"、"婚后购置房产一套 (登记在甲方名下)"、"甲方2024年3月起将共同存款分批转入其胞弟账户 (银行流水已调取)"                   |
-| experiences        | "第2次调解: 乙方详细描述了发现转账后的沟通过程——甲方最初否认, 后来承认但拒绝说明用途"、"第3次: 乙方描述了甲方在婚姻期间多次隐瞒收入的具体事件" |
-| opinions           | "甲方的转账行为可能构成恶意转移夫妻共同财产 (信心: 0.72)"、"双方感情破裂的时间点是财产分割的关键争议点 (信心: 0.60)"                           |
-| observationSummary | "乙方当事人情绪波动较大但陈述逻辑清晰; 核心诉求是财产分割公平而非惩罚性赔偿; 甲方当事人对关键问题回避态度明显"                                 |
+| 字段         | 内容                                                                                                                                           |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| worldFacts   | "双方2022年5月登记结婚"、"婚后购置房产一套 (登记在甲方名下)"、"甲方2024年3月起将共同存款分批转入其胞弟账户 (银行流水已调取)"                   |
+| experiences  | "第2次调解: 乙方详细描述了发现转账后的沟通过程——甲方最初否认, 后来承认但拒绝说明用途"、"第3次: 乙方描述了甲方在婚姻期间多次隐瞒收入的具体事件" |
+| observations | "甲方对家庭财务去向的陈述与银行流水不符 (proofCount: 3)"、"乙方当事人情绪波动较大但陈述逻辑清晰"、"甲方当事人对关键问题回避态度明显"           |
 
-四网络在法律咨询中自然映射:
+三存储网络在法律咨询中自然映射:
 
 - World = 可验证的客观证据 (登记日期、银行流水、产权登记)
 - Experience = 当事人亲历的第一人称叙事 (对方的行为、对话过程)
-- Opinion = 法律专业判断 (法条适用性、证据可信度、对方意图推断)
-- Observation = 综合评估 (当事人状态、纠纷本质、调解前景)
+- Observation = 去重后的原子归纳 (当事人状态、陈述与证据的矛盾点、可信度判断), 带 proof count / refine 历史
 
-这验证了 World/Experience/Opinion/Observation 的区分不是心理咨询的特化, 而是 "事实-经历-判断-综合" 这一认知模式的通用表达。心理咨询的诊断与法律的案由都落在 worldFacts, 咨询师的假设与律师的策略判断都落在 opinions。
+**案例公式化不落 MemoryContext 字段**（ADR 005 决策 2）: "甲方的转账行为是否构成恶意转移夫妻共同财产? 感情破裂时间点是否构成争议关键?" 这类随证据演化的整体工作假设，作为 Hindsight mental model 承载——source_query 定义问题，后台随 consolidate 自动重写，`is_stale` 提示需要重新审视，读取零 LLM 成本。
+
+这验证了 World/Experience/Observation 的区分不是心理咨询的特化, 而是 "事实-经历-判断" 这一认知模式的通用表达。心理咨询的诊断与法律的案由都落在 worldFacts, 咨询师的假设与律师的策略判断以 observation 原子信念落地 (带证据溯源), 以 mental model 承载长期演化。
 
 领域层**不**依赖 Hindsight。`MemoryContext` 在 `core-engine` 中定义，`HindsightMemoryAdapter` 在 `api-server` 中实现。
 
@@ -1108,7 +1132,7 @@ Hindsight 管理 (嵌入式 pg0):
   - `reflect()` → no-op，记录调用日志
 - 用 `FakeMemoryRepository` 运行 2-3 次完整咨询会话
 - 验证目标:
-  1. `MemoryContext` 四字段在真实 recall 场景中是否够用
+  1. `MemoryContext` 三字段（worldFacts/experiences/observations）+ mental model 的划分在真实 recall 场景中是否够用（ADR 005 后验证）
   2. `retain(userId, messages)` 签名是否适合异步调用模式
   3. `reflect` 的触发时机 (会话结束？话题结束？两者？) 是否正确
   4. 调用方的 `RecallOptions`/`ReflectOptions` 参数结构是否合理（决策 5：领域特定性由 query 构造承载，非 per-call 提示词）
@@ -1153,27 +1177,28 @@ Hindsight 管理 (嵌入式 pg0):
 
 | 决策                   | 选择                                                                                                        | 理由                                                                                                                                                                                                                                                                                                                                       |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 会谈记忆实现           | Hindsight (自托管)                                                                                          | 自带事实提取/实体解析/混合检索（v0.9.1 含图谱与时间检索臂）+ 三操作, 避免自建~12周的重复工作; MIT开源, 可自托管; opinions 需 HeartRule 自建（决策 1/6）                                                                                                                                                                                    |
+| 会谈记忆实现           | Hindsight (自托管)                                                                                          | 自带事实提取/实体解析/混合检索（v0.9.1 含图谱与时间检索臂）+ 三操作, 避免自建~12周的重复工作; MIT开源, 可自托管; 判断/公式化职能由 observation + mental model 原生承接（ADR 005），无需自建层                                                                                                                                              |
 | 领域知识库实现         | pgvector (PostgreSQL 扩展)                                                                                  | 领域知识是静态参考内容 (非经验记忆)，数据形状与 Hindsight 不匹配; pgvector 已在项目 schema 中预留 embedding 字段，零新基础设施; 元数据过滤+向量相似度混合查询，适合百到千量级的结构化知识条目                                                                                                                                              |
 | 咨询方案 / 临床文档    | 自建 (PostgreSQL)                                                                                           | 独立的咨询领域模型，非通用记忆问题; 临床文档需要独立版本存档                                                                                                                                                                                                                                                                               |
 | 变量 vs 记忆           | 变量收缩为操作参数+进程控制；语义理解由记忆承载；变量可从记忆通过 ai_think 调取                             | 信息可溯源: 语义信息以记忆为准, 变量按需从记忆提取; 避免两处存储同一信息                                                                                                                                                                                                                                                                   |
 | 临床文档存储           | 独立版本存档 + 汇入会谈记忆                                                                                 | 版本追溯 (不可篡改) + 记忆检索 (随对话记忆一起被 recall, 避免 LLM 上下文拼装时额外查询文档表)                                                                                                                                                                                                                                              |
-| MemoryContext 领域模型 | 沿用 World/Experience/Opinion/Observation 四字段作为通用认知抽象                                            | "区分事实与判断"是跨咨询领域的底层认知模式; 数据来源拆分: 前三字段来自 recall, opinions 来自自建层（决策 1/6）; 代码只实现咨询抽象层，领域差异性 (查询模板、反思维度、知识库) 由 YAML 脚本系统承载                                                                                                                                         |
+| MemoryContext 领域模型 | 三存储字段 worldFacts/experiences/observations + mental model 承载案例公式化（ADR 005）                     | "区分事实与判断"是跨咨询领域的底层认知模式; 三类字段均来自 recall, 判断的 grounding 语义由 observation 自带（sourceFactIds 溯源）, 随证据演化的工作假设由 mental model 承载; 代码只实现咨询抽象层，领域差异性 (查询模板、反思维度、知识库) 由 YAML 脚本系统承载                                                                            |
 | 记忆系统 DDD 分层      | 领域层 `MemoryRepository` 端口 + 应用层 `MemoryService` 编排 + 基础设施层 `HindsightMemoryAdapter` 实现端口 | 领域层不感知 Hindsight; 编排逻辑与具体实现分离; 遵循项目已有的 DDD + Hexagonal Architecture                                                                                                                                                                                                                                                |
 | 部署模式               | Hindsight Docker + 现有 PostgreSQL                                                                          | 单容器, 嵌入式 pg0, 不增加独立数据库; 16GB内存可承受                                                                                                                                                                                                                                                                                       |
 | API 稳定性风险         | 适配层封装                                                                                                  | Hindsight pre-1.0（当前 v0.9.1）的 API 变更影响局限在 MemoryAdapter 内部                                                                                                                                                                                                                                                                   |
 | 近期/远期记忆分工      | {{chat}} 保留最近 N 轮完整消息，超出窗口的内容通过 recall() 检索                                            | 避免手动实现复杂的分级压缩策略（先压缩 AI、再压缩用户、再压缩 action 摘要等）；Hindsight 的语义+BM25 检索（v0.9.1 可选交叉编码器重排）已经做了相关性判断；咨询场景单次会话 20-50 轮，128K 窗口暂时够用                                                                                                                                     |
 | messages 表存储粒度    | 一回合一条记录（含 actionId、timestamp、metadata）                                                          | 需要细粒度支持: 重跑时的 superseded 标记按 action 位置精确废弃；actionId 追溯支持调试和单步回放；恢复执行状态需要按时间排序重建 conversationHistory；`WHERE session_id = ? ORDER BY timestamp` 有联合索引，百条级毫秒完成                                                                                                                  |
 | retain 调用粒度        | 每个 Action 结束后（非每轮对话后）                                                                          | Action 是完整的信息收集单元，一个 Action 内的多轮对话构成连贯叙事，per-round 会割裂事实提取（同一事件的碎片分散在多个 round 中）且增加 Hindsight 实体解析负担（3-5x 的 LLM 提取调用）；per-Action 一次 retain 比 per-round 多次碎片 retain + 事后实体解析质量更高。同 Session 内后续 Action 通过 recall() 获取前面 Action 已 retain 的内容 |
-| 四网络映射             | opinions 数据来源从"recall 返回字段"改为"HeartRule 自建层"                                                  | 校准发现（见 `decisions/004`）：opinion 不是 Hindsight recall 的 fact type，`RecallResult` 无 `confidence` 字段。领域四字段抽象保留，但 opinions 改由 reflect + `response_schema` 产出，mental model 或自建表承载（决策 1/6）；同时修正 reflect 语义（决策 2）                                                                             |
+| 领域"判断"的承载       | observation（原子信念）+ mental model（案例公式化），不设 opinions 字段、不持久化数值 confidence            | 上游史实核查（见 `decisions/005`）：opinion 曾是一等存储类型，2026 年初起被删除，职能拆至 observation（自动 consolidate + refine + 证据链）与 mental model（source_query 定义、后台随证据重写）；数值 confidence 无标定、被上游弃用。HeartRule 跟随该演进，删除 opinions 概念——替换 004 决策 1/6 的"自建层"方案                            |
 
 ---
 
 ## 8. 关联设计文档
 
-| 文档                                                      | 关系                                                                                                       |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| [recall 快慢通道设计](ai-ask-memory-recall.md)            | 定义记忆的**检索层**：快通道同步联想 + 慢通道异步深度分析                                                  |
-| [意识系统设计](consciousness-system.md)                   | 定义记忆的**认知层**：脚本配置的观察视角，利用 recall 进行意识分析                                         |
-| [变量-记忆桥接设计](variable-memory-bridge.md)            | 定义记忆与变量的**集成层**：变量如何从记忆中调取值                                                         |
-| [记忆模型校准](decisions/004-memory-model-calibration.md) | 定义数据模型的**能力校准**：Hindsight v0.6.2→v0.9.1 重核，opinions 自建来源、reflect 语义、时间/图谱轴修订 |
+| 文档                                                                    | 关系                                                                                                                                   |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [recall 快慢通道设计](ai-ask-memory-recall.md)                          | 定义记忆的**检索层**：快通道同步联想 + 慢通道异步深度分析                                                                              |
+| [意识系统设计](consciousness-system.md)                                 | 定义记忆的**认知层**：脚本配置的观察视角，利用 recall 进行意识分析                                                                     |
+| [变量-记忆桥接设计](variable-memory-bridge.md)                          | 定义记忆与变量的**集成层**：变量如何从记忆中调取值                                                                                     |
+| [记忆模型校准](decisions/004-memory-model-calibration.md)               | 定义数据模型的**能力校准**：Hindsight v0.6.2→v0.9.1 重核，reflect 语义、时间/图谱轴修订                                                |
+| [005 去除 Opinions 概念](decisions/005-drop-opinions-domain-concept.md) | **领域模型修订**（替换 004 决策 1/6 的"自建层"遗留）：MemoryContext 三字段化、案例公式化由 mental model 承载、数值 confidence 不持久化 |

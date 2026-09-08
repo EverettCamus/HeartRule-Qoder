@@ -1,7 +1,8 @@
 /**
  * formatMemoryContext() 单元测试
  *
- * 测试 BaseAction.formatMemoryContext() 的四字段格式化逻辑
+ * 测试 BaseAction.formatMemoryContext() 的三字段格式化逻辑（ADR 005：无 opinions/observationSummary，
+ * observations 为结构化数组，proofCount 作证据强度信号）
  */
 import { describe, it, expect } from 'vitest';
 
@@ -44,8 +45,7 @@ describe('BaseAction.formatMemoryContext', () => {
           memoryContext: {
             worldFacts: [],
             experiences: [],
-            opinions: [],
-            observationSummary: '',
+            observations: [],
           },
         })
       )
@@ -58,8 +58,7 @@ describe('BaseAction.formatMemoryContext', () => {
         memoryContext: {
           worldFacts: [{ content: '用户报告工作压力' }],
           experiences: [],
-          opinions: [],
-          observationSummary: '',
+          observations: [],
         },
       })
     );
@@ -69,14 +68,16 @@ describe('BaseAction.formatMemoryContext', () => {
     expect(result).not.toContain('## 综合观察');
   });
 
-  it('formats all four sections when populated', () => {
+  it('formats all three sections when populated', () => {
     const result = action.testFormatMemoryContext(
       makeContext({
         memoryContext: {
           worldFacts: [{ content: '用户自述失眠3个月' }],
           experiences: [{ content: '第1次会谈讨论了家庭关系' }],
-          opinions: [{ content: '可能有完美主义倾向', confidence: 0.75 }],
-          observationSummary: '用户面对工作环境时有明显压力反应',
+          observations: [
+            { content: '可能有完美主义倾向' },
+            { content: '用户面对工作环境时有明显压力反应' },
+          ],
         },
       })
     );
@@ -84,25 +85,23 @@ describe('BaseAction.formatMemoryContext', () => {
     expect(result).toContain('用户自述失眠3个月');
     expect(result).toContain('## 历史经历');
     expect(result).toContain('第1次会谈讨论了家庭关系');
-    expect(result).toContain('## 判断与推论');
-    expect(result).toContain('可能有完美主义倾向');
-    expect(result).toContain('置信度: 75%');
     expect(result).toContain('## 综合观察');
+    expect(result).toContain('可能有完美主义倾向');
     expect(result).toContain('用户面对工作环境时有明显压力反应');
   });
 
-  it('renders confidence as percentage', () => {
+  it('annotates proofCount as evidence strength (ADR 005 决策 3)', () => {
     const result = action.testFormatMemoryContext(
       makeContext({
         memoryContext: {
           worldFacts: [],
           experiences: [],
-          opinions: [{ content: '轻度焦虑', confidence: 0.3 }],
-          observationSummary: '',
+          observations: [{ content: '轻度焦虑', proofCount: 3 }, { content: '无证据支撑的猜测' }],
         },
       })
     );
-    expect(result).toContain('置信度: 30%');
+    expect(result).toContain('轻度焦虑（支撑证据 3 条）');
+    expect(result).not.toContain('支撑证据 0 条');
   });
 
   it('annotates source channel/credibility/time on entries (决策 4)', () => {
@@ -124,8 +123,7 @@ describe('BaseAction.formatMemoryContext', () => {
               sourceCredibility: 'medium',
             },
           ],
-          opinions: [],
-          observationSummary: '',
+          observations: [],
         },
       })
     );
@@ -143,8 +141,7 @@ describe('BaseAction.formatMemoryContext', () => {
         memoryContext: {
           worldFacts: [{ content: '用户报告工作压力' }],
           experiences: [],
-          opinions: [],
-          observationSummary: '',
+          observations: [],
         },
       })
     );

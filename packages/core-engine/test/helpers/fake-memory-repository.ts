@@ -34,8 +34,7 @@ export class FakeMemoryRepository implements MemoryRepository {
     return {
       worldFacts: [],
       experiences: [],
-      opinions: [],
-      observationSummary: '',
+      observations: [],
     };
   }
 
