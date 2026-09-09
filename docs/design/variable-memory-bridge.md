@@ -17,6 +17,8 @@ last_updated: 2026-09-09
 > ⚠️ **校准（2026-09-08 · ADR 005 生效）**：Hindsight 已删除 opinion 类型（2026 年初起），职能拆至 observation（自动 consolidate 的原子信念 + 证据）与 mental model（常驻公式化判断）。本文原"Hindsight Opinion"承接与"confidence 分数对比"的合并策略一并修订——临床判断的动态承载改为 observation + mental model，比较信号改为可核验的客观证据信号，无数值 confidence（见 `decisions/004` 决策 1/6 修订与 `decisions/005` 决策 1/3）。
 >
 > ⚠️ **修订（2026-09-09 · v0.2.0，人批准）**：证据驱动修订三件事——(1) 新增**变量消费方式二分**（§2.4）：条件消费需标量 → 快照缓存模型；插值消费不需标量 → 收缩为 memory_query 声明 + 记忆上下文注入（快通道推广）；(2) 修正**合并策略**（§4.2）：按时机分工——新鲜度层级上 piggyback（看得见 {{chat}}）严格新于 recall（滞后于 per-action 异步 retain），原"recall 时效更优时覆盖"分支会话内不可达；(3) 快照增加**证据锚**字段（§4.5 Phase D，可互查原则 3 + ADR 005 客观信号，无数值 confidence）。
+>
+> ⚠️ **裁决（2026-09-09 · ADR 007 优先，人已裁定）**：v0.2.0 与 [007 ADR](decisions/007-variable-document-boundary.md) 矛盾处以 007 为准——(1) 跨会话权威：v0.2.0「快照是可重建缓存（权威在记忆）」改为信息点文档唯一权威，装载读文档、recall 只兜底（007 决策 2/4）；(2) 异步 recall 回包不再写变量（evidence 锚 / 空值兜底路径取消），会话内唯一刷新源是 piggyback（007 决策 6）。冲突区段的完整修订由 backlog Epic D [design] 故事执行。
 
 ---
 

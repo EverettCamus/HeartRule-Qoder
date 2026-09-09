@@ -51,11 +51,11 @@
 
 > 来源意图：意图区「变量职责收缩」
 
-| 状态    | 类型           | 故事                                                                                                          | 关联                                                             |
-| ------- | -------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| ready   | [design]       | memory-framework + variable-memory-bridge 按 ADR 007 修订（职责边界、双路径收缩、autoRefresh 矩阵、迁移策略） | [007 ADR](../design/decisions/007-variable-document-boundary.md) |
-| backlog | [intelligence] | 信息点文档机制实现：文档模板+数据区、映射装载（hydrate）与写回、版本与 provenance                             | 007 ADR 决策 2/3/4/5                                             |
-| backlog | [feature]      | 全局变量取消迁移：global.yaml、user_global_variables 表、三层作用域、存量脚本                                 | 007 ADR 决策 2                                                   |
+| 状态    | 类型           | 故事                                                                                                                                                                   | 关联                                                             |
+| ------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| ready   | [design]       | memory-framework + variable-memory-bridge 按 ADR 007 修订（职责边界、双路径收缩、autoRefresh 矩阵、迁移策略）；与 bridge v0.2.0 矛盾处以 007 为准（2026-09-09 人裁定） | [007 ADR](../design/decisions/007-variable-document-boundary.md) |
+| backlog | [intelligence] | 信息点文档机制实现：文档模板+数据区、映射装载（hydrate）与写回、版本与 provenance                                                                                      | 007 ADR 决策 2/3/4/5                                             |
+| backlog | [feature]      | 全局变量取消迁移：global.yaml、user_global_variables 表、三层作用域、存量脚本                                                                                          | 007 ADR 决策 2                                                   |
 
 ## 智能设计议题（Exploration）
 
