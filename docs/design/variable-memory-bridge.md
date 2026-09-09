@@ -1,6 +1,6 @@
 ---
 status: decision-recorded
-last_updated: 2026-09-08
+last_updated: 2026-09-09
 ---
 
 # 变量-记忆桥接设计
@@ -11,10 +11,12 @@ last_updated: 2026-09-08
 > - 关联：[recall 快慢通道设计](ai-ask-memory-recall.md) — 变量通过 recall 通道检索记忆
 > - 关联：[意识系统设计](consciousness-system.md) — 意识同时依赖变量和记忆两个数据源
 >
-> **版本**: v0.1.1
-> **日期**: 2026-06-03
+> **版本**: v0.2.0
+> **创建**: 2026-06-03 · **修订**: 2026-09-09
 >
 > ⚠️ **校准（2026-09-08 · ADR 005 生效）**：Hindsight 已删除 opinion 类型（2026 年初起），职能拆至 observation（自动 consolidate 的原子信念 + 证据）与 mental model（常驻公式化判断）。本文原"Hindsight Opinion"承接与"confidence 分数对比"的合并策略一并修订——临床判断的动态承载改为 observation + mental model，比较信号改为可核验的客观证据信号，无数值 confidence（见 `decisions/004` 决策 1/6 修订与 `decisions/005` 决策 1/3）。
+>
+> ⚠️ **修订（2026-09-09 · v0.2.0，人批准）**：证据驱动修订三件事——(1) 新增**变量消费方式二分**（§2.4）：条件消费需标量 → 快照缓存模型；插值消费不需标量 → 收缩为 memory_query 声明 + 记忆上下文注入（快通道推广）；(2) 修正**合并策略**（§4.2）：按时机分工——新鲜度层级上 piggyback（看得见 {{chat}}）严格新于 recall（滞后于 per-action 异步 retain），原"recall 时效更优时覆盖"分支会话内不可达；(3) 快照增加**证据锚**字段（§4.5 Phase D，可互查原则 3 + ADR 005 客观信号，无数值 confidence）。
 
 ---
 
@@ -59,6 +61,34 @@ Phase 1 完成后，Hindsight 已经可以跨会话 retain/recall/reflect。但�
 变量的权威来源是记忆，而不是反过来。
 ```
 
+### 2.4 消费方式二分：语义结论再分两类
+
+"变量该存什么"按消费方式再切一刀——同一个语义结论（如"核心信念"），消费方式不同，存法不同：
+
+```
+消费方式            要的是                        存储模型
+──────────────────────────────────────────────────────────────
+条件消费            精确标量（驱动分支/退出判断）   快照缓存：存值 + 消费前 piggyback
+（condition /        没有值就无法分支               刷新 + 会话结束 reconcile + 证据锚
+  exit_decision /
+  队列调整）
+
+插值消费            符合当前理解的表达             不存值：memory_query 声明 + 记忆上下文
+（仅 prompt/模板     不需要精确值，措辞允许演化      注入（mental model / observation 已在
+  插值）                                           {{memory_context}}；消费点按需
+                                                   recall 补齐，0 LLM、≤200ms 预算，
+                                                   继承 ADR 006 决策 2/3 的快通道约束）
+```
+
+**分类规则**：按变量的**全部引用点**定类——任何一处出现在 condition / exit_decision / 队列调整 → 标量类（缓存模型）；仅出现在 prompt/模板插值 → 可收缩类（memory_query 声明）。
+
+**两条配套纪律**：
+
+1. **静态校验兜底误用**（渐进规则化原则 3）：引擎加载 YAML 时分析引用位置，可收缩类声明出现在条件位置 → 报错，不静默走错分支。
+2. **可追溯不丢失**：插值消费点的 `memory_query` 声明保留了维度锚——"AI 为什么这么说"仍可回溯到记忆证据链（observation 的 sourceFactIds / mental model 的 based_on），不依赖变量快照的写入记录。
+
+**为什么收缩成立（ADR 005 之后更强）**：案例公式化判断（核心信念、主要压力源等）已由 mental model 承载——会话启动零 LLM 读入 {{memory_context}}、后台随证据重写。插值消费的 LLM 当轮已持有最新判断，再存标量副本 = 同一信息第三处存（表 + mental model + 快照），正是 §1 问题 1 的病。收缩后无值即无过期，且 look-ahead/piggyback 集合缩小（token 成本下降）。
+
 ---
 
 ## 3. 变量的双重来源
@@ -71,15 +101,18 @@ Phase 1 完成后，Hindsight 已经可以跨会话 retain/recall/reflect。但�
   → 从用户单次回复中提取精确值
   → 适用：单次即可收集的信息
 
-来源 2: 从会谈记忆中调取 (Phase 2b 新增)
-  ai_think 调用 recall() 从 Hindsight 获取
-  → 用户可能跨多次对话提到同一个信息
-  → 不需要反复向用户收集，也不需要全局变量持久化
-  → 示例：
-    recall("用户的核心信念")
-    → World: "用户自述'永远不够好'的感觉源于母亲高期望"
-    → Observation: "完美主义倾向与童年条件化自我价值感相关"
-    → ai_think 综合后写入变量 {核心信念} = "完美主义倾向（与童年条件化自我价值感相关）"
+来源 2: 从会谈记忆中调取 (Phase 2b 新增，服务于条件消费的标量变量)
+  案例公式化变量（核心信念、主要压力源等）: 读取 mental model（零 LLM）
+    → 会话启动已注入 {{memory_context}}，ai_think 需要标量时直接取 mental model 内容
+  非公式化变量: ai_think 调用 recall() 综合
+    → 用户可能跨多次对话提到同一个信息
+    → 不需要反复向用户收集，也不需要全局变量持久化
+    → 示例：
+      recall("用户的核心信念")
+      → World: "用户自述'永远不够好'的感觉源于母亲高期望"
+      → Observation: "完美主义倾向与童年条件化自我价值感相关" (proofCount: 3)
+      → ai_think 综合后写入变量 {核心信念}，evidence 锚指向 observation 的 sourceFactIds
+  插值消费的变量不经过这条路径——按 §2.4 收缩为 memory_query 声明，无值可写
 ```
 
 ---
@@ -98,7 +131,7 @@ Action N 执行:
     └── Action N+1 的引用变量 (如已变化则更新)  ← 蹭车刷新
 
   → 同步写入 VariableStore
-  → 异步发起 Hindsight recall (双保险)
+  → 异步发起 Hindsight recall (校准锚, 见 §4.2)
 ```
 
 **成本**：输出 token 增加 ~50-200 per 变量，输入 token 增加 ~100-300 per 变量（提示 LLM "顺便判断这些变量是否需要更新"）。无额外 LLM 调用。
@@ -115,7 +148,7 @@ Action N 执行:
 
 ### 4.2 双路径：同步 LLM + 异步 Hindsight
 
-只靠 LLM piggyback 有一个弱点：LLM 在生成回复时主要注意力在"当前要问用户什么"，对被动评估的变量可能关注不足。Hindsight recall 虽然异步，但返回的是结构化、经过三网络分类（world/experience/observation）的记忆，准确度更高。
+只靠 LLM piggyback 有一个弱点：LLM 在生成回复时主要注意力在"当前要问用户什么"，对被动评估的变量可能关注不足。Hindsight recall 返回的是结构化、经过三网络分类（world/experience/observation）的记忆，且 observation 带证据溯源（proofCount / sourceFactIds）——作为**校准**来源更有据可查。
 
 **双路径设计**：
 
@@ -131,21 +164,35 @@ Action N 执行时:
   ┌─────────────────────────────────────────────────────┐
   │ 路径 2 (异步): Hindsight recall                     │
   │   发起 recall("核心信念") 等查询                     │
-  │   → 结果回来后比较证据强度与时效                     │
-  │   → 如果 Hindsight 的观察更新/证据更充分，覆盖        │
+  │   → 回包不抢写：更新快照的 evidence 锚               │
+  │   → piggyback 值为空/低质量时兜底写入                │
   │   → 标记 source: 'hindsight_recall'                 │
   │   → 作为长期记忆的校准锚点                           │
   └─────────────────────────────────────────────────────┘
 ```
 
-**合并策略**：异步结果返回时，用证据强度的客观信号比较（ADR 005 决策 3——记忆层不持久化数值 confidence，只用可核验信号）：
+**新鲜度层级**（合并策略的依据，任一时刻从新到旧）：
 
 ```
-if (hindsightObservation 比 piggyback 值更新鲜（recall 时间戳 / 条目时间线）||
-    hindsightObservation 证据更充分（sourceFactIds 更多 / refine 方向 strengthened）||
-    对应 mental model 标记 is_stale（提示旧公式化已过期，需以新证据覆盖）) {
-  覆盖变量值，source = 'hindsight_recall'
-}
+{{chat}} / messages 表（含最新用户输入）
+  > piggyback 视野（当轮 LLM 调用看到 {{chat}}）
+  > retain → Hindsight store（per-action 异步，滞后当前在途对话）
+  > recall 读到内容（读上面的 store）
+  > 上次会话结束时的快照
+```
+
+推论：**会话内 recall 永远不比 piggyback 更新鲜**——两者之间隔着未 retain 的在途对话。原合并策略中"recall 时效优于 piggyback 时覆盖"的分支不可达，删除。
+
+**合并策略（按时机分工，证据强度用 ADR 005 客观信号，无数值 confidence）**：
+
+```
+会话内        piggyback 写入即生效（最鲜，无需仲裁）
+异步 recall  回包只更新 evidence 锚（sourceFactIds / proofCount / refine 方向
+              / mental model is_stale）；piggyback 值为空或低质量时兜底
+会话结束      reconcile 对账：mental model / observation 基于新证据重写
+              （非 is_stale）→ 更新快照 + 记证据锚，source = 'session_reconcile'
+下次会话启动   快照是可重建缓存（权威在记忆）：getMentalModel（零 LLM 读）
+              + 批量 recall 初值 → 覆盖旧快照
 ```
 
 #### Hindsight 在本 session 内的角色
@@ -207,6 +254,10 @@ Action `ask_mood` 的 look-ahead 收集：`{核心信念, 应对模式, 主要�
 1. Action N 是 ai_say (纯输出, 无 LLM 输出 schema)
    → 回退到 Action N-1 的 look-ahead 结果
    → 如果仍然没有，使用当前 VariableStore 中的值（可能过时）
+   → 决议：不为 ai_say 加 piggyback——ai_say 与前一 action 之间无用户输入，
+     其 LLM 视野与前一 ai_ask 相同，评估证据零增量；链中插值消费经 §2.4
+     收缩后不依赖标量；作者在意新鲜度时显式插入 ai_think（既定节点：
+     内部推理 → 结论写入变量）
 
 2. Action N 是 session 第一个 action (冷启动)
    → 依赖 Session 初始化时的 Hindsight recall (session-orchestrator.ts:253)
@@ -316,18 +367,52 @@ lookAheadVariables(actionN+1)
 
 ```typescript
 // ADR 005 决策 3：不保留 confidence: number ——
-// 证据强度由 recall 命中的 observation 信号（新鲜度 / proofCount / refine 方向）+ mental model is_stale 表达
+// 可信度由证据锚的客观信号表达；evidence 同时满足可互查原则 3
+//（"从记忆派生的变量值能反向追溯到支撑它的原始记忆片段"）
 interface VariableValue {
   value: unknown;
   type: VariableType;
-  lastUpdated: string;
-  source: 'user_input' | 'llm_extraction' | 'llm_piggyback' | 'hindsight_recall';
-  refreshQuery?: string;
   scope: VariableScope;
+  source:
+    | 'user_input' // ai_ask 从用户输入提取
+    | 'llm_extraction' // ai_ask LLM 提取
+    | 'llm_piggyback' // 消费前 look-ahead 蹭车刷新
+    | 'hindsight_recall' // 异步 recall 兜底写入
+    | 'mental_model' // 案例公式化：mental model 读取（零 LLM）
+    | 'session_reconcile'; // 会话结束对账写回
+  lastUpdated: string; // 客观时间戳（禁的是 LLM 自评分数，不禁时间戳）
+  evidence?: {
+    sourceFactIds?: string[]; // observation 溯源事实（可互查）
+    proofCount?: number; // 证据条数
+    mentalModelId?: string; // mental model 承载时
+    isStale?: boolean; // mental model 过期信号
+    refineDirection?: 'strengthened' | 'weakened'; // refine 历史方向
+  };
+  refreshQuery?: string;
 }
 ```
 
 **关键文件**：`packages/shared-types/src/domain/variable.ts`
+
+#### Phase E: 消费方式静态校验
+
+在 YAML 脚本加载时分析变量引用位置（§2.4）：
+
+- 收集每个变量的全部引用点（prompt 插值 / condition / exit_decision / 队列调整）
+- 可收缩类声明（仅插值引用）出现在条件位置 → 加载报错
+- 校验结果写入脚本校验输出，供脚本编辑器展示
+
+**关键文件**：脚本解析/校验处（core-engine script 解析模块，落点以实现为准）
+
+#### Phase F: 会话结束 reconcile 对账
+
+会话结束时，对语义标量变量做对账（§4.2 合并策略）：
+
+- reflect / mental model 后台重写基于新证据（非 is_stale）→ 更新快照
+- 记录 evidence 锚（sourceFactIds / proofCount / mentalModelId）
+- 标记 source: 'session_reconcile'
+
+**关键文件**：`packages/api-server/src/services/session-orchestrator.ts`
 
 ### 4.6 YAML 完整示例
 
@@ -358,7 +443,7 @@ phases:
                 - varName: 情绪触发场景
                   method: llm
             # Action 1 的 LLM 输出中已刷新了 {情绪问题}
-            # 如果 Hindsight 中有更新的判断，异步回调会覆盖
+            # 异步 recall 回包更新 evidence 锚，不抢写（§4.2 合并策略）
 
           # Action 3: 用 ai_think 综合分析，从记忆补充变量
           - action_id: think_synthesize
@@ -384,18 +469,21 @@ phases:
 
 ## 5. 当前实现状态
 
-| 能力                       | 状态        | 说明                                                           |
-| -------------------------- | ----------- | -------------------------------------------------------------- |
-| ai_ask 对话中提取变量      | ✅ Phase 0  | direct / pattern / llm 三种方法                                |
-| ai_think 占位符填充        | ✅ Phase 0  | 仅硬编码占位符，不做真实推理                                   |
-| Session 启动时 recall      | ✅ Phase 1  | 固定查询「用户核心问题、关键事件、治疗进展」                   |
-| `{%memory_context%}` 注入  | ✅ Phase 1  | ai_ask / ai_say 模板中的记忆上下文占位符                       |
-| per-Action retain          | ✅ Phase 2a | Action 完成时 retain 完整对话片段                              |
-| Look-Ahead 变量解析器      | ❌ 待实现   | §4.5 Phase A: ScriptExecutor 中解析下一个 action 的变量引用    |
-| AiAskAction Piggyback 刷新 | ❌ 待实现   | §4.5 Phase B: LLM 输出 schema 中追加 refresh 字段              |
-| 异步 Hindsight Recall      | ❌ 待实现   | §4.5 Phase C: action 完成后异步 recall，择优覆盖               |
-| VariableMetadata 扩展      | ❌ 待实现   | §4.5 Phase D: source 字段扩展 llm_piggyback / hindsight_recall |
-| 全局变量收缩               | ❌ 持续     | 需要审计现有脚本中的全局变量，逐步迁移                         |
+| 能力                       | 状态        | 说明                                                          |
+| -------------------------- | ----------- | ------------------------------------------------------------- |
+| ai_ask 对话中提取变量      | ✅ Phase 0  | direct / pattern / llm 三种方法                               |
+| ai_think 占位符填充        | ✅ Phase 0  | 仅硬编码占位符，不做真实推理                                  |
+| Session 启动时 recall      | ✅ Phase 1  | 固定查询「用户核心问题、关键事件、治疗进展」                  |
+| `{%memory_context%}` 注入  | ✅ Phase 1  | ai_ask / ai_say 模板中的记忆上下文占位符                      |
+| per-Action retain          | ✅ Phase 2a | Action 完成时 retain 完整对话片段                             |
+| Look-Ahead 变量解析器      | ❌ 待实现   | §4.5 Phase A: ScriptExecutor 中解析下一个 action 的变量引用   |
+| AiAskAction Piggyback 刷新 | ❌ 待实现   | §4.5 Phase B: LLM 输出 schema 中追加 refresh 字段             |
+| 异步 Hindsight Recall      | ❌ 待实现   | §4.5 Phase C: action 完成后异步 recall，择优覆盖              |
+| VariableMetadata 扩展      | ❌ 待实现   | §4.5 Phase D: source 枚举扩展 + evidence 证据锚               |
+| 消费方式静态校验           | ❌ 待实现   | §4.5 Phase E: YAML 加载时引用点分析，可收缩类误用条件位置报错 |
+| 会话结束 reconcile 对账    | ❌ 待实现   | §4.5 Phase F: 会话结束基于新证据更新快照 + 证据锚             |
+| 插值消费快通道 recall 注入 | ❌ 待实现   | §2.4: ai-ask-memory-recall 快通道推广到插值消费点（0 LLM）    |
+| 全局变量收缩               | ❌ 持续     | 按 §6 消费方式二分审计现有脚本中的全局变量，逐步迁移          |
 
 ---
 
@@ -409,11 +497,13 @@ phases:
 操作参数（保留在变量）:
   - 咨询师名、用户名、当前会谈次数、max_rounds
 
-语义值（应迁移到记忆）:
-  - 核心信念 → recall("用户的核心信念")
-  - 主要压力源 → recall("用户的主要压力来源")
-  - 情绪状态 → recall("用户当前的情绪状态")
-  - 应对模式 → recall("用户的应对模式")
+语义值（按消费方式二分，§2.4）:
+  条件消费 → 保留标量（缓存模型）:
+    - 情绪状态 → autoRefresh: true, refreshQuery: '用户当前的情绪状态和变化趋势'
+  插值消费 → 收缩为 memory_query 声明（不存值）:
+    - 核心信念 → memory_query: '用户的核心信念'
+    - 主要压力源 → memory_query: '用户的主要压力来源'
+    - 应对模式 → memory_query: '用户的应对模式'
 
 全局事实（保留在变量，但来源标记为记忆）:
   - PHQ-9得分 → 量表提交时写入变量，同时 retain 到 Hindsight
@@ -421,7 +511,7 @@ phases:
 
 ### 6.2 渐进式迁移
 
-1. 先在新的 YAML 脚本中为变量配置 `autoRefresh` + `refreshQuery` 属性
+1. 先在新的 YAML 脚本中为变量配置 `autoRefresh` + `refreshQuery` 属性；仅插值消费的语义变量直接声明为 memory_query（可收缩类），不再做变量声明
 2. 旧的全局变量保持不变，不做破坏性变更（默认 `autoRefresh: true`，行为向后兼容）
 3. 当 piggyback 或 Hindsight recall 更新了变量值时，记录 `source` 为 `llm_piggyback` 或 `hindsight_recall`
 4. 逐步确认变量值从记忆获取的准确性后，对固定变量设置 `autoRefresh: false`，移除对应的全局变量声明
@@ -430,15 +520,61 @@ phases:
 
 ## 7. 设计决策记录
 
-| 决策                      | 选择                                                                    | 理由                                                                                                           |
-| ------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| 变量收缩范围              | 仅设计文档，不立即实施                                                  | 需要先审计现有脚本中的全局变量使用情况                                                                         |
-| 变量刷新策略              | Piggyback（蹭已有 LLM 调用）                                            | 边际成本 ~0.1 倍 LLM 调用 vs 独立 ai_think 的 1 倍                                                             |
-| 刷新时机                  | Action N 执行时刷新 Action N+1 的变量                                   | 确保变量在被使用前已更新；per-action retain 在秒级完成，时间窗口充裕                                           |
-| 双路径                    | 同步 LLM piggyback + 异步 Hindsight recall                              | LLM 保证及时性（下一 action 立即可用），Hindsight 保证准确性（结构化记忆 > LLM 被动评估）                      |
-| Look-ahead 深度           | 仅看下一个 action                                                       | 降低解析复杂度；多看几个 action 的收益递减                                                                     |
-| 分支处理                  | 收集所有分支的变量                                                      | 变量数量少（1-5），全量收集不造成显著成本；避免路径预测错误                                                    |
-| Hindsight 本 session 使用 | 支持                                                                    | Per-action retain 是异步快速的，不需要等跨 session                                                             |
-| autoRefresh 默认          | `true`                                                                  | 大多数变量需要保持新鲜；固定信息（人口学、量表得分）显式关闭                                                   |
-| 合并策略                  | Hindsight 的客观证据信号更优时覆盖（ADR 005 决策 3，无数值 confidence） | LLM piggyback 是"快速但不一定准确"，Hindsight 是"稍慢但结构化"；证据强度用 proofCount / 新鲜度 / is_stale 判断 |
-| 全局变量审计              | 后续 YAML 脚本层面做                                                    | 不涉及代码改动，由咨询师在脚本工程中标记                                                                       |
+| 决策                      | 选择                                                                                   | 理由                                                                                                                                                              |
+| ------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 变量收缩范围              | 仅设计文档，不立即实施                                                                 | 需要先审计现有脚本中的全局变量使用情况                                                                                                                            |
+| 变量刷新策略              | Piggyback（蹭已有 LLM 调用）                                                           | 边际成本 ~0.1 倍 LLM 调用 vs 独立 ai_think 的 1 倍                                                                                                                |
+| 刷新时机                  | Action N 执行时刷新 Action N+1 的变量                                                  | 确保变量在被使用前已更新；per-action retain 在秒级完成，时间窗口充裕                                                                                              |
+| 双路径                    | 同步 LLM piggyback（会话内唯一刷新源）+ 异步 Hindsight recall（校准锚）                | piggyback 看得见 {{chat}} 最鲜；recall 结构化带证据但滞后于 retain——不赛跑新鲜度，回包只更新 evidence 锚 + 空值兜底                                               |
+| Look-ahead 深度           | 仅看下一个 action                                                                      | 降低解析复杂度；多看几个 action 的收益递减                                                                                                                        |
+| 分支处理                  | 收集所有分支的变量                                                                     | 变量数量少（1-5），全量收集不造成显著成本；避免路径预测错误                                                                                                       |
+| Hindsight 本 session 使用 | 支持                                                                                   | Per-action retain 是异步快速的，不需要等跨 session                                                                                                                |
+| autoRefresh 默认          | `true`                                                                                 | 大多数变量需要保持新鲜；固定信息（人口学、量表得分）显式关闭                                                                                                      |
+| 合并策略                  | 按时机分工：会话内 piggyback 生效；recall 只校准；会话结束 reconcile；下次启动重建快照 | 新鲜度层级上 recall 严格滞后于 piggyback（per-action 异步 retain），"recall 更时效"分支不可达；证据强度用 proofCount / sourceFactIds / is_stale（ADR 005 决策 3） |
+| 消费方式二分              | 条件消费 → 标量缓存；插值消费 → 收缩为 memory_query + 记忆上下文注入                   | 插值要的是"符合当前理解的表达"而非精确值；ADR 005 后 mental model 已在注入路径，标量副本是第三处存储；收缩后无值无过期，piggyback 集合缩小                        |
+| ai_say 链刷新             | 不覆盖                                                                                 | ai_say 与前一 action 间无用户输入，piggyback 评估证据零增量；插值收缩后链中需求消失；作者在意时显式插入 ai_think                                                  |
+| 快照字段                  | 证据锚（evidence: sourceFactIds/proofCount/mentalModelId/is_stale），无数值 confidence | 可互查原则 3（派生值回溯原始记忆片段）+ ADR 005 决策 3（LLM 自评分数无标定，用客观信号）                                                                          |
+| 全局变量审计              | 后续 YAML 脚本层面做                                                                   | 不涉及代码改动，由咨询师在脚本工程中标记                                                                                                                          |
+
+---
+
+## 8. 案例验证
+
+> 机制讨论的模拟对话案例（rhythm §8 案例验证要求：人确认合理性后作为验收处案例的单一出处）。
+
+### 案例 A：条件消费标量 —— piggyback 刷新生命周期
+
+```
+会话 2 启动（核心信念已有 mental model 记录）:
+  [启动] getMentalModel("核心信念公式化") → 快照 {核心信念} = "完美主义倾向（源于母亲高期望）"
+         source: mental_model, evidence: { mentalModelId, isStale: false }
+  ...
+  Action k: ai_ask「最近工作压力大吗」
+    用户: "上周述职被领导说了两句，我又觉得自己不够好了"
+    → Action k 的 LLM 输出附带 look-ahead 刷新 {核心信念}（Action k+1 的 condition 引用）:
+      值不变（新证据未推翻公式化），写入快照 source: llm_piggyback
+    → 异步 recall 回包: 更新 evidence 锚（observation proofCount +1），不覆盖值
+  Action k+1: condition "核心信念 == '我不够好'" → 读快照，确定、便宜
+  [会话结束] reconcile: mental model 非 is_stale、无重写 → 快照保留 + evidence 锚落库
+```
+
+### 案例 B：插值消费收缩 —— memory_query + 记忆上下文注入
+
+```
+原脚本: 全局变量 主要压力源 + ai_say 模板 "让我们继续聊聊{{主要压力源}}..."
+收缩后:
+  ai_say config:
+    memory_query: '用户的主要压力来源'
+  → 执行时快通道 recall（≤200ms，无 LLM）注入该 action 的 {{memory_context}}
+  → LLM 自然引用: "上次你提到主要压力来自和上级的关系，最近这方面有变化吗？"
+  → 无标量、无过期、措辞随当前理解；"为什么这么说"可回溯 observation 的 sourceFactIds
+```
+
+### 案例 C：ai_say 链决议
+
+```
+连续 ai_say（心理教育段落）中模板引用 {核心信念}:
+  → 经 §2.4 收缩为 memory_query 注入，无标量需求（决议不覆盖 ai_say 的代价被消掉）
+若脚本作者需要跨轮一致的表述或条件分支:
+  → 显式插入 ai_think（output_variables: [核心信念]），作为可控可调试的刷新点
+```
