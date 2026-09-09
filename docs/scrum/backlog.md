@@ -19,11 +19,13 @@
 
 > 来源意图：意图区「记忆系统收尾与封板」
 
-| 状态  | 类型      | 故事                                                                            | 关联                                                                                            |
-| ----- | --------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| ready | [feature] | Hindsight 记忆集成收尾验证：跑通 verify-mental-model.ts，确保对 docker 后端全绿 | [004 ADR](../design/decisions/004-memory-model-calibration.md) · scripts/verify-mental-model.ts |
-| ready | [design]  | memory-retrieval-types 从 active → decision-recorded（补 ADR）                  | [记忆调取机制](../design/memory-retrieval-types.md)                                             |
-| ready | [design]  | ai-ask-memory-recall 从 active → decision-recorded（补 ADR）                    | [ai_ask 记忆调用](../design/ai-ask-memory-recall.md)                                            |
+| 状态    | 类型           | 故事                                                                                            | 关联                                                                                                                     |
+| ------- | -------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| ready   | [feature]      | Hindsight 记忆集成收尾验证：跑通 verify-mental-model.ts，确保对 docker 后端全绿                 | [004 ADR](../design/decisions/004-memory-model-calibration.md) · scripts/verify-mental-model.ts                          |
+| backlog | [intelligence] | ai_ask 快通道实现：每轮 recall + 分层 memoryContext（baseline/fastHits/deepInsights）+ 分段渲染 | [ai_ask 记忆调用 §3/§6](../design/ai-ask-memory-recall.md) · [006 ADR](../design/decisions/006-retrieval-layer-scope.md) |
+| backlog | [intelligence] | 三路查询实证：类似/关联事件视角的命中率对比验证（默认关闭，证据通过才开启）                     | [记忆调取机制 §2.11](../design/memory-retrieval-types.md) · 006 ADR 决策 2                                               |
+| backlog | [intelligence] | 慢通道实现：insightForSlowThinking 触发 → 两阶段深度检索 → DeepInsight 注入                     | [意识系统 §2.6](../design/consciousness-system.md) · 006 ADR 决策 4                                                      |
+| backlog | [intelligence] | require 收集紧迫度核实：在 exit-decision 上下文中评估是否重新设计                               | 006 ADR 决策 6                                                                                                           |
 
 ### Epic B · 议程主线 —— 意识层与话题队列
 
@@ -48,13 +50,14 @@
 
 > 智能思路讨论的沉淀区。机制文档与 ADR 落在 `docs/design/`，此处仅留探索项。每次讨论必须收敛为机制文档 / ADR / spec / backlog 故事（四选一）；未收敛前以探索项留此，注明未决问题。
 
-| 议题                           | 未决问题                                          | 备注                                        |
-| ------------------------------ | ------------------------------------------------- | ------------------------------------------- |
-| 意识层与主线引擎的接缝协议     | 触发检测（矛盾/情绪）到队列修改之间的具体事件契约 | 设计 active，检测定义已落 commit；属 Epic B |
-| 记忆快/慢双通道与 LLM 预算配合 | 慢通道 recall 何时触发、怎么控制成本              | 关联 ai-ask-memory-recall；属 Epic A        |
+| 议题                       | 未决问题                                          | 备注                                        |
+| -------------------------- | ------------------------------------------------- | ------------------------------------------- |
+| 意识层与主线引擎的接缝协议 | 触发检测（矛盾/情绪）到队列修改之间的具体事件契约 | 设计 active，检测定义已落 commit；属 Epic B |
 
 ## 已关闭（Done）
 
-| 故事                                       | 关闭日期   |
-| ------------------------------------------ | ---------- |
-| [feature] 建立开发节奏系统 + Sprint 0 恢复 | 2026-08-15 |
+| 故事                                                                        | 关闭日期   |
+| --------------------------------------------------------------------------- | ---------- |
+| [feature] 建立开发节奏系统 + Sprint 0 恢复                                  | 2026-08-15 |
+| [design] memory-retrieval-types 封板（active → decision-recorded，006 ADR） | 2026-09-09 |
+| [design] ai-ask-memory-recall 封板（active → decision-recorded，006 ADR）   | 2026-09-09 |
