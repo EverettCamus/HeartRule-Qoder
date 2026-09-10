@@ -30,7 +30,7 @@ description: 认领或开始 sprint-plan / backlog 中的某个 story、或用�
 2. **头脑风暴**：**REQUIRED SUB-SKILL:** Use superpowers:brainstorming（需求澄清，**不做领域建模**；既有流程类需求走其 Bounded 路径）→ **人审门：业务规则正确**
 3. **写 spec**：**REQUIRED SUB-SKILL:** Use heartrule-write-spec → **人审门：领域模型片段与意图一致**
 4. **写 plan**：**REQUIRED SUB-SKILL:** Use superpowers:writing-plans（plan 不新增领域建模；发现需调整模型 → 回第 3 步改 spec）→ **人审门：不违反架构约束**
-5. **实现与测试**：superpowers:executing-plans 或 superpowers:subagent-driven-development + superpowers:test-driven-development；完成后出 **DDD 合规自查报告**（格式见 `references/ddd-compliance-report.md`，检查依据 = `docs/design/architecture-constraints.md`；机械项 AI 查、语义项人抽查）——此步是唯一**抽查**环节（§4 协议表）。
+5. **实现与测试**：superpowers:executing-plans 或 superpowers:subagent-driven-development + superpowers:test-driven-development；完成后出 **DDD 合规自查报告**（格式见 `references/ddd-compliance-report.md`，检查依据 = `docs/design/foundation/architecture-constraints.md`；机械项 AI 查、语义项人抽查）——此步是唯一**抽查**环节（§4 协议表）。
 6. **验收**：**REQUIRED SUB-SKILL:** Use heartrule-accept-story（GWT/案例 + DoD + sprint-plan 标记 done）
 
 ## 人审门

@@ -1,6 +1,6 @@
 # Hindsight 核心理念
 
-> ⚠️ **校准（2026-09-08 · ADR 005）**：本文是 **arXiv 论文 + 上游早期版本（~v0.4）** 的快照——其中的 **Opinion Network 与数值 confidence 已被上游删除**（2026-01–04，观察见 `decisions/005-drop-opinions-domain-concept.md` 史实时间线）；当前上游模型 = **三类 fact type（world/experience/observation）+ mental model**（observation 自动 consolidate 带证据，不再"综合摘要"），HeartRule 领域模型跟随当前上游（`decisions/005` 决策 1/3）。本文作为论文年代的术语参考保留，不反映当前模型；阅读时以 [memory-framework](../design/memory-framework.md) §4.2 校准模型为准。
+> ⚠️ **校准（2026-09-08 · ADR 005）**：本文是 **arXiv 论文 + 上游早期版本（~v0.4）** 的快照——其中的 **Opinion Network 与数值 confidence 已被上游删除**（2026-01–04，观察见 `../design/decisions/005-drop-opinions-domain-concept.md` 史实时间线）；当前上游模型 = **三类 fact type（world/experience/observation）+ mental model**（observation 自动 consolidate 带证据，不再"综合摘要"），HeartRule 领域模型跟随当前上游（`decisions/005` 决策 1/3）。本文作为论文年代的术语参考保留，不反映当前模型；阅读时以 [memory-framework](../design/memory/memory-framework.md) §4.2 校准模型为准。
 >
 > **来源**: [Hindsight is 20/20: Building Agent Memory that Retains, Recalls, and Reflects](https://ar5iv.labs.arxiv.org/html/2512.12818) (arXiv:2512.12818, 2025-12)
 > **项目**: [github.com/vectorize-io/hindsight](https://github.com/vectorize-io/hindsight)

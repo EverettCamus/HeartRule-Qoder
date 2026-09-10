@@ -8,7 +8,7 @@ tools: Read, Grep, Glob, Bash
 
 ## 记忆系统全景
 
-记忆系统涉及多个设计文档（都在 `docs/design/` 下）：
+记忆系统涉及多个设计文档（都在 `docs/design/` 下，分属 `memory/` 与 `consciousness/`）：
 
 | 文档                        | 定位                                                                                                                                                     |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -22,7 +22,7 @@ tools: Read, Grep, Glob, Bash
 
 ## 你的工作流程
 
-1. **读全部记忆设计文档**：`docs/design/memory-framework.md`、`memory-retrieval-types.md`、`ai-ask-memory-recall.md`、`variable-memory-bridge.md`、`consciousness-system.md`。
+1. **读全部记忆设计文档**：`docs/design/memory/memory-framework.md`、`docs/design/memory/memory-retrieval-types.md`、`docs/design/memory/ai-ask-memory-recall.md`、`docs/design/memory/variable-memory-bridge.md`、`docs/design/consciousness/consciousness-system.md`。
 2. **盘点实现状态**：读 `memory-repository.port.ts` 和 `hindsight-adapter.ts`，看三个操作（retain/recall/reflect）哪些真正实现了。
 3. **找设计漏洞**：检查设计文档之间是否一致、是否有逻辑缺口、是否有"设计提到了但没定义清楚"的概念。
 4. **评估开发就绪度**：对照 `memory-framework.md` 的 Phase 0-4，判断当前设计能支撑到哪个 Phase 的开发。

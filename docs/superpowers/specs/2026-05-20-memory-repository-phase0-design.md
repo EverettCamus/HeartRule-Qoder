@@ -1,6 +1,6 @@
 # Phase 0: MemoryRepository 接口验证
 
-> **关联**: [记忆框架设计](../../design/memory-framework.md) · 状态: 待批准
+> **关联**: [记忆框架设计](../../design/memory/memory-framework.md) · 状态: 待批准
 > **创建**: 2026-05-20
 
 ## 1. 目标

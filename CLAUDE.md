@@ -321,7 +321,7 @@ Infrastructure Layer (external adapters)
 
 HeartRule's core principle: **In a constrained cognitive budget, use low-entropy symbolic structure (YAML + rules) to anchor high-entropy generative intelligence (LLM).**
 
-> Full theoretical framework: `docs/design/heartrule-design-philosophy-v2.md`.
+> Full theoretical framework: `docs/design/foundation/heartrule-design-philosophy-v2.md`.
 > This section is the **actionable subset** — use it for daily coding decisions.
 
 ### Three Core Concepts
@@ -454,13 +454,13 @@ Vitest config in root `vitest.config.ts` excludes `script-editor/` and `e2e/` fr
 
 Key architecture documents for ongoing and planned work:
 
-| Document                                         | Topic                                                                  |
-| ------------------------------------------------ | ---------------------------------------------------------------------- |
-| `docs/design/topic-unit-modeling.md`             | Core domain model: topic queue, action atoms, consciousness adjustment |
-| `docs/design/script-engine-design-principles.md` | DSL syntax design principles (linearity, no engineering, determinism)  |
-| `docs/design/consciousness-system.md`            | Consciousness layer design (triggers, interventions)                   |
-| `docs/design/memory-framework.md`                | Full memory system design (Hindsight integration)                      |
-| `docs/design/variable-memory-bridge.md`          | Variable ↔ Memory responsibility boundary                              |
-| `docs/design/ai-ask-memory-recall.md`            | Memory recall within ai_ask actions                                    |
-| `docs/ddd/strategic-design.md`                   | Bounded contexts and domain relationships                              |
-| `docs/ddd/context-map.md`                        | Context mapping diagrams                                               |
+| Document                                                    | Topic                                                                  |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `docs/design/topic/topic-unit-modeling.md`                  | Core domain model: topic queue, action atoms, consciousness adjustment |
+| `docs/design/foundation/script-engine-design-principles.md` | DSL syntax design principles (linearity, no engineering, determinism)  |
+| `docs/design/consciousness/consciousness-system.md`         | Consciousness layer design (triggers, interventions)                   |
+| `docs/design/memory/memory-framework.md`                    | Full memory system design (Hindsight integration)                      |
+| `docs/design/memory/variable-memory-bridge.md`              | Variable ↔ Memory responsibility boundary                              |
+| `docs/design/memory/ai-ask-memory-recall.md`                | Memory recall within ai_ask actions                                    |
+| `docs/ddd/strategic-design.md`                              | Bounded contexts and domain relationships                              |
+| `docs/ddd/context-map.md`                                   | Context mapping diagrams                                               |

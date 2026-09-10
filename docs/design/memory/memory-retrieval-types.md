@@ -9,14 +9,14 @@ last_updated: 2026-09-08
 >
 > - 上游: [记忆框架设计](memory-framework.md) — 五类记忆的定义与存储
 > - 关联: [ai_ask 记忆调用](ai-ask-memory-recall.md) — 快/慢双通道检索机制
-> - 关联: [意识系统设计](consciousness-system.md) — 慢通道的触发来源
+> - 关联: [意识系统设计](../consciousness/consciousness-system.md) — 慢通道的触发来源
 >
 > **版本**: v0.4.0 (封板修订)
 > **创建**: 2026-07-23 · **更新**: 2026-09-08
 >
-> **校准**: 2026-09-08 按 [005 去除 Opinions 概念](decisions/005-drop-opinions-domain-concept.md) 修订——client_memory 不再含自建 opinions；判断类内容由 observation（原子信念，带 source_fact_ids）与 mental model（常驻判断，based_on 证据链）承载，溯源/附着表述相应更新
+> **校准**: 2026-09-08 按 [005 去除 Opinions 概念](../decisions/005-drop-opinions-domain-concept.md) 修订——client_memory 不再含自建 opinions；判断类内容由 observation（原子信念，带 source_fact_ids）与 mental model（常驻判断，based_on 证据链）承载，溯源/附着表述相应更新
 >
-> **封板**: 2026-09-08 按 [006 检索层范围收敛](decisions/006-retrieval-layer-scope.md) 封板——本文定位为检索机制的**坐标系（描述语言）**而非强制契约；轴取值按第一个实现实例（ai_ask 快通道）标注校验状态（§5.1）
+> **封板**: 2026-09-08 按 [006 检索层范围收敛](../decisions/006-retrieval-layer-scope.md) 封板——本文定位为检索机制的**坐标系（描述语言）**而非强制契约；轴取值按第一个实现实例（ai_ask 快通道）标注校验状态（§5.1）
 
 ## 1. 设计思路
 
@@ -189,7 +189,7 @@ last_updated: 2026-09-08
 **关键点**：
 
 - 扩展查询的构造（抽象事件概念、确定时间窗口）由**引擎动态完成**，不要求脚本作者提供任何检索词
-- 抽象走规则，**零 LLM**（ADR 004：快通道走规则，LLM 升级移到慢通道）——若规则抽象命中率不理想，升级路径是慢通道（意识触发，见 [意识系统设计](consciousness-system.md)），不在快通道内加 LLM
+- 抽象走规则，**零 LLM**（ADR 004：快通道走规则，LLM 升级移到慢通道）——若规则抽象命中率不理想，升级路径是慢通道（意识触发，见 [意识系统设计](../consciousness/consciousness-system.md)），不在快通道内加 LLM
 - 判断"是否事件性描述"是零成本的启发式规则
 
 **降级策略**（启用时，受轴 9 `strict_200ms` 预算约束）：
@@ -201,7 +201,7 @@ last_updated: 2026-09-08
   3. 仍超 → 只留原始查询（现状行为）
 ```
 
-**动态觉察的补充路径**：引擎默认增强覆盖的是普适方向。对"这个时刻值得深挖"的判断，由意识层承担（已有慢通道机制，见 [意识系统设计](consciousness-system.md)）——引擎增强负责"主线即时理解"，意识层负责"支线深度分析"，两者互补。
+**动态觉察的补充路径**：引擎默认增强覆盖的是普适方向。对"这个时刻值得深挖"的判断，由意识层承担（已有慢通道机制，见 [意识系统设计](../consciousness/consciousness-system.md)）——引擎增强负责"主线即时理解"，意识层负责"支线深度分析"，两者互补。
 
 ---
 

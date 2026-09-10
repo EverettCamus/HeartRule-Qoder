@@ -8,15 +8,15 @@ last_updated: 2026-09-08
 > **关联**:
 >
 > - 上游：[记忆框架设计](memory-framework.md) — 本文定义记忆的检索层（快/慢双通道），框架定义记忆的数据层
-> - 关联：[意识系统设计](consciousness-system.md) — 意识通过 recall 通道获取跨轮记忆上下文；慢通道由意识层的 `insightForSlowThinking` 触发
+> - 关联：[意识系统设计](../consciousness/consciousness-system.md) — 意识通过 recall 通道获取跨轮记忆上下文；慢通道由意识层的 `insightForSlowThinking` 触发
 > - 关联：[变量-记忆桥接设计](variable-memory-bridge.md) — 变量如何通过 recall 从记忆取值
 >
 > **版本**: v0.5.0 (封板修订)
 > **创建**: 2026-05-21 · **更新**: 2026-09-08
 >
-> **校准**: 2026-09-08 按 [005 去除 Opinions 概念](decisions/005-drop-opinions-domain-concept.md) 修订——recall 侧重不再含 opinion（上游已删除该类型）：用户信念沉淀在 observation（带证据引文），常驻工作假设由 mental model 承载（会话启动读入 baseline，非逐轮 recall）
+> **校准**: 2026-09-08 按 [005 去除 Opinions 概念](../decisions/005-drop-opinions-domain-concept.md) 修订——recall 侧重不再含 opinion（上游已删除该类型）：用户信念沉淀在 observation（带证据引文），常驻工作假设由 mental model 承载（会话启动读入 baseline，非逐轮 recall）
 >
-> **封板**: 2026-09-08 按 [006 检索层范围收敛](decisions/006-retrieval-layer-scope.md) 封板——快通道为核心实现实例；慢通道机制移居 [意识系统设计](consciousness-system.md) §2.6，本文只保留 ai_ask 侧契约；`require` 收集紧迫度移出本文（exit-decision 关切，见 backlog）
+> **封板**: 2026-09-08 按 [006 检索层范围收敛](../decisions/006-retrieval-layer-scope.md) 封板——快通道为核心实现实例；慢通道机制移居 [意识系统设计](../consciousness/consciousness-system.md) §2.6，本文只保留 ai_ask 侧契约；`require` 收集紧迫度移出本文（exit-decision 关切，见 backlog）
 
 ## 1. 问题
 
@@ -35,7 +35,7 @@ ai_ask 启动
   │             ≤200ms，纯检索无 LLM 调用
   │
   └─[阶段2] 慢通道 (异步深度分析) ── 由意识层 `insightForSlowThinking` 触发
-                → 机制细节见 [意识系统设计 §2.6](consciousness-system.md)
+                → 机制细节见 [意识系统设计 §2.6](../consciousness/consciousness-system.md)
                 → 产出 DeepInsight 洞察 → 注入后续轮次
                 异步运行，不阻塞用户（本文 §4 仅保留 ai_ask 侧契约）
 ```
@@ -147,16 +147,16 @@ recall(userId, "{用户原话截断(≤200字)} —— 关于{当前收集的变
 
 ## 4. 阶段 2: 慢通道 —— 异步深度分析（ai_ask 侧契约）
 
-慢通道机制细节（两阶段深度检索、DeepInsight 卡片、硬限制、时效性门控、场景示例）见 [意识系统设计 §2.6](consciousness-system.md)。本文只保留 ai_ask 侧的契约：
+慢通道机制细节（两阶段深度检索、DeepInsight 卡片、硬限制、时效性门控、场景示例）见 [意识系统设计 §2.6](../consciousness/consciousness-system.md)。本文只保留 ai_ask 侧的契约：
 
 ### 4.1 触发来源
 
-慢通道由**意识层**触发——某个意识的 `insightForSlowThinking`（string，见 [意识系统 §2.3.3](consciousness-system.md)）非空时，触发深度 recall + LLM 综合。主线 LLM 不感知、不负责触发慢通道；主线和支线分工明确：主线回应来访者，支线觉察信号并决定"什么值得深挖"。
+慢通道由**意识层**触发——某个意识的 `insightForSlowThinking`（string，见 [意识系统 §2.3.3](../consciousness/consciousness-system.md)）非空时，触发深度 recall + LLM 综合。主线 LLM 不感知、不负责触发慢通道；主线和支线分工明确：主线回应来访者，支线觉察信号并决定"什么值得深挖"。
 
 ### 4.2 ai_ask 侧契约（硬约束）
 
 1. **fire-and-forget**：异步运行，不阻塞主线（5-30s，轴 9 `relaxed_30s`）
-2. **产出 DeepInsight 存入 `session.metadata.deepInsights`**（类型定义见 [意识系统 §2.6](consciousness-system.md)）
+2. **产出 DeepInsight 存入 `session.metadata.deepInsights`**（类型定义见 [意识系统 §2.6](../consciousness/consciousness-system.md)）
 3. **注入前经时效性门控**：`formatMemoryContext()` 在「深度洞察」段只渲染 `relevanceCheck != "过期"` 的条目（§6）
 4. **慢通道只有建议权**：洞察注入 prompt 后由主线 LLM 自己判断是否采纳；不直接修改脚本流程（不跳过 Topic、不插入 Action）
 

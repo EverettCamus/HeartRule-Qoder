@@ -19,7 +19,7 @@ description: 开始一个 story 的六步流程、或需要检查领域概念与
 
 1. **列概念清单**：列出本 story 涉及的领域概念（类名、字段、枚举、新术语、新关系）。
 2. **对照检查**，逐个回答：
-   - 叫什么——与 UL（`docs/design/ubiquitous-language.md`）或本体（`docs/design/ontology.md`）一致的名称？
+   - 叫什么——与 UL（`docs/design/foundation/ubiquitous-language.md`）或本体（`docs/design/foundation/ontology.md`）一致的名称？
    - 在不在——代码概念是否已登记 UL；咨询知识概念是否已在本体（任务/领域/推理三层）？
    - 属哪个限界上下文、与谁的关系是否已定义？
 3. **缺口按归属补齐**：

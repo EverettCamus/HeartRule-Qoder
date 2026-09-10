@@ -5,7 +5,7 @@ status: active
 version: 2.0.0
 last_updated: 2026-03-12
 source: docs/design
-path: docs/design/heartrule-design-philosophy-v2.md
+path: docs/design/foundation/heartrule-design-philosophy-v2.md
 tags: [authoritative, current, design-philosophy, strategic-design]
 search_priority: high
 previous_version: heartrule-design-philosophy.md
@@ -15,7 +15,7 @@ previous_version: heartrule-design-philosophy.md
 
 > **文档定位**：本文件是HeartRule AI咨询引擎的**根本性设计哲学**，阐述系统设计的"为什么"、"是什么"、"怎么选"、"怎么做"，形成从理论到实践的完整逻辑闭环。
 >
-> **下游文档**：[脚本引擎设计原则](script-engine-design-principles.md) · [意识系统设计](consciousness-system.md) · [记忆框架设计](memory-framework.md) — 这些文档将本文的原则落实为具体的设计决策和实现方案。
+> **下游文档**：[脚本引擎设计原则](script-engine-design-principles.md) · [意识系统设计](../consciousness/consciousness-system.md) · [记忆框架设计](../memory/memory-framework.md) — 这些文档将本文的原则落实为具体的设计决策和实现方案。
 >
 > **版本说明**：v2版本基于五轮哲学对话提炼，采用四层连接机制重构，严格分离哲学（道）与技术（术），并整合'抬头低头'概念作为第八设计原则。
 >

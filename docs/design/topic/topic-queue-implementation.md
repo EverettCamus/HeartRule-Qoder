@@ -10,9 +10,9 @@ last_updated: 2026-08-15
 > **关联文档**：
 >
 > - 上游：[话题单元建模](topic-unit-modeling.md) — 议程的三个不变量和六种操作
-> - 同级：[通用语言](ubiquitous-language.md)
-> - 下游：[意识系统设计](consciousness-system.md) — 议程的唯一修改者，执行时间判断
-> - 决策记录：[001](decisions/001-topic-time-estimation.md) · [002](decisions/002-time-application-and-depth.md) · [003](decisions/003-time-implementation-mechanism.md)
+> - 同级：[通用语言](../foundation/ubiquitous-language.md)
+> - 下游：[意识系统设计](../consciousness/consciousness-system.md) — 议程的唯一修改者，执行时间判断
+> - 决策记录：[001](../decisions/001-topic-time-estimation.md) · [002](../decisions/002-time-application-and-depth.md) · [003](../decisions/003-time-implementation-mechanism.md)
 >
 > **版本**：v0.5.0
 > **创建**：2026-07-21
@@ -167,7 +167,7 @@ topics:
 
 ### 4.2 时间判断的承担者
 
-时间判断不是独立意识，而是 `process_quality` 内置意识（见 [意识系统设计](consciousness-system.md) §2.5）的一个判断维度。`process_quality` 始终运行、每轮评估。
+时间判断不是独立意识，而是 `process_quality` 内置意识（见 [意识系统设计](../consciousness/consciousness-system.md) §2.5）的一个判断维度。`process_quality` 始终运行、每轮评估。
 
 三层运算，各走各的路径：
 

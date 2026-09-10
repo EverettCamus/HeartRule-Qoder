@@ -54,9 +54,9 @@
 
 ## 关联
 
-- [memory-retrieval-types.md](../memory-retrieval-types.md) — 封板对象，坐标系定位（决策 1/2）
-- [ai-ask-memory-recall.md](../ai-ask-memory-recall.md) — 封板对象，快通道实现实例 + ai_ask 侧契约（决策 2/3/4/6）
-- [consciousness-system.md](../consciousness-system.md) — §2.6 慢通道机制新住所（决策 4）
+- [memory-retrieval-types.md](../memory/memory-retrieval-types.md) — 封板对象，坐标系定位（决策 1/2）
+- [ai-ask-memory-recall.md](../memory/ai-ask-memory-recall.md) — 封板对象，快通道实现实例 + ai_ask 侧契约（决策 2/3/4/6）
+- [consciousness-system.md](../consciousness/consciousness-system.md) — §2.6 慢通道机制新住所（决策 4）
 - `decisions/004-memory-model-calibration.md` — 决策 3 继承「快通道走规则，LLM 升级移到慢通道」
 - `decisions/005-drop-opinions-domain-concept.md` — 决策 5 继承 opinions 移除与 confidence 删除
 - backlog：[intelligence] 故事 × 4（见后果）

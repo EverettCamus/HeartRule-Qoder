@@ -7,9 +7,9 @@ last_updated: 2026-09-08
 
 > **关联**:
 >
-> - 上游：[HeartRule 设计哲学 v2](heartrule-design-philosophy-v2.md) — 意识是规划执行分离（P8）和确定性分层（P2）的实现机制
-> - 上游：[脚本引擎设计原则](script-engine-design-principles.md) — 意识是 DSL 刻意约束后的"逃逸通道"（P4 执行与适应分离）
-> - 关联：[记忆框架设计](memory-framework.md) · [recall 快慢通道设计](ai-ask-memory-recall.md) — 意识利用记忆和 recall 进行跨轮观察
+> - 上游：[HeartRule 设计哲学 v2](../foundation/heartrule-design-philosophy-v2.md) — 意识是规划执行分离（P8）和确定性分层（P2）的实现机制
+> - 上游：[脚本引擎设计原则](../foundation/script-engine-design-principles.md) — 意识是 DSL 刻意约束后的"逃逸通道"（P4 执行与适应分离）
+> - 关联：[记忆框架设计](../memory/memory-framework.md) · [recall 快慢通道设计](../memory/ai-ask-memory-recall.md) — 意识利用记忆和 recall 进行跨轮观察
 >
 > **版本**: v0.2.0 (草案)
 > **创建**: 2026-07-09
@@ -125,7 +125,7 @@ consciousness-system.md  [本文]  ← 意识系统（认知层：从什么角�
 variable-memory-bridge.md       ← 变量与记忆桥接（集成层：变量如何从记忆取值）
 ```
 
-快通道机制见 [recall 快慢通道设计](ai-ask-memory-recall.md)；**慢通道（慢思考）机制由本文 §2.6 定义**——`insightForSlowThinking` 的消费端。本文也不重复记忆的三网络模型 + mental model 机制（见 memory-framework §4.2）。
+快通道机制见 [recall 快慢通道设计](../memory/ai-ask-memory-recall.md)；**慢通道（慢思考）机制由本文 §2.6 定义**——`insightForSlowThinking` 的消费端。本文也不重复记忆的三网络模型 + mental model 机制（见 memory-framework §4.2）。
 
 ---
 
@@ -286,7 +286,7 @@ interface ConsciousnessResult {
 
 ### 2.6 慢通道（慢思考）机制
 
-意识产出 `insightForSlowThinking` 非空时触发慢通道：深度 recall + LLM 综合，产出 DeepInsight 注入后续轮次。ai_ask 侧的契约（fire-and-forget、建议权、注入规则）见 [ai_ask 记忆调用 §4](ai-ask-memory-recall.md)，本文定义机制本身。
+意识产出 `insightForSlowThinking` 非空时触发慢通道：深度 recall + LLM 综合，产出 DeepInsight 注入后续轮次。ai_ask 侧的契约（fire-and-forget、建议权、注入规则）见 [ai_ask 记忆调用 §4](../memory/ai-ask-memory-recall.md)，本文定义机制本身。
 
 **触发**：某个意识的本轮产出 `insightForSlowThinking`（string，§2.3.3）非空。该字段承载"什么值得深挖"的线索，是触发慢通道的唯一信号。
 
@@ -342,7 +342,7 @@ interface DeepInsight {
 }
 ```
 
-**注入与时效性门控**：产出存入 `session.metadata.deepInsights`；注入前用极短 LLM 调用判断时效（"当前对话在第 N 轮，主题是 X。以下洞察是否仍然相关？"→ 是/否），标记 `relevanceCheck`。`formatMemoryContext()` 只渲染非"过期"条目（[ai_ask 记忆调用 §6](ai-ask-memory-recall.md)）。
+**注入与时效性门控**：产出存入 `session.metadata.deepInsights`；注入前用极短 LLM 调用判断时效（"当前对话在第 N 轮，主题是 X。以下洞察是否仍然相关？"→ 是/否），标记 `relevanceCheck`。`formatMemoryContext()` 只渲染非"过期"条目（[ai_ask 记忆调用 §6](../memory/ai-ask-memory-recall.md)）。
 
 **慢通道的 recall 策略**（比快通道更广更深）：
 

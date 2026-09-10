@@ -28,7 +28,7 @@
 引擎现状：
 
 - `MonitorOrchestrator` + `AiAskMonitorHandler` / `AiSayMonitorHandler` 是前身（仅做 per-action 质量评估）
-- Consciousness system 设计文档已完成（`docs/design/consciousness-system.md`），定义了主线+支线双线程架构、三种干预模式（feedback / slow_thinking / orchestration）、内置+脚本定义两类意识
+- Consciousness system 设计文档已完成（`docs/design/consciousness/consciousness-system.md`），定义了主线+支线双线程架构、三种干预模式（feedback / slow_thinking / orchestration）、内置+脚本定义两类意识
 - Contradiction detection 和 Emotion detection 设计文档归档在 `openspec/docs/consciousness-design/`
 - **代码零行**
 
@@ -51,7 +51,7 @@
    - 与引擎的映射：ScriptExecutor = Actor, Consciousness system = Critic
    - 关键设计问题：Critic 的反馈粒度（per-action? per-topic? per-phase?）、干预时机、多 Critic 冲突仲裁
 
-**落地目标：** 实现 `docs/design/consciousness-system.md` Phase 1 — 框架 + 示例意识（process_quality + emotion_trajectory）
+**落地目标：** 实现 `docs/design/consciousness/consciousness-system.md` Phase 1 — 框架 + 示例意识（process_quality + emotion_trajectory）
 
 ---
 
@@ -62,9 +62,9 @@
 引擎现状：
 
 - `MemoryRepository` port 已定义（retain / recall / reflect），三网络模型（World / Experience / Observation）+ mental model（ADR 005，opinions 已移除）
-- Hindsight 集成完整设计（`docs/design/memory-framework.md`），预估 12 周
-- Variable-Memory bridge 设计（`docs/design/variable-memory-bridge.md`）
-- AiAsk 中 recall 集成设计（`docs/design/ai-ask-memory-recall.md`）
+- Hindsight 集成完整设计（`docs/design/memory/memory-framework.md`），预估 12 周
+- Variable-Memory bridge 设计（`docs/design/memory/variable-memory-bridge.md`）
+- AiAsk 中 recall 集成设计（`docs/design/memory/ai-ask-memory-recall.md`）
 - `FakeMemoryRepository` 测试用，实际 adapter **代码零行**
 
 需要研读的知识：

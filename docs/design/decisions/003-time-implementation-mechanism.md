@@ -98,7 +98,7 @@ process_quality:
     intervention_cooldown: 2 # 提示词注入至少间隔 2 轮
 ```
 
-**两级响应对应意识的分级干预**（见 [consciousness-system.md §2.2](../consciousness-system.md#22-轻量干预与重量干预)）：
+**两级响应对应意识的分级干预**（见 [consciousness-system.md §2.2](../consciousness/consciousness-system.md#22-轻量干预与重量干预)）：
 
 | 压力层级           | 走什么通道                            | 动作                                 |
 | ------------------ | ------------------------------------- | ------------------------------------ |

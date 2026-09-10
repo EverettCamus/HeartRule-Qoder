@@ -7,9 +7,9 @@ last_updated: 2026-09-08
 
 > **关联**:
 >
-> - 上游：[HeartRule 设计哲学 v2](heartrule-design-philosophy-v2.md) — 记忆体系是实现熵减架构（P5）和协同进化（P7）的数据基础设施
-> - 关联：[recall 快慢通道设计](ai-ask-memory-recall.md) · [意识系统设计](consciousness-system.md) · [变量-记忆桥接设计](variable-memory-bridge.md)
-> - 校准：[004 记忆模型校准](decisions/004-memory-model-calibration.md) · [005 去除 Opinions 概念](decisions/005-drop-opinions-domain-concept.md)
+> - 上游：[HeartRule 设计哲学 v2](../foundation/heartrule-design-philosophy-v2.md) — 记忆体系是实现熵减架构（P5）和协同进化（P7）的数据基础设施
+> - 关联：[recall 快慢通道设计](ai-ask-memory-recall.md) · [意识系统设计](../consciousness/consciousness-system.md) · [变量-记忆桥接设计](variable-memory-bridge.md)
+> - 校准：[004 记忆模型校准](../decisions/004-memory-model-calibration.md) · [005 去除 Opinions 概念](../decisions/005-drop-opinions-domain-concept.md)
 >
 > **文档定位**: HeartRule AI 咨询引擎的完整记忆体系设计，定义五种记忆类型的职责、关系、数据流和实现策略。
 > **版本**: v0.8.0 (封板修订)
@@ -1195,10 +1195,10 @@ Hindsight 管理 (嵌入式 pg0):
 
 ## 8. 关联设计文档
 
-| 文档                                                                    | 关系                                                                                                                                   |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| [recall 快慢通道设计](ai-ask-memory-recall.md)                          | 定义记忆的**检索层**：快通道同步联想 + 慢通道异步深度分析                                                                              |
-| [意识系统设计](consciousness-system.md)                                 | 定义记忆的**认知层**：脚本配置的观察视角，利用 recall 进行意识分析                                                                     |
-| [变量-记忆桥接设计](variable-memory-bridge.md)                          | 定义记忆与变量的**集成层**：变量如何从记忆中调取值                                                                                     |
-| [记忆模型校准](decisions/004-memory-model-calibration.md)               | 定义数据模型的**能力校准**：Hindsight v0.6.2→v0.9.1 重核，reflect 语义、时间/图谱轴修订                                                |
-| [005 去除 Opinions 概念](decisions/005-drop-opinions-domain-concept.md) | **领域模型修订**（替换 004 决策 1/6 的"自建层"遗留）：MemoryContext 三字段化、案例公式化由 mental model 承载、数值 confidence 不持久化 |
+| 文档                                                                       | 关系                                                                                                                                   |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [recall 快慢通道设计](ai-ask-memory-recall.md)                             | 定义记忆的**检索层**：快通道同步联想 + 慢通道异步深度分析                                                                              |
+| [意识系统设计](../consciousness/consciousness-system.md)                   | 定义记忆的**认知层**：脚本配置的观察视角，利用 recall 进行意识分析                                                                     |
+| [变量-记忆桥接设计](variable-memory-bridge.md)                             | 定义记忆与变量的**集成层**：变量如何从记忆中调取值                                                                                     |
+| [记忆模型校准](../decisions/004-memory-model-calibration.md)               | 定义数据模型的**能力校准**：Hindsight v0.6.2→v0.9.1 重核，reflect 语义、时间/图谱轴修订                                                |
+| [005 去除 Opinions 概念](../decisions/005-drop-opinions-domain-concept.md) | **领域模型修订**（替换 004 决策 1/6 的"自建层"遗留）：MemoryContext 三字段化、案例公式化由 mental model 承载、数值 confidence 不持久化 |

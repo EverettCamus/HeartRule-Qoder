@@ -80,8 +80,8 @@ variables:
 
 ## 关联
 
-- [memory-framework.md](../memory-framework.md) — §2.1/§2.3/§7 修订对象（决策 1/2/5/6）
-- [variable-memory-bridge.md](../variable-memory-bridge.md) — 双路径收缩、映射字段替换 refreshQuery（决策 3/6）
+- [memory-framework.md](../memory/memory-framework.md) — §2.1/§2.3/§7 修订对象（决策 1/2/5/6）
+- [variable-memory-bridge.md](../memory/variable-memory-bridge.md) — 双路径收缩、映射字段替换 refreshQuery（决策 3/6）
 - [strategic-design.md](../../ddd/strategic-design.md) — §1.3 Variable System，B3 红线出处（决策 2）
 - `decisions/005-drop-opinions-domain-concept.md` — 同类先例：领域概念收缩、单一权威
 - `decisions/006-retrieval-layer-scope.md` — 决策 1 将"变量桥接"列为潜在检索消费场景，本 ADR 收缩其召回角色（决策 6）

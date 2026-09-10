@@ -10,8 +10,8 @@ last_updated: 2026-08-15
 > **关联文档**：
 >
 > - 上游：[HeartRule 设计哲学 v2](heartrule-design-philosophy-v2.md)
-> - 上游：[话题单元建模](topic-unit-modeling.md) — 核心领域模型（咨询过程 = 话题队列的逐项执行）
-> - 下游：[意识系统设计](consciousness-system.md) — 意识脚本的设计详解
+> - 上游：[话题单元建模](../topic/topic-unit-modeling.md) — 核心领域模型（咨询过程 = 话题队列的逐项执行）
+> - 下游：[意识系统设计](../consciousness/consciousness-system.md) — 意识脚本的设计详解
 > - 下游：脚本编写指南（待创建）— 面向咨询师的实操手册
 >
 > **版本**：v0.6.0 (草案)

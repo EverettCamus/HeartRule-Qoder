@@ -20,24 +20,24 @@
 
 > 来源意图：意图区「记忆系统收尾与封板」
 
-| 状态    | 类型           | 故事                                                                                            | 关联                                                                                                                     |
-| ------- | -------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| ready   | [feature]      | Hindsight 记忆集成收尾验证：跑通 verify-mental-model.ts，确保对 docker 后端全绿                 | [004 ADR](../design/decisions/004-memory-model-calibration.md) · scripts/verify-mental-model.ts                          |
-| backlog | [intelligence] | ai_ask 快通道实现：每轮 recall + 分层 memoryContext（baseline/fastHits/deepInsights）+ 分段渲染 | [ai_ask 记忆调用 §3/§6](../design/ai-ask-memory-recall.md) · [006 ADR](../design/decisions/006-retrieval-layer-scope.md) |
-| backlog | [intelligence] | 三路查询实证：类似/关联事件视角的命中率对比验证（默认关闭，证据通过才开启）                     | [记忆调取机制 §2.11](../design/memory-retrieval-types.md) · 006 ADR 决策 2                                               |
-| backlog | [intelligence] | 慢通道实现：insightForSlowThinking 触发 → 两阶段深度检索 → DeepInsight 注入                     | [意识系统 §2.6](../design/consciousness-system.md) · 006 ADR 决策 4                                                      |
-| backlog | [intelligence] | require 收集紧迫度核实：在 exit-decision 上下文中评估是否重新设计                               | 006 ADR 决策 6                                                                                                           |
+| 状态    | 类型           | 故事                                                                                            | 关联                                                                                                                            |
+| ------- | -------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| ready   | [feature]      | Hindsight 记忆集成收尾验证：跑通 verify-mental-model.ts，确保对 docker 后端全绿                 | [004 ADR](../design/decisions/004-memory-model-calibration.md) · scripts/verify-mental-model.ts                                 |
+| backlog | [intelligence] | ai_ask 快通道实现：每轮 recall + 分层 memoryContext（baseline/fastHits/deepInsights）+ 分段渲染 | [ai_ask 记忆调用 §3/§6](../design/memory/ai-ask-memory-recall.md) · [006 ADR](../design/decisions/006-retrieval-layer-scope.md) |
+| backlog | [intelligence] | 三路查询实证：类似/关联事件视角的命中率对比验证（默认关闭，证据通过才开启）                     | [记忆调取机制 §2.11](../design/memory/memory-retrieval-types.md) · 006 ADR 决策 2                                               |
+| backlog | [intelligence] | 慢通道实现：insightForSlowThinking 触发 → 两阶段深度检索 → DeepInsight 注入                     | [意识系统 §2.6](../design/consciousness/consciousness-system.md) · 006 ADR 决策 4                                               |
+| backlog | [intelligence] | require 收集紧迫度核实：在 exit-decision 上下文中评估是否重新设计                               | 006 ADR 决策 6                                                                                                                  |
 
 ### Epic B · 议程主线 —— 意识层与话题队列
 
 > 来源意图：意图区「议程主线落地」
 
-| 状态    | 类型           | 故事                                                 | 关联                                                                                             |
-| ------- | -------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| ready   | [feature]      | rerun-action 从 worktree 分支合并回主干              | docs/superpowers/plans/2026-05-07-rerun-action.md · worktree-rerun-feature-continue              |
-| backlog | [intelligence] | 意识层触发机制实现（不变量三：意识为唯一队列修改者） | [意识系统](../design/consciousness-system.md) · [话题单元建模](../design/topic-unit-modeling.md) |
-| backlog | [feature]      | 议程（话题队列）运行时实现                           | [议程实现机制](../design/topic-queue-implementation.md)                                          |
-| backlog | [feature]      | session-intelligence guardian 实现                   | docs/superpowers/specs · 相关设计                                                                |
+| 状态    | 类型           | 故事                                                 | 关联                                                                                                                 |
+| ------- | -------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| ready   | [feature]      | rerun-action 从 worktree 分支合并回主干              | docs/superpowers/plans/2026-05-07-rerun-action.md · worktree-rerun-feature-continue                                  |
+| backlog | [intelligence] | 意识层触发机制实现（不变量三：意识为唯一队列修改者） | [意识系统](../design/consciousness/consciousness-system.md) · [话题单元建模](../design/topic/topic-unit-modeling.md) |
+| backlog | [feature]      | 议程（话题队列）运行时实现                           | [议程实现机制](../design/topic/topic-queue-implementation.md)                                                        |
+| backlog | [feature]      | session-intelligence guardian 实现                   | docs/superpowers/specs · 相关设计                                                                                    |
 
 ### Epic C · 节奏系统主线 —— 工具与流程建设
 

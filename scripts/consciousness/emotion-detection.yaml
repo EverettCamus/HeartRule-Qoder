@@ -2,7 +2,7 @@
 # 用于检测用户对话中的情绪变化，帮助咨询师把握会谈节奏
 #
 # 存档 (Archived) — 早期配置格式实验，作为格式参考。
-# 配置格式规范已整合到: docs/design/consciousness-system.md §4
+# 配置格式规范已整合到: docs/design/consciousness/consciousness-system.md §4
 # 存档日期: 2026-07-09
 
 metadata:
