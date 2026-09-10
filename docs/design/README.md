@@ -32,6 +32,7 @@
 | ----------------------------------------------------------------- | --------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [topic-unit-modeling](topic/topic-unit-modeling.md)               | 地图 · 领域建模 | active            | —                                                                                                                                                                                           |
 | [topic-queue-implementation](topic/topic-queue-implementation.md) | 引擎机制        | decision-recorded | [001 话题时间预估](decisions/001-topic-time-estimation.md) · [002 用途与深度](decisions/002-time-application-and-depth.md) · [003 实现机制](decisions/003-time-implementation-mechanism.md) |
+| [action-topic-boundary](topic/action-topic-boundary.md)           | 引擎机制        | draft             | —                                                                                                                                                                                           |
 
 ## 意识线（consciousness/）
 
