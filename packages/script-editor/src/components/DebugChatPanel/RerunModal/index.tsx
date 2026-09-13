@@ -78,7 +78,7 @@ const RerunModal: React.FC<RerunModalProps> = ({
   const [tone, setTone] = useState(actionConfig?.tone || '');
   const [maxRounds, setMaxRounds] = useState(actionConfig?.max_rounds || 20);
   const [provider, setProvider] = useState('deepseek');
-  const [model, setModel] = useState('deepseek-v4-flash');
+  const [model, setModel] = useState('deepseek-flash');
   const [temperature, setTemperature] = useState(0.7);
 
   // Reset form when modal opens
@@ -99,7 +99,7 @@ const RerunModal: React.FC<RerunModalProps> = ({
     setMaxRounds(version.config?.max_rounds || actionConfig?.max_rounds || 20);
     if (version.llmConfig) {
       setProvider(version.llmConfig.provider || 'deepseek');
-      setModel(version.llmConfig.model || 'deepseek-v4-flash');
+      setModel(version.llmConfig.model || 'deepseek-flash');
       setTemperature(version.llmConfig.temperature ?? 0.7);
     }
   };
@@ -268,7 +268,7 @@ const RerunModal: React.FC<RerunModalProps> = ({
               <Input
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                placeholder="deepseek-v4-flash"
+                placeholder="deepseek-flash"
                 style={{ width: 300 }}
               />
             </div>
