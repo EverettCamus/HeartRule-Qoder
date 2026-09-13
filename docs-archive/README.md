@@ -29,9 +29,9 @@ docs-archive/
 
 ### When NOT to Use Archived Documents
 
-1. **Current Development**: Use OpenSpec documents in `openspec/specs/` for current development
-2. **Authoritative Reference**: OpenSpec documents are the single source of truth
-3. **New Implementations**: Always reference current OpenSpec specifications
+1. **Current Development**: 设计权威在 [`docs/design/`](../docs/design/README.md)（含 [`decisions/`](../docs/design/decisions/) ADR 注册表）——原 OpenSpec 方案已废弃，`openspec/` 目录不复存在
+2. **Authoritative Reference**: `docs/design/` 是唯一设计真相源
+3. **New Implementations**: 先查 `docs/design/` 现行文档与 ADR；本目录仅作历史参考。个别文档经人确认后复活至 `docs/design/`（复活文档带「演进注记」说明与现行设计的差异），档案副本保留作历史
 
 ### Metadata Fields
 
@@ -43,7 +43,7 @@ Each archived document includes metadata with the following fields:
 - `archived_date`: Date when document was archived
 - `source`: Original source directory (e.g., "docs")
 - `path`: Original path relative to docs/
-- `migrated_to`: (Optional) Path to OpenSpec version if document was migrated
+- `migrated_to`: (Optional) 原 OpenSpec 迁移方案的遗留字段，已废弃——复活至 docs/design/ 的文档以复活文档的「演进注记」为准
 - `tags`: Always includes "historical", "reference", "archived"
 - `search_priority`: "medium" - lower priority than OpenSpec documents
 
@@ -63,9 +63,8 @@ Each archived document includes metadata with the following fields:
 
 ## Related Documents
 
-- [OpenSpec Specifications](../openspec/specs/) - Current authoritative documentation
-- [Migration Tracking](../openspec/migration-tracking.md) - Document migration status
-- [Archive Plan](../openspec/archive-plan.md) - Archive strategy and process
+- [设计文档状态索引](../docs/design/README.md) - 当前设计权威（含 ADR 注册表）
+- [产品待办](../docs/scrum/backlog.md) - 故事关联列挂有本目录旧稿引用（历史参考用）
 
 ---
 
