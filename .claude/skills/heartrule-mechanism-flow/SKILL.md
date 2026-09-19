@@ -22,7 +22,7 @@ description: 引擎级需求、[intelligence] story、或讨论引擎智能机�
 3. **案例验证**：AI 起草模拟对话片段，**人确认合理性后使用**（单一出处）；案例在验收处必出现。
 4. **五落点收敛**（§8 产出物规则；习惯称"四选一"，落点实为五种——§13 名词表），每次讨论至少落一处：
    1. **本体文档更新** → `docs/design/foundation/ontology.md`（补了任务层/领域层/推理层条目）；
-   2. **机制设计文档** → `docs/design/` 对应文档——开头必写**引擎级业务需求一句话**（可追溯性闸门：谁在什么场景得到什么价值；写不出来 = 技术自嗨，不写）；
+   2. **机制设计文档** → `docs/design/` 对应文档——开头必写**引擎级业务需求一句话**（可追溯性闸门：谁在什么场景得到什么价值；写不出来 = 技术自嗨，不写）；行文按 `heartrule-design-docs` › 表达原则（单一出处，此处不重复）；
    3. **ADR** → `docs/design/decisions/NNN-slug.md`（格式见 `heartrule-design-docs` 的 `references/adr-template.md`）；
    4. **spec** → `docs/superpowers/specs/`（锚 + 任务锚写开头，机制说明写设计段；同一机制复用出第二个场景时**必须提炼回机制文档**）；
    5. **backlog 故事** → `[intelligence]` 条目。

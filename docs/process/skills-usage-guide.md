@@ -30,7 +30,7 @@ last_updated: 2026-09-07
 | `heartrule-write-spec`     | 写 spec：GWT 正负例 + 领域模型片段 + 人工审查清单                 | story-flow 第 ③ 步；单独要"写 spec"                                      | §7 第 3 步     |
 | `heartrule-accept-story`   | 验收（平台 GWT / 引擎案例）+ DoD + sprint-plan 标 done            | story-flow 第 ⑥ 步；单独要"验收/收尾"                                    | §7 第 6 步、§5 |
 | `heartrule-mechanism-flow` | 智能机制收敛：本体先行（任务锚）→ 机制设计 → 案例验证 → 五落点    | 引擎级需求；`[intelligence]` story；智能机制讨论                         | §8             |
-| `heartrule-design-docs`    | 文档治理：状态机、封板、ADR 流程                                  | 动 docs/design、docs/ddd 文档且涉及状态/决策；架构决策；`[design]` story | §6             |
+| `heartrule-design-docs`    | 文档治理：状态机、封板、ADR 流程、表达原则                        | 动 docs/design、docs/ddd 文档且涉及状态/决策；架构决策；`[design]` story | §6             |
 | `heartrule-sprint-cycle`   | sprint 边界：计划（整文件覆盖）、节奏小结、backlog 维护           | 新一周计划；sprint 末小结；backlog 维护                                  | §5、§10        |
 
 ## 3. 结构：入口少、委托多
