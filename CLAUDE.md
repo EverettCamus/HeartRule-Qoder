@@ -450,17 +450,11 @@ Vitest config in root `vitest.config.ts` excludes `script-editor/` and `e2e/` fr
 - Import order: builtin → external → internal → parent → sibling → index
 - `printWidth=100`, `singleQuote`, `trailingComma=es5`, 2-space indent
 
-## Active Design Documents
+## Design Documents
 
-Key architecture documents for ongoing and planned work:
+设计文档的清单与状态**不在本文件维护**——单一出处是：
 
-| Document                                                    | Topic                                                                  |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `docs/design/topic/topic-unit-modeling.md`                  | Core domain model: topic queue, action atoms, consciousness adjustment |
-| `docs/design/foundation/script-engine-design-principles.md` | DSL syntax design principles (linearity, no engineering, determinism)  |
-| `docs/design/consciousness/consciousness-system.md`         | Consciousness layer design (triggers, interventions)                   |
-| `docs/design/memory/memory-framework.md`                    | Full memory system design (Hindsight integration)                      |
-| `docs/design/memory/variable-memory-bridge.md`              | Variable ↔ Memory responsibility boundary                              |
-| `docs/design/memory/ai-ask-memory-recall.md`                | Memory recall within ai_ask actions                                    |
-| `docs/ddd/strategic-design.md`                              | Bounded contexts and domain relationships                              |
-| `docs/ddd/context-map.md`                                   | Context mapping diagrams                                               |
+- [`docs/README.md`](docs/README.md) — 文档地图：哪类文档住哪、谁是权威、下一个读者是谁。
+- [`docs/design/README.md`](docs/design/README.md) — 设计文档状态表 + ADR 注册表（`decision-recorded` 即封板，仅证据驱动才修订）。
+
+开工前按[开发节奏系统](docs/process/development-rhythm.md) §9 执行：先读 sprint-plan 与 backlog，提出工作计划草案，经人批准后动手。
