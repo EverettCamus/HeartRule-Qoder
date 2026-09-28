@@ -6,22 +6,40 @@
 
 ## 分区
 
-| 目录                       | 放什么                                         | 权威性             | 下一个读者               | 索引                                  |
-| -------------------------- | ---------------------------------------------- | ------------------ | ------------------------ | ------------------------------------- |
-| `design/`                  | 设计真相源：领域建模、本体、引擎机制、横切约束 | **唯一设计权威**   | 建代码的人、封板评审的人 | [README](design/README.md)            |
-| `design/decisions/`        | ADR（跨域扁平，不按域拆）                      | 决策封板记录       | 每次开工的 AI            | [注册表](design/README.md#adr-注册表) |
-| `ddd/`                     | 战略设计：限界上下文、上下文映射、战术快照     | 平台侧建模权威     | 画边界的领域专家         | 见下方清单                            |
-| `process/`                 | 怎么一起工作：节奏系统、技能速查               | **约定唯一权威**   | 人与 AI 每次开工         | [README](process/README.md)           |
-| `scrum/`                   | 做什么、什么时候做：产品待办、当前 sprint      | 需求与计划权威     | sprint 计划与回顾的人    | 见下方清单                            |
-| `superpowers/`             | 单个故事的过程记录：spec / plan / domain-check | **不作为依据**     | 执行该故事的 AI          | [README](superpowers/README.md)       |
-| `reference/`               | 外部资料快照 + 本项目已废弃旧稿                | 参考，非权威       | 查来路的人               | [README](reference/README.md)         |
-| `logging-specification.md` | 日志级别、格式与数据摘要规则                   | 待核（见下方清单） | 加日志的人               | —                                     |
+| 目录                       | 放什么                                         | 权威性               | 下一个读者               | 索引                                  |
+| -------------------------- | ---------------------------------------------- | -------------------- | ------------------------ | ------------------------------------- |
+| `design/`                  | 设计真相源：领域建模、本体、引擎机制、横切约束 | **唯一设计权威**     | 建代码的人、封板评审的人 | [README](design/README.md)            |
+| `design/decisions/`        | ADR（跨域扁平，不按域拆）                      | 决策封板记录         | 每次开工的 AI            | [注册表](design/README.md#adr-注册表) |
+| `ddd/`                     | 战略设计：限界上下文、上下文映射、战术快照     | 平台侧建模权威       | 画边界的领域专家         | 见下方清单                            |
+| `process/`                 | 怎么一起工作：节奏系统、技能速查               | **约定唯一权威**     | 人与 AI 每次开工         | [README](process/README.md)           |
+| `scrum/`                   | 做什么、什么时候做：产品待办、当前 sprint      | 需求与计划权威       | sprint 计划与回顾的人    | 见下方清单                            |
+| `superpowers/`             | 单个故事的过程记录：spec / plan / domain-check | **不作为依据**       | 执行该故事的 AI          | [README](superpowers/README.md)       |
+| `reference/`               | 外部资料快照 + 本项目已废弃旧稿                | 参考，非权威         | 查来路的人               | [README](reference/README.md)         |
+| `audit/`                   | 2026-09-28 代码编目：能力清单与深挖、混乱地图  | **过渡分区，会退场** | 领 backlog 故事的人      | 见下方清单（含退场条件）              |
+| `logging-specification.md` | 日志级别、格式与数据摘要规则                   | 待核（见下方清单）   | 加日志的人               | —                                     |
 
 已归档的文档在仓库根的 [`docs-archive/`](../docs-archive/)：**只作历史参考**，复活需经人确认并搬回 `design/`（复活稿带「演进注记」）。归档通道的作用是给每份文档一个退场处，见[归档说明](../docs-archive/README.md)。
 
 ## 无独立索引的分区
 
-两个分区内容少且稳定，由本页直接列出，不另设 README。
+分区内容少且稳定，由本页直接列出，不另设 README。
+
+**`audit/`** — 2026-09-28 一次性的代码编目战役产出（read-only，只诊断不修复）。它**不是常设分区**：backlog 的故事行大量 `关联` 到这里，"story 从哪来"的来路靠它保存。
+
+| 文件                                                          | 一句话                                                    |
+| ------------------------------------------------------------- | --------------------------------------------------------- |
+| [capability-inventory](audit/capability-inventory.md)         | 能力清单 CAP-01..17：用户能做什么 + 实现度分级（坐标系）  |
+| [mess-map](audit/mess-map.md)                                 | 混乱制图：六类混乱各在哪、量级、是否已被 backlog 登记     |
+| [domain-ledger](audit/domain-ledger.md)                       | 领域清算：战略/战术设计概念的实际分布表，每概念权威是哪份 |
+| [duplication-report](audit/duplication-report.md)             | 重复与名实检测：双实现、同概念多名、同名多实、死概念      |
+| [runnability-baseline](audit/runnability-baseline.md)         | 可运行基线：现在能不能跑、跑到哪断、护栏覆盖哪些执行路径  |
+| [deep-dive-execution-core](audit/deep-dive-execution-core.md) | 深挖：执行内核（consulting-session 上下文）               |
+| [deep-dive-session-state](audit/deep-dive-session-state.md)   | 深挖：会话状态与断点恢复                                  |
+| [deep-dive-debugging](audit/deep-dive-debugging.md)           | 深挖：调试闭环（runId 分支、重跑、回写）                  |
+| [deep-dive-authoring](audit/deep-dive-authoring.md)           | 深挖：脚本编写与编辑器                                    |
+| [deep-dive-platform](audit/deep-dive-platform.md)             | 深挖：项目与版本、供应商、模板                            |
+
+**退场条件**：`audit/` 的存在只为服务"这批 story 从哪来"。当关联它的故事全部 done、`关联` 列不再需要指向它时，整体转 [`docs-archive/`](../docs-archive/)——它正好是[归档通道](../docs-archive/README.md)的第一个客户。
 
 **`ddd/`** — 战略设计。边界与上下文关系改起来贵，这里是它们的记录处。
 
