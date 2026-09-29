@@ -7,21 +7,21 @@
 
 > 「提出意图」的产出物登记处（[开发节奏系统 §4](../process/development-rhythm.md)）：意图一句话 + 价值 + 状态。意图随时可加、不急着拆；拆成 epic 时在对应 epic 分组下标注来源意图。状态：`活跃` / `未拆`（还没想清怎么拆）/ `已拆成 epic` / `放弃`（标日期）。每周 sprint 计划从「活跃」意图中选目标。
 
-| 状态        | 意图（一句话）                                                                                          | 价值                                                               | 来源                       | 关联 epic |
-| ----------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------- | --------- |
-| 已拆成 epic | 记忆系统收尾与封板：Hindsight 记忆集成跑到全绿，两条记忆设计文档封板                                    | 记忆成为可验证、可回归的一等资产，设计不再悬空                     | 回溯补录                   | Epic A    |
-| 已拆成 epic | 议程主线落地：意识层与话题队列的运行时实现，引擎能觉察信号并调整议程                                    | 引擎具备咨询师"边执行边观察"的核心智能                             | 回溯补录                   | Epic B    |
-| 已拆成 epic | 节奏系统固化：开发节奏落盘为文档与项目 skill                                                            | 人与 AI 的协作有可查的约定与可执行的工具                           | 回溯补录                   | Epic C    |
-| 已拆成 epic | 变量职责收缩：跨会话状态权威归信息点文档，全局变量取消                                                  | 跨会话状态三处存储收敛为一处；人类咨询师获得修正 AI 理解的编辑面   | 2026-09-09 讨论（ADR 007） | Epic D    |
-| 未拆        | 代码-文档一致性收敛：设计约定了一套、AI 生成代码时另起炉灶的那几处收口                                  | 引擎行为与设计文档对得上，读者不必猜"以哪份为准"                   | 2026-09-27 审计            | —         |
-| 已拆成 epic | 三大基础咨询动作（收集 ai_ask / 分析 ai_think / 传递 ai_say）的主线能力成立：写下的能跑起来、能接进流程 | 一次咨询能由脚本自动走完，走完时关键信息已变成结构化变量           | 代码编目 2026-09-28        | Epic E    |
-| 已拆成 epic | 调试闭环：调试台与编辑器看到的是同一份脚本，改动写得回去、看得见，一局能接着上次继续                    | 脚本作者"改一版立刻试、调好就落地"的闭环真的闭上                   | 代码编目 2026-09-28        | Epic F    |
-| 已拆成 epic | 咨询师用拖拽和配置搭出咨询骨架，手写的只有提示词；写错立刻知道                                          | 领域专家自己能搭、能改一个咨询流程，不用每次找工程师               | 代码编目 2026-09-28        | Epic G    |
-| 已拆成 epic | 项目版本切来切去有据可依，且不丢东西                                                                    | 调试期反复切版本对比是常态；这个能力不可靠，整条编辑器路子就站不稳 | 代码编目 2026-09-28        | Epic H    |
-| 已拆成 epic | 来访者中途走了，下次回来接着上次那句话往下谈                                                            | 一次咨询能被拆成很多次——做不成，就只能一口气谈完                   | 代码编目 2026-09-28        | Epic I    |
-| 未拆        | 咨询动作的智能提升：退出判断、策略调整（含"运行时由 LLM 动态调整动作脚本"）                             | 咨询动作从"能跑"到"跑得准"                                         | 会话 2026-09-28            | —         |
-| 未拆        | 咨询师口述经验，由 LLM 生成咨询脚本                                                                     | 咨询师不必先学脚本写法——"计划"能力                                 | 会话 2026-09-28            | —         |
-| 未拆        | 面向来访者的咨询产品：咨询界面、登录与权限、脚本导入导出                                                | 从"编辑器自用"走到"能给来访者用"                                   | 代码编目 2026-09-28 §三    | —         |
+| 状态        | 意图（一句话）                                                                                                     | 价值                                                               | 来源                              | 关联 epic |
+| ----------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ | --------------------------------- | --------- |
+| 已拆成 epic | 记忆系统收尾与封板：Hindsight 记忆集成跑到全绿，两条记忆设计文档封板                                               | 记忆成为可验证、可回归的一等资产，设计不再悬空                     | 回溯补录                          | Epic A    |
+| 已拆成 epic | 议程主线落地：意识层与话题队列的运行时实现，引擎能觉察信号并调整议程                                               | 引擎具备咨询师"边执行边观察"的核心智能                             | 回溯补录                          | Epic B    |
+| 已拆成 epic | 节奏系统固化：开发节奏落盘为文档与项目 skill                                                                       | 人与 AI 的协作有可查的约定与可执行的工具                           | 回溯补录                          | Epic C    |
+| 已拆成 epic | 变量职责收缩：跨会话状态权威归信息点文档，全局变量取消                                                             | 跨会话状态三处存储收敛为一处；人类咨询师获得修正 AI 理解的编辑面   | 2026-09-09 讨论（ADR 007）        | Epic D    |
+| 已拆成 epic | 代码-文档一致性收敛：设计约定了一套、AI 生成代码时另起炉灶的那几处收口；加上编目查出、还没登记过归宿的 51+4 处混乱 | 引擎行为与设计文档对得上，读者不必猜"以哪份为准"                   | 2026-09-27 审计 + 编目 2026-09-28 | Epic J    |
+| 已拆成 epic | 三大基础咨询动作（收集 ai_ask / 分析 ai_think / 传递 ai_say）的主线能力成立：写下的能跑起来、能接进流程            | 一次咨询能由脚本自动走完，走完时关键信息已变成结构化变量           | 代码编目 2026-09-28               | Epic E    |
+| 已拆成 epic | 调试闭环：调试台与编辑器看到的是同一份脚本，改动写得回去、看得见，一局能接着上次继续                               | 脚本作者"改一版立刻试、调好就落地"的闭环真的闭上                   | 代码编目 2026-09-28               | Epic F    |
+| 已拆成 epic | 咨询师用拖拽和配置搭出咨询骨架，手写的只有提示词；写错立刻知道                                                     | 领域专家自己能搭、能改一个咨询流程，不用每次找工程师               | 代码编目 2026-09-28               | Epic G    |
+| 已拆成 epic | 项目版本切来切去有据可依，且不丢东西                                                                               | 调试期反复切版本对比是常态；这个能力不可靠，整条编辑器路子就站不稳 | 代码编目 2026-09-28               | Epic H    |
+| 已拆成 epic | 来访者中途走了，下次回来接着上次那句话往下谈                                                                       | 一次咨询能被拆成很多次——做不成，就只能一口气谈完                   | 代码编目 2026-09-28               | Epic I    |
+| 未拆        | 咨询动作的智能提升：退出判断、策略调整（含"运行时由 LLM 动态调整动作脚本"）                                        | 咨询动作从"能跑"到"跑得准"                                         | 会话 2026-09-28                   | —         |
+| 未拆        | 咨询师口述经验，由 LLM 生成咨询脚本                                                                                | 咨询师不必先学脚本写法——"计划"能力                                 | 会话 2026-09-28                   | —         |
+| 未拆        | 面向来访者的咨询产品：咨询界面、登录与权限、脚本导入导出                                                           | 从"编辑器自用"走到"能给来访者用"                                   | 代码编目 2026-09-28 §三           | —         |
 
 ## 就绪故事（Ready）
 
@@ -32,7 +32,7 @@
 | 状态        | 类型           | 故事                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 关联                                                                                                                                                 |
 | ----------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | done        | [feature]      | Hindsight 记忆集成收尾验证：跑通 verify-mental-model.ts，确保对 docker 后端全绿                                                                                                                                                                                                                                                                                                                                                                                                   | [004 ADR](../design/decisions/004-memory-model-calibration.md) · scripts/verify-mental-model.ts                                                      |
-| in-progress | [intelligence] | ai_ask 快通道实现：每轮 recall + 分层 memoryContext（baseline/fastHits/deepInsights）+ 分段渲染                                                                                                                                                                                                                                                                                                                                                                                   | [ai_ask 记忆调用 §3/§6](../design/memory/ai-ask-memory-recall.md) · [006 ADR](../design/decisions/006-retrieval-layer-scope.md) · Sprint 2           |
+| in-progress | [intelligence] | ai_ask 快通道实现：每轮 recall + 分层 memoryContext（baseline/fastHits/deepInsights）+ 分段渲染                                                                                                                                                                                                                                                                                                                                                                                   | [ai_ask 记忆调用 §3/§6](../design/memory/ai-ask-memory-recall.md) · [006 ADR](../design/decisions/006-retrieval-layer-scope.md) · Sprint 3           |
 | backlog     | [intelligence] | 三路查询实证：类似/关联事件视角的命中率对比验证（默认关闭，证据通过才开启）                                                                                                                                                                                                                                                                                                                                                                                                       | [记忆调取机制 §2.11](../design/memory/memory-retrieval-types.md) · 006 ADR 决策 2                                                                    |
 | backlog     | [intelligence] | 慢通道实现：insightForSlowThinking 触发 → 两阶段深度检索 → DeepInsight 注入                                                                                                                                                                                                                                                                                                                                                                                                       | [意识系统 §2.6](../design/consciousness/consciousness-system.md) · 006 ADR 决策 4 · [ai_say 三线旧稿](../../docs-archive/misc/ai_say智能实现机制.md) |
 | backlog     | [intelligence] | require 收集紧迫度核实：在 exit-decision 上下文中评估是否重新设计                                                                                                                                                                                                                                                                                                                                                                                                                 | 006 ADR 决策 6                                                                                                                                       |
@@ -75,9 +75,9 @@
 
 | 状态    | 类型               | 故事                                                                                              | 关联                                                                                              |
 | ------- | ------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| backlog | [feature]          | ai_think 真的推演一步：调 LLM，结果写进脚本指定的变量，后续动作读得到                             | [CAP-04](../audit/capability-inventory.md) · [执行内核深挖](../audit/deep-dive-execution-core.md) |
-| backlog | [feature]          | ai_ask 的追问循环有硬上限：缺省脚本也保证终止                                                     | [CAP-03](../audit/capability-inventory.md)                                                        |
-| backlog | [feature]          | ai_say 的配置字段只有一个名字（编辑器 / YAML / 引擎三处同名）                                     | [CAP-02](../audit/capability-inventory.md) · [重复报告](../audit/duplication-report.md)           |
+| ready   | [feature]          | ai_think 真的推演一步：调 LLM，结果写进脚本指定的变量，后续动作读得到                             | [CAP-04](../audit/capability-inventory.md) · [执行内核深挖](../audit/deep-dive-execution-core.md) |
+| ready   | [feature]          | ai_ask 的追问循环有硬上限：缺省脚本也保证终止                                                     | [CAP-03](../audit/capability-inventory.md)                                                        |
+| ready   | [feature]          | ai_say 的配置字段只有一个名字（编辑器 / YAML / 引擎三处同名）                                     | [CAP-02](../audit/capability-inventory.md) · [重复报告](../audit/duplication-report.md)           |
 | backlog | [feature]          | ai_say 说完之后，等不等确认由脚本说了算（`require_acknowledgment` 现在面板有、落盘丢、schema 拒） | [CAP-02](../audit/capability-inventory.md)                                                        |
 | backlog | [feature·回溯补录] | 领域专家写一份 YAML，就能把一次咨询交给引擎跑完                                                   | [CAP-01](../audit/capability-inventory.md)                                                        |
 | backlog | [design]           | ADR：AI 输出的安全水位——拦截换话术，还是事后关键词告警                                            | [CAP-06](../audit/capability-inventory.md)                                                        |
@@ -86,22 +86,23 @@
 ### Epic F · 调试闭环主线 —— 调好的东西真的落回脚本
 
 > 来源意图：意图区「调试闭环」
-> **版本管理不在本 epic**：项目版本归 Epic H（H 的里子就是原 F 的目标 2）。F 只管 `runId` 分支这一层。
-> **回退是破坏性的、旧线只能看不能续跑**——这是 ADR 定下的语义，不是缺陷；`debug_entries` 已保住"看"的能力。
+> **本 epic 的里子**：调试时会临时改脚本、特别是提示词，改完立刻看 AI 回复的效果——**调好的那些改动要能保存回脚本文件**，不然调试白调。
+> **回退是调试的常规动作，不是终点**：改提示词 → 重跑 → 看输出 → 不满意 → 回退再改 → 再看，直到提示词或配置项定得合理。**回退之后必须能接着跑**。
+> **版本管理不在本 epic**：项目版本（`script_files` 快照、切版本、版本对比）归 Epic H。F 只管 `runId` 这条"一次尝试"的线。
 
-| 状态    | 类型      | 故事                                                                                       | 关联                                                                                                                                                       |
-| ------- | --------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ready   | [feature] | rerun-action 从 worktree 分支合并回主干                                                    | docs/superpowers/plans/2026-05-07-rerun-action.md · worktree-rerun-feature-continue · [脚本调试需求旧稿](../../docs-archive/misc/HeartRule脚本调试需求.md) |
-| backlog | [feature] | 调试里调好的改动，落回编辑器那份脚本上——提示成功就等于真的变了                             | [CAP-13](../audit/capability-inventory.md) · [调试深挖 N3](../audit/deep-dive-debugging.md)                                                                |
-| backlog | [feature] | "这版改动写回去了没有"，用户看得出来                                                       | [CAP-13](../audit/capability-inventory.md) · [调试深挖 N4/N5](../audit/deep-dive-debugging.md)                                                             |
-| backlog | [feature] | 接着上次那局调，不用每次从头开一局                                                         | [CAP-13](../audit/capability-inventory.md)                                                                                                                 |
-| backlog | [feature] | 每条分支各存一套执行状态，能切回去接着跑                                                   | [CAP-16](../audit/capability-inventory.md) · [调试深挖 缺陷②](../audit/deep-dive-debugging.md)                                                             |
-| backlog | [feature] | 分支选择器真的能用                                                                         | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N1/N2/N11](../audit/deep-dive-debugging.md)                                                         |
-| backlog | [feature] | 重跑不要把历史消息标错                                                                     | [CAP-10](../audit/capability-inventory.md) · [调试深挖 缺陷①](../audit/deep-dive-debugging.md)                                                             |
-| backlog | [design]  | ADR：回退的语义——破坏性回退（旧线只读不续），并给 `runId` 定名                             | [CAP-16](../audit/capability-inventory.md) · [调试深挖 缺陷②](../audit/deep-dive-debugging.md)                                                             |
-| backlog | [feature] | 按 ADR 落地：回退不截断 `rerunHistory`（保住配置记录）+ 弹窗补一句"回退后无法回到当前进度" | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N1/N2](../audit/deep-dive-debugging.md)                                                             |
-| backlog | [feature] | 重跑按当时那次用的模型配置来，不凭空写死 `deepseek`                                        | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N6](../audit/deep-dive-debugging.md)                                                                |
-| backlog | [feature] | 换一个 action 重开，不会带着上一个的模型配置                                               | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N6](../audit/deep-dive-debugging.md)                                                                |
+| 状态    | 类型      | 故事                                                                                                                             | 关联                                                                                                                                                       |
+| ------- | --------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ready   | [feature] | rerun-action 从 worktree 分支合并回主干                                                                                          | docs/superpowers/plans/2026-05-07-rerun-action.md · worktree-rerun-feature-continue · [脚本调试需求旧稿](../../docs-archive/misc/HeartRule脚本调试需求.md) |
+| backlog | [feature] | 调试里调好的改动，落回编辑器那份脚本上——提示成功就等于真的变了                                                                   | [CAP-13](../audit/capability-inventory.md) · [调试深挖 N3](../audit/deep-dive-debugging.md)                                                                |
+| backlog | [feature] | "这版改动写回去了没有"，用户看得出来                                                                                             | [CAP-13](../audit/capability-inventory.md) · [调试深挖 N4/N5](../audit/deep-dive-debugging.md)                                                             |
+| backlog | [feature] | 接着上次那局调，不用每次从头开一局                                                                                               | [CAP-13](../audit/capability-inventory.md)                                                                                                                 |
+| backlog | [feature] | 每条分支各存一套执行状态，能切回去接着跑                                                                                         | [CAP-16](../audit/capability-inventory.md) · [调试深挖 缺陷②](../audit/deep-dive-debugging.md)                                                             |
+| backlog | [feature] | 分支选择器真的能用                                                                                                               | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N1/N2/N11](../audit/deep-dive-debugging.md)                                                         |
+| backlog | [feature] | 重跑不要把历史消息标错                                                                                                           | [CAP-10](../audit/capability-inventory.md) · [调试深挖 缺陷①](../audit/deep-dive-debugging.md)                                                             |
+| backlog | [design]  | ADR：一条会话能不能同时活着多条分支——能切回某条旧分支接着往下跑，还是旧分支只作可看的历史记录；顺带给 `runId` 定个用户看得懂的名 | [CAP-16](../audit/capability-inventory.md) · [调试深挖 缺陷②](../audit/deep-dive-debugging.md) · 与 Epic I 的会话模型同题                                  |
+| backlog | [feature] | 按 ADR 落地：回退之后能接着跑（同一点可以反复回退、反复试），每次试过什么配置留得住                                              | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N1/N2](../audit/deep-dive-debugging.md)                                                             |
+| backlog | [feature] | 重跑按当时那次用的模型配置来，不凭空写死 `deepseek`                                                                              | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N6](../audit/deep-dive-debugging.md)                                                                |
+| backlog | [feature] | 换一个 action 重开，不会带着上一个的模型配置                                                                                     | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N6](../audit/deep-dive-debugging.md)                                                                |
 
 ### Epic G · 编辑主线 —— 写下的就是会生效的
 
@@ -122,31 +123,46 @@
 > 来源意图：意图区「项目版本切来切去有据可依，且不丢东西」
 > 本 epic 含原 Epic F 的目标 2（版本对比与切换）——版本能力只有一个家。
 
-| 状态    | 类型      | 故事                                                                                                    | 关联                                                                                                    |
-| ------- | --------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| backlog | [design]  | ADR：切版本时，当前工作区怎么办（自动存现场 / 要求先发布 / 别的）；含会话侧同类问题（F 的回退）怎么处置 | [CAP-14](../audit/capability-inventory.md) · [平台深挖](../audit/deep-dive-platform.md) · Epic F 的 ADR |
-| backlog | [feature] | 按 ADR 落地：切版本不丢文件（发布快照带全字段 `filePath`、切前存现场、删除可回溯）                      | [CAP-14](../audit/capability-inventory.md)                                                              |
-| backlog | [feature] | 两个版本摆一起，看得出差在哪                                                                            | [CAP-14](../audit/capability-inventory.md)                                                              |
-| backlog | [feature] | 切版本前有未发布改动时给警告（`VersionListPanel` 那个从未传过的 prop 接上）                             | [CAP-14](../audit/capability-inventory.md)                                                              |
-| backlog | [feature] | 项目元信息在界面上能改（改名 / 描述 / 标签）                                                            | [CAP-17](../audit/capability-inventory.md)                                                              |
-| backlog | [feature] | 建项目时选的方案算数（不用在会话属性面板再选第二次）                                                    | [CAP-05](../audit/capability-inventory.md)                                                              |
-| backlog | [feature] | 撤销草稿表：工作区以 `script_files` 为准（界面那个假的"草稿时间戳"改读对地方）                          | [CAP-14](../audit/capability-inventory.md)                                                              |
+| 状态    | 类型      | 故事                                                                               | 关联                                                                                    |
+| ------- | --------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| backlog | [design]  | ADR：切版本时，当前工作区怎么办（自动存现场 / 要求先发布 / 别的）                  | [CAP-14](../audit/capability-inventory.md) · [平台深挖](../audit/deep-dive-platform.md) |
+| backlog | [feature] | 按 ADR 落地：切版本不丢文件（发布快照带全字段 `filePath`、切前存现场、删除可回溯） | [CAP-14](../audit/capability-inventory.md)                                              |
+| backlog | [feature] | 两个版本摆一起，看得出差在哪                                                       | [CAP-14](../audit/capability-inventory.md)                                              |
+| backlog | [feature] | 切版本前有未发布改动时给警告（`VersionListPanel` 那个从未传过的 prop 接上）        | [CAP-14](../audit/capability-inventory.md)                                              |
+| backlog | [feature] | 项目元信息在界面上能改（改名 / 描述 / 标签）                                       | [CAP-17](../audit/capability-inventory.md)                                              |
+| backlog | [feature] | 建项目时选的方案算数（不用在会话属性面板再选第二次）                               | [CAP-05](../audit/capability-inventory.md)                                              |
+| backlog | [feature] | 撤销草稿表：工作区以 `script_files` 为准（界面那个假的"草稿时间戳"改读对地方）     | [CAP-14](../audit/capability-inventory.md)                                              |
 
 ### Epic I · 会话运行时主线 —— 接着上次那句话往下谈
 
 > 来源意图：意图区「来访者中途走了，下次回来接着上次那句话往下谈」
 > **主目标是用户价值（对话级断点、入口一致）；并发与幂等是支撑的非功能需求，排在后面。**
 
-| 状态    | 类型      | 故事                                                                              | 关联                                                                                                             |
-| ------- | --------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| backlog | [design]  | ADR："接着那一轮"是重发那一轮还是等用户先开口；一条会话是线性时间线还是分叉树     | [CAP-07](../audit/capability-inventory.md) · [会话状态深挖](../audit/deep-dive-session-state.md) · Epic F 的 ADR |
-| backlog | [feature] | `position` 类型补上轮次（现在是 `as any` 写进去、schema 类型没有，前端 9 处在读） | [CAP-07](../audit/capability-inventory.md) · [会话状态深挖](../audit/deep-dive-session-state.md)                 |
-| backlog | [feature] | 下次回来，接着上次那句话往下谈（不是重开那个动作）                                | [CAP-07](../audit/capability-inventory.md)                                                                       |
-| backlog | [feature] | 两个入口对同一件事表现一致（`prevVariableSnapshots` 现在一个恒空、一个正常）      | [CAP-07](../audit/capability-inventory.md)                                                                       |
-| backlog | [design]  | 恢复语义写成机制文档（`fromSessionData` 合并顺序、superseded 过滤、四桶回填）     | [CAP-07](../audit/capability-inventory.md) · 红线 A6                                                             |
-| backlog | [feature] | 发消息幂等：重复请求不多出一条用户消息                                            | [CAP-07](../audit/capability-inventory.md)                                                                       |
-| backlog | [feature] | 同会话并发不打架（锁或乐观并发）                                                  | [CAP-07](../audit/capability-inventory.md)                                                                       |
-| backlog | [feature] | 配了哪家就是哪家（provider 别名不把 DeepSeek 静默指向火山）                       | [CAP-15](../audit/capability-inventory.md)                                                                       |
+| 状态    | 类型      | 故事                                                                              | 关联                                                                                                                            |
+| ------- | --------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| backlog | [design]  | ADR："接着那一轮"是重发那一轮还是等用户先开口                                     | [CAP-07](../audit/capability-inventory.md) · [会话状态深挖](../audit/deep-dive-session-state.md) · 会话模型同题见 Epic F 的 ADR |
+| backlog | [feature] | `position` 类型补上轮次（现在是 `as any` 写进去、schema 类型没有，前端 9 处在读） | [CAP-07](../audit/capability-inventory.md) · [会话状态深挖](../audit/deep-dive-session-state.md)                                |
+| backlog | [feature] | 下次回来，接着上次那句话往下谈（不是重开那个动作）                                | [CAP-07](../audit/capability-inventory.md)                                                                                      |
+| backlog | [feature] | 两个入口对同一件事表现一致（`prevVariableSnapshots` 现在一个恒空、一个正常）      | [CAP-07](../audit/capability-inventory.md)                                                                                      |
+| backlog | [design]  | 恢复语义写成机制文档（`fromSessionData` 合并顺序、superseded 过滤、四桶回填）     | [CAP-07](../audit/capability-inventory.md) · 红线 A6                                                                            |
+| backlog | [feature] | 发消息幂等：重复请求不多出一条用户消息                                            | [CAP-07](../audit/capability-inventory.md)                                                                                      |
+| backlog | [feature] | 同会话并发不打架（锁或乐观并发）                                                  | [CAP-07](../audit/capability-inventory.md)                                                                                      |
+| backlog | [feature] | 配了哪家就是哪家（provider 别名不把 DeepSeek 静默指向火山）                       | [CAP-15](../audit/capability-inventory.md)                                                                                      |
+
+### Epic J · 混乱收口 —— 说出口的与代码里的一致
+
+> 来源意图：意图区「代码-文档一致性收敛」（2026-09-27 审计 + 编目 2026-09-28）
+> **覆盖范围**：[混乱地图](../audit/mess-map.md) 64 条里**没有归宿的 55 条**（51「否」+ 4「X」）。其余 9 条早有家：3 条已进 C/B/D，6 条「部分」随原意图走。
+> **做事顺序**：先修**有用户影响的**——对外文档说错事实（E 类口径失真 13 条，全部是根 README / CLAUDE.md / AGENTS.md / 指南在说假话，谁读谁被误导）；其余 42 条**不逐条开故事**，一次性定归宿（直接改 / 拆故事 / 明确弃 / 归档）。
+> 修复的验收口径是"读者照做能走通"，不是"文件被打开过"。
+
+| 状态    | 类型      | 故事                                                                                                                                                      | 关联                                                                                                                                   |
+| ------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| backlog | [feature] | 根 `README.md` 不再说谎：完成度一节（前端"0%"、11 个端点、15 个测试）、项目目录树、服务端口、"六大引擎"含三个不存在的引擎                                 | [E-01/02/03/06](../audit/mess-map.md) · [CAP-01](../audit/capability-inventory.md)                                                     |
+| backlog | [feature] | `CLAUDE.md` 与 4 篇 `AGENTS.md` 对齐事实：`SessionManager` 已不存在（现为 `SessionOrchestrator`）、schema 是单文件、推荐的技能名已改名                    | [E-04/05/07](../audit/mess-map.md)                                                                                                     |
+| backlog | [feature] | 死引用与过期索引清一遍：`_system/README.md` 三处死引用 + 不存在的物理路径、`docs-archive/README.md` 自身过期、`DEV_START_GUIDE.md` 端口写反、两份索引漏项 | [E-08/10/11/13](../audit/mess-map.md)                                                                                                  |
+| backlog | [feature] | `docs/ddd/strategic-design.md` 的整改清单与代码现状对齐（M4 称"没有 `application/` 目录"，实际已存在）                                                    | [E-12](../audit/mess-map.md) · [MESS-D-05](../audit/mess-map.md)                                                                       |
+| backlog | [design]  | 其余 42 条逐条定归宿，出一份「编目项 → 归宿」对照表：直接改 / 拆故事 / 明确弃 / 归档                                                                      | [mess-map](../audit/mess-map.md) 51「否」+ 4「X」 · 含 `.qoder/` 20+ 处死引用的取舍、`application/` 三个并行目录（DDD 计划 Phase 1.4） |
 
 ## 智能设计议题（Exploration）
 
