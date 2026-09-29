@@ -80,6 +80,7 @@ export interface DebugSessionDetail {
   globalVariables?: Record<string, unknown>;
   metadata: Record<string, unknown>;
   messages: DebugMessage[];
+  runVersions?: Array<{ version: string; runId: string; type: string; actionId?: string; createdAt: string }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -103,6 +104,7 @@ export interface DebugMessageResponse {
   error?: any;
   actionSnapshots?: Record<string, any>;
   rerunHistory?: any[];
+  runVersions?: Array<{ version: string; runId: string; type: string; actionId?: string; createdAt: string }>;
 }
 
 export interface CreateDebugSessionRequest {
@@ -114,6 +116,7 @@ export interface CreateDebugSessionRequest {
 
 export interface SendDebugMessageRequest {
   content: string;
+  restoreToActionId?: string;
 }
 
 export interface RerunRequest {
@@ -217,13 +220,41 @@ export const debugApi = {
   /**
    * 获取会话消息历史
    */
-  async getDebugSessionMessages(sessionId: string) {
+  async getDebugSessionMessages(sessionId: string, branchId?: string) {
+    const params: Record<string, string> = {};
+    if (branchId) params.branchId = branchId;
     const response = await axios.get<{ success: boolean; data: DebugMessage[] }>(
       `${API_BASE_URL}/sessions/${sessionId}/messages`,
       {
         timeout: 30000,
+        params,
       }
     );
+    return response.data;
+  },
+
+  /**
+   * 获取分支完整状态（消息 + 位置 + 调试气泡）
+   */
+  async getBranchState(sessionId: string, branchId?: string) {
+    const params: Record<string, string> = {};
+    if (branchId) params.branchId = branchId;
+    const response = await axios.get<{
+      success: boolean;
+      data: {
+        messages: DebugMessage[];
+        position: any;
+        executionStatus: string;
+        currentBranchId?: string;
+        branchRunId?: string;
+        actionSnapshots: Record<string, any>;
+        rerunHistory: any[];
+        currentRunId?: string;
+      };
+    }>(`${API_BASE_URL}/sessions/${sessionId}/branch-state`, {
+      timeout: 30000,
+      params,
+    });
     return response.data;
   },
 

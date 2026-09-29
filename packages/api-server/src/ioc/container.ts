@@ -14,8 +14,10 @@
  * Container → Adapters (outbound) → Core Engine (through ports)
  */
 
-import { LLMOrchestrator, ScriptExecutor } from '@heartrule/core-engine';
+import { LLMOrchestrator, ScriptExecutor, createLogger } from '@heartrule/core-engine';
 import type { ILLMProvider } from '@heartrule/core-engine';
+
+const logger = createLogger('DependencyContainer');
 
 import { DeepSeekProvider } from '../adapters/outbound/llm/deepseek-provider.js';
 import { OpenAIProvider } from '../adapters/outbound/llm/openai-provider.js';
@@ -54,7 +56,7 @@ export class DependencyContainer {
     // 3. 创建 ScriptExecutor（注入 LLMOrchestrator）
     this.scriptExecutor = new ScriptExecutor(this.llmOrchestrator);
 
-    console.log('[DependencyContainer] ✅ Container initialized:', {
+    logger.info('Container initialized', {
       llmProvider: this.getLLMProviderName(),
     });
   }

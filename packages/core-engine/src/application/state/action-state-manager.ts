@@ -13,7 +13,10 @@
 import type { BaseAction } from '../../domain/actions/base-action.js';
 import type { TemplateProvider } from '../../engines/prompt-template/template-provider.js';
 import type { ExecutionState } from '../../engines/script-execution/script-executor.js';
+import { createLogger } from '../../utils/logger.js';
 import type { ActionFactory } from '../actions/action-factory.js';
+
+const logger = createLogger('ActionStateManager');
 
 /**
  * Action State Snapshot
@@ -88,19 +91,17 @@ export class ActionStateManager {
     // 如果没有提供 phases，使用 executionState 中的 currentActionId
     const currentActionId = correctActionId ?? executionState.currentActionId;
 
-    console.log('[ActionStateManager] 🔍 Checking if action needs restore:', {
+    logger.debug('Checking if action needs restore', {
       hasActionState: !!executionState.metadata.actionState,
       hasCurrentAction: !!executionState.currentAction,
       savedActionId,
       currentActionId,
-      correctActionId,
-      actionStateSnapshot: executionState.metadata.actionState,
     });
 
     // 只有当 actionId 匹配时才恢复
     if (executionState.metadata.actionState && !executionState.currentAction) {
       if (savedActionId !== currentActionId) {
-        console.log('[ActionStateManager] ⚠️ ActionId mismatch, not restoring:', {
+        logger.warn('ActionId mismatch, not restoring', {
           savedActionId,
           currentActionId,
         });
@@ -108,20 +109,18 @@ export class ActionStateManager {
         return;
       }
 
-      console.log('[ActionStateManager] 🔄 Deserializing action state:', {
+      logger.debug('Deserializing action state', {
         actionId: executionState.metadata.actionState.actionId,
         currentRound: executionState.metadata.actionState.currentRound,
       });
       executionState.currentAction = this.deserialize(executionState.metadata.actionState);
-      console.log('[ActionStateManager] ✅ Action restored:', {
+      logger.debug('Action restored', {
         actionId: executionState.currentAction.actionId,
         currentRound: executionState.currentAction.currentRound,
         maxRounds: executionState.currentAction.maxRounds,
       });
     } else if (!executionState.metadata.actionState) {
-      console.log('[ActionStateManager] ⚠️ No actionState in metadata');
-    } else if (executionState.currentAction) {
-      console.log('[ActionStateManager] ℹ️ currentAction already exists, no restore needed');
+      logger.debug('No actionState in metadata');
     }
   }
 

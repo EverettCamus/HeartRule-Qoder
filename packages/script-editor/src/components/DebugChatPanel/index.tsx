@@ -34,6 +34,7 @@ import {
   determineSnapshotMsgCount,
   insertSeparator,
 } from './separatorUtils';
+import { buildDebugBubbles } from './buildDebugBubbles';
 import './style.css';
 
 const { TextArea } = Input;
@@ -132,26 +133,21 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     content: ErrorBubbleContent;
   }
 
-  // Timeline history snapshots (client-side only)
-  interface TimelineSnapshot {
-    snapshotId: string;
-    actionId: string;
-    mode: 'initial' | 'rerun' | 'rollback';
-    timestamp: string;
+  // Timeline entries (lightweight — branch data loaded from server on demand)
+  interface TimelineEntry {
+    id: string;
+    branchId: string;
     label: string;
-    messages: DebugMessage[];
-    debugBubblesV2: DebugBubbleV2[];
+    actionId: string;
+    timestamp: string;
   }
-  const [timelineSnapshots, setTimelineSnapshots] = useState<TimelineSnapshot[]>([]);
-  const [viewingSnapshotId, setViewingSnapshotId] = useState<string | null>(null);
+  const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
+  // Branch-aware mode: selectedBranchId identifies which branch is being viewed.
+  // null = current branch (V1), non-null = historical branch (V0).
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
 
-  // Refs for accessing latest messages/bubbles in snapshot callbacks
-  const messagesRef = useRef(messages);
-  messagesRef.current = messages;
-  const debugBubblesV2Ref = useRef(debugBubblesV2);
   // Pre-rerun message count for reliable separator insertion
   const preRerunMsgCountRef = useRef<number | undefined>(undefined);
-  debugBubblesV2Ref.current = debugBubblesV2;
 
   // Refs for accessing latest state in fetchDebugEntriesV2
   const navigationTreeRef = useRef(navigationTree);
@@ -196,17 +192,65 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
     return rerunHistory.filter((e: any) => e.actionId === actionId);
   }, [rerunHistory, currentPosition]);
 
-  // Derived display data — when viewing a history snapshot, use its data instead of live state
-  const viewingSnapshot = useMemo(
-    () =>
-      viewingSnapshotId
-        ? (timelineSnapshots.find((s) => s.snapshotId === viewingSnapshotId) ?? null)
-        : null,
-    [viewingSnapshotId, timelineSnapshots]
+  // Load branch state from server when switching timeline views
+  const loadBranchState = async (branchId?: string) => {
+    const sid = activeSessionId || sessionId;
+    if (!sid) return;
+    try {
+      const result = await debugApi.getBranchState(sid, branchId);
+      if (result.success && result.data) {
+        const d = result.data;
+        setMessages(d.messages);
+        if (d.position) {
+          setCurrentPosition({
+            phaseIndex: d.position.phaseIndex || 0,
+            phaseId: d.position.phaseId || '',
+            topicIndex: d.position.topicIndex || 0,
+            topicId: d.position.topicId || '',
+            actionIndex: d.position.actionIndex || 0,
+            actionId: d.position.actionId || '',
+            actionType: d.position.actionType || '',
+          });
+        }
+        if (d.branchRunId) {
+          setCurrentRunId(d.branchRunId);
+          fetchDebugEntriesV2(d.branchRunId);
+        }
+        setSessionInfo((prev: any) => ({
+          ...prev,
+          executionStatus: d.executionStatus,
+          metadata: { ...(prev?.metadata || {}), actionSnapshots: d.actionSnapshots || {}, rerunHistory: d.rerunHistory || [], currentBranchId: d.currentBranchId },
+        }));
+      }
+    } catch (err) {
+      console.error('[DebugChat] Failed to load branch state:', err);
+    }
+  };
+
+  // Reload when switching branches
+  useEffect(() => {
+    if (visible && (activeSessionId || sessionId)) {
+      const branchId = selectedBranchId
+        ? timelineEntries.find(e => e.id === selectedBranchId)?.branchId
+        : undefined;
+      loadBranchState(branchId);
+    }
+  }, [selectedBranchId]);
+
+  // Currently selected timeline entry (null when viewing current branch)
+  const selectedEntry = useMemo(
+    () => selectedBranchId ? timelineEntries.find(e => e.id === selectedBranchId) : undefined,
+    [selectedBranchId, timelineEntries]
   );
-  const displayMessages = viewingSnapshot ? viewingSnapshot.messages : messages;
-  const displayDebugBubblesV2 = viewingSnapshot ? viewingSnapshot.debugBubblesV2 : debugBubblesV2;
-  const displayErrorBubbles = viewingSnapshot ? [] : errorBubbles;
+
+  // Timeline selector options (from lightweight timelineEntries)
+  const timelineSelectOptions = useMemo(() => [
+    { value: '__current__', label: `v${timelineEntries.length} (当前)` },
+    ...timelineEntries.slice().reverse().map((e, i) => ({
+      value: e.id,
+      label: `v${timelineEntries.length - 1 - i}`,
+    })),
+  ], [timelineEntries]);
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -414,84 +458,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       entries.forEach((entry) => runIds.add(entry.runId));
       setAvailableRunIds(Array.from(runIds));
 
-      // Group entries by position (phaseId-topicId-actionId-round) to build unified bubbles
-      const groupKey = (e: DebugEntryRecord) =>
-        `${e.phaseId}|${e.topicId}|${e.actionId}|${e.round}|${e.runId}`;
-
-      const grouped = new Map<string, DebugEntryRecord[]>();
-      entries.forEach((entry) => {
-        const key = groupKey(entry);
-        if (!grouped.has(key)) grouped.set(key, []);
-        grouped.get(key)!.push(entry);
-      });
-
-      // Look up position names from navigation tree
-      const tree = navigationTreeRef.current;
-
-      // Build DebugBubbleV2 from each group
-      const bubbles: DebugBubbleV2[] = [];
-      for (const [, entries] of grouped) {
-        const first = entries[0];
-        // Merge all entries' content.entries into one array
-        const allEntries = entries.flatMap((e) => e.content.entries || []);
-
-        // Look up phase/topic/action names from navigation tree
-        let phaseName: string | undefined;
-        let topicName: string | undefined;
-        let actionName: string | undefined;
-        if (tree?.phases) {
-          for (const phase of tree.phases) {
-            if (phase.phaseId === first.phaseId) {
-              phaseName = phase.phaseName;
-              if (phase.topics) {
-                for (const topic of phase.topics) {
-                  if (topic.topicId === first.topicId) {
-                    topicName = topic.topicName;
-                    if (topic.actions) {
-                      for (const action of topic.actions) {
-                        if (action.actionId === first.actionId) {
-                          actionName = action.displayName;
-                          break;
-                        }
-                      }
-                    }
-                    break;
-                  }
-                }
-              }
-              break;
-            }
-          }
-        }
-
-        bubbles.push({
-          id: first.id,
-          sessionId: first.sessionId,
-          runId: first.runId,
-          phaseId: first.phaseId,
-          topicId: first.topicId,
-          actionId: first.actionId,
-          actionType: first.actionType,
-          round: first.round,
-          phaseName,
-          topicName,
-          actionName,
-          entries: allEntries,
-          timestamp: first.createdAt,
-          isExpanded: false,
-        });
-      }
-
-      // Sort by position then round
-      bubbles.sort((a, b) => {
-        const byPhase = a.phaseId.localeCompare(b.phaseId);
-        if (byPhase !== 0) return byPhase;
-        const byTopic = a.topicId.localeCompare(b.topicId);
-        if (byTopic !== 0) return byTopic;
-        const byAction = a.actionId.localeCompare(b.actionId);
-        if (byAction !== 0) return byAction;
-        return a.round - b.round;
-      });
+      // Build bubbles using pure function (extracted for testability)
+      const bubbles = buildDebugBubbles(entries, navigationTreeRef.current);
 
       // Attach per-position variable state to each bubble
       const varStoreMap = variableStoreByPositionRef.current;
@@ -566,7 +534,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           currentRound: lastBubble.round,
           maxRounds: (foundAction?.config as any)?.max_rounds,
         };
-        setCurrentPosition(pos);
+        // Don't pollute live position when viewing a snapshot (use ref for async safety)
+        if (!selectedBranchId) setCurrentPosition(pos);
       }
     } catch (err) {
       console.warn('[DebugChat] ⚠️ Failed to fetch V2 debug entries:', err);
@@ -837,6 +806,9 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       content: userMessage,
       timestamp: new Date().toISOString(),
     };
+    // When sending from a snapshot, suppress Select re-fires BEFORE the first
+    // setMessages (re-render triggers Ant Design onChange which clears selectedBranchId)
+    const restoreToActionId = selectedBranchId ? timelineEntries.find(e => e.id === selectedBranchId)?.actionId : undefined;
     console.log('[DebugChat] 💬 Adding user message to UI:', userMsg);
     setMessages((prev) => [...prev, userMsg]);
 
@@ -844,13 +816,19 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       setLoading(true);
       console.log('[DebugChat] ⏳ Sending message to backend...');
 
+      if (restoreToActionId) {
+        console.log('[DebugChat] 🔍 Sending from snapshot — restoreToActionId:', restoreToActionId);
+      }
+
       // 发送消息到后端
       console.log('[DebugChat] 📡 API Call: sendDebugMessage', {
         sessionId: currentSessionId,
         content: userMessage,
+        restoreToActionId,
       });
       const response = await debugApi.sendDebugMessage(currentSessionId, {
         content: userMessage,
+        restoreToActionId,
       });
 
       // 🔍 详细调试日志
@@ -874,8 +852,9 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
         debugInfo: response.debugInfo,
       });
 
-      if (sessionInfo) {
+      if (sessionInfo && !restoreToActionId) {
         // Merge all updatable fields from response into sessionInfo
+        // (skip for snapshot continuation to avoid polluting V1's live state)
         const updates: any = {};
         if (response.executionStatus) updates.executionStatus = response.executionStatus;
         if ((response as any).actionSnapshots) {
@@ -1051,7 +1030,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
           currentRound: response.position.currentRound,
           maxRounds: response.position.maxRounds,
         });
-        setCurrentPosition(pos);
+        // Only update live position for normal flow, not snapshot continuation
+        if (!restoreToActionId) setCurrentPosition(pos);
       }
 
       // 添加AI回复到消息列表（仅当有非空内容时）
@@ -1073,15 +1053,21 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       }
 
       // V2: Update runId from response and refresh debug entries
-      if (response.currentRunId) {
+      // Don't update live runId for snapshot continuations — would pollute V1's view
+      if (response.currentRunId && !restoreToActionId) {
         setCurrentRunId(response.currentRunId);
       }
-      console.log('[DebugChat] 🔍 V2 fetch debug entries trigger:', {
-        responseCurrentRunId: response.currentRunId,
-        stateCurrentRunId: currentRunId,
-        resolvedRunId: response.currentRunId || currentRunId || undefined,
-      });
-      fetchDebugEntriesV2(response.currentRunId || currentRunId || undefined);
+
+      // Refresh branch state after V0 continuation
+      if (restoreToActionId && selectedBranchId) {
+        loadBranchState(timelineEntries.find(e => e.id === selectedBranchId)?.branchId);
+      }
+
+      // For snapshot continuation: loadBranchState already handles debug entry fetch.
+      // For normal flow: fetch debug entries for the response runId.
+      if (!restoreToActionId) {
+        fetchDebugEntriesV2(response.currentRunId || currentRunId || undefined);
+      }
     } catch (err: any) {
       console.error('[DebugChat] ❌ Failed to send message:', {
         error: err,
@@ -1317,8 +1303,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
       setAvailableRunIds([]);
       setNavigationTree(null);
       setCurrentPosition(undefined); // 使用 undefined 而不是 null
-      setTimelineSnapshots([]);
-      setViewingSnapshotId(null);
+      setTimelineEntries([]);
+      setSelectedBranchId(null);
       latestVariableStoreRef.current = null;
       variableStoreByPositionRef.current.clear();
 
@@ -1650,21 +1636,20 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
     data.targetActionId = rerunMode === 'rollback' ? rerunTargetActionId : undefined;
 
-    // Create timeline snapshot before executing rerun/rollback
+    // Create timeline entry for the snapshot branch
     const snapshotLabel =
       rerunMode === 'rerun'
         ? `🔄 重运行 ${currentPosition?.actionId || ''}`
         : `↩️ 回退到 ${rerunTargetActionId}`;
-    setTimelineSnapshots((prev) => [
+
+    setTimelineEntries((prev) => [
       ...prev,
       {
-        snapshotId: uuidv4(),
+        id: uuidv4(),
         actionId: rerunTargetActionId || currentPosition?.actionId || '',
-        mode: rerunMode === 'rerun' ? 'rerun' : 'rollback',
+        branchId: (sessionInfo?.metadata?.currentBranchId as string) || currentRunId || '',
         timestamp: new Date().toISOString(),
         label: snapshotLabel,
-        messages: messagesRef.current.map((m) => ({ ...m })),
-        debugBubblesV2: debugBubblesV2Ref.current.map((b) => ({ ...b })),
       },
     ]);
 
@@ -1802,22 +1787,13 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                 }))}
               />
             )}
-            {timelineSnapshots.length > 0 && (
+            {timelineEntries.length > 0 && (
               <Select
-                value={viewingSnapshotId || '__current__'}
-                onChange={(val) => setViewingSnapshotId(val === '__current__' ? null : val)}
+                value={selectedBranchId || '__current__'}
+                onChange={(val) => setSelectedBranchId(val === '__current__' ? null : val)}
                 style={{ width: 160, marginLeft: 12 }}
                 size="small"
-                options={[
-                  { value: '__current__', label: `v${timelineSnapshots.length} (当前)` },
-                  ...timelineSnapshots
-                    .slice()
-                    .reverse()
-                    .map((s, i) => ({
-                      value: s.snapshotId,
-                      label: `v${timelineSnapshots.length - 1 - i}`,
-                    })),
-                ]}
+                options={timelineSelectOptions}
               />
             )}
           </div>
@@ -1845,6 +1821,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             />
           </div>
         </div>
+
 
         {/* 错误提示 - 使用新的 ErrorBanner */}
         {detailedError && (
@@ -1875,8 +1852,8 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             <div className="debug-chat-loading">
               <Spin tip="Loading conversation history..." />
             </div>
-          ) : displayMessages.length === 0 &&
-            displayDebugBubblesV2.length === 0 &&
+          ) : messages.length === 0 &&
+            debugBubblesV2.length === 0 &&
             errorBubbles.length === 0 ? (
             <Empty description="No messages yet" style={{ marginTop: 50 }} />
           ) : (
@@ -1889,7 +1866,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                   timestamp: string;
                 }> = [];
 
-                displayMessages.forEach((msg) => {
+                messages.forEach((msg) => {
                   items.push({
                     type: 'message',
                     data: msg,
@@ -1899,7 +1876,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
 
                 // Error bubbles (V2-style, filtered by debugFilter.showError)
                 if (debugFilter.showError) {
-                  displayErrorBubbles.forEach((bubble) => {
+                  errorBubbles.forEach((bubble) => {
                     items.push({
                       type: 'error',
                       data: bubble,
@@ -1909,7 +1886,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                 }
 
                 // V2 unified debug bubbles
-                displayDebugBubblesV2.forEach((bubble) => {
+                debugBubblesV2.forEach((bubble) => {
                   items.push({
                     type: 'bubble-v2' as any,
                     data: bubble,
@@ -1974,23 +1951,6 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                                 b.id === item.data.id ? { ...b, isExpanded: !b.isExpanded } : b
                               )
                             );
-                            // When viewing a historical snapshot, also update its copy
-                            if (viewingSnapshotId) {
-                              setTimelineSnapshots((prev) =>
-                                prev.map((s) =>
-                                  s.snapshotId === viewingSnapshotId
-                                    ? {
-                                        ...s,
-                                        debugBubblesV2: s.debugBubblesV2.map((b) =>
-                                          b.id === item.data.id
-                                            ? { ...b, isExpanded: !b.isExpanded }
-                                            : b
-                                        ),
-                                      }
-                                    : s
-                                )
-                              );
-                            }
                           }}
                           sessionId={activeSessionId || sessionId || undefined}
                           isLatest={!!(item.data as DebugBubbleV2).variableContent}
@@ -2066,7 +2026,7 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
             }
 
             // 查看历史快照时，在输入框上方显示提示条（不阻挡输入）
-            const historyBanner = viewingSnapshot ? (
+            const historyBanner = selectedBranchId && selectedEntry ? (
               <div
                 style={{
                   display: 'flex',
@@ -2079,11 +2039,11 @@ const DebugChatPanel: React.FC<DebugChatPanelProps> = ({
                   border: '1px solid #91d5ff',
                 }}
               >
-                <span style={{ fontSize: 12, color: '#1890ff' }}>📜 {viewingSnapshot.label}</span>
+                <span style={{ fontSize: 12, color: '#1890ff' }}>📜 {selectedEntry.label}</span>
                 <Button
                   type="link"
                   size="small"
-                  onClick={() => setViewingSnapshotId(null)}
+                  onClick={() => setSelectedBranchId(null)}
                   style={{ marginLeft: 8, fontSize: 12 }}
                 >
                   ← 返回当前

@@ -58,6 +58,14 @@ export class SessionOrchestrator {
 
   // ==================== Private: Session Construction ====================
 
+  /** Parse double-encoded JSONB metadata (Drizzle stores JSON as JSON-string). */
+  private parseMetadata(raw: unknown): Record<string, any> {
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch (_) { return {}; }
+    }
+    return (raw as Record<string, any>) || {};
+  }
+
   private createInitialSession(
     sessionData: SessionData,
     globalVariables: Record<string, any>,
@@ -97,6 +105,9 @@ export class SessionOrchestrator {
     }
     if (overrides.sessionConfig) {
       session.metadata.sessionConfig = overrides.sessionConfig;
+    }
+    if (overrides.currentBranchId) {
+      session.metadata.currentBranchId = overrides.currentBranchId;
     }
 
     logger.debug('📋 Initial session:', {
@@ -244,19 +255,25 @@ export class SessionOrchestrator {
     const script = await this.repository.loadScriptById(sessionData.scriptId);
 
     try {
+      const branchId = uuidv4();
       const runId = uuidv4();
       await this.repository.setSessionRunId(sessionId, runId);
 
       const { values: globalVariables, definitions: globalVariableDefinitions } =
         await this.repository.loadGlobalVariables(script.scriptName, sessionData.userId);
-      const conversationHistory = await this.repository.loadConversationHistory(sessionId);
+      const conversationHistory = await this.repository.loadConversationHistory(
+        sessionId,
+        { branchId }
+      );
 
       let session = this.createInitialSession(sessionData, globalVariables, conversationHistory, {
         ...(sessionData.metadata as Record<string, any>),
         projectId: script.projectId,
+        currentBranchId: branchId,
       });
 
       session.metadata.currentRunId = runId;
+      session.metadata.currentBranchId = branchId;
       session.metadata.globalVariableDefinitions = globalVariableDefinitions;
       session.metadata.globalVariableCallback = async (name: string, value: unknown) => {
         try {
@@ -293,6 +310,8 @@ export class SessionOrchestrator {
         logger.debug('💾 Saved sessionConfig to database:', session.metadata.sessionConfig);
       }
 
+      logger.info('🔍 [INIT] Before persist — metadata keys:', Object.keys(session.metadata).join(','));
+      logger.info('🔍 [INIT] currentBranchId:', session.metadata.currentBranchId);
       await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevHistoryLength);
       await this.saveVariableSnapshots(session);
       await this.repository.persistSession(session, globalVariables);
@@ -315,8 +334,12 @@ export class SessionOrchestrator {
     }
   }
 
-  async processUserInput(sessionId: string, userInput: string): Promise<SessionResponse> {
-    logger.info('🔵 processUserInput called', { sessionId, userInput });
+  async processUserInput(
+    sessionId: string,
+    userInput: string,
+    restoreToActionId?: string
+  ): Promise<SessionResponse> {
+    logger.info('🔵 processUserInput called', { sessionId, userInput, restoreToActionId });
 
     const sessionData = await this.repository.loadSessionById(sessionId);
     const script = await this.repository.loadScriptById(sessionData.scriptId);
@@ -325,11 +348,71 @@ export class SessionOrchestrator {
       const { values: globalVariables, definitions: globalVariableDefinitions } =
         await this.repository.loadGlobalVariables(script.scriptName, sessionData.userId);
 
-      await this.repository.saveUserMessage(sessionId, userInput);
+      // Determine which branch to use. When continuing from a snapshot,
+      // load messages from that snapshot's branch (not the current branch).
+      const metadata = this.parseMetadata(sessionData.metadata);
+      const actionSnapshots = metadata.actionSnapshots || {};
+      const snapshot = restoreToActionId ? actionSnapshots[restoreToActionId] : null;
+      const snapshotBranchId = snapshot?.branchId as string | undefined;
+      const activeBranchId = snapshotBranchId || (metadata.currentBranchId as string);
 
-      const conversationHistory = await this.repository.loadConversationHistory(sessionId);
+      // Load conversation history filtered by the active branch
+      let conversationHistory = await this.repository.loadConversationHistory(
+        sessionId,
+        { branchId: activeBranchId }
+      );
+
+      // Create a new runId for snapshot continuation (debug entries isolated from V1)
+      const continuationRunId = snapshot ? uuidv4() : null;
+      if (continuationRunId) {
+        await this.repository.setSessionRunId(sessionId, continuationRunId);
+        logger.info('Branch continuation — new runId:', { continuationRunId });
+      }
+
+      if (snapshot) {
+        logger.info('🔄 Continuing from snapshot on branch', {
+          restoreToActionId,
+          snapshotBranchId,
+          historyLength: conversationHistory.length,
+        });
+      }
+
+      await this.repository.saveUserMessage(sessionId, userInput, activeBranchId);
+
+      // Append the just-saved user message to history
+      conversationHistory = [
+        ...conversationHistory,
+        {
+          role: 'user',
+          content: userInput,
+          timestamp: new Date().toISOString(),
+        },
+      ];
 
       let session = this.restoreSession(sessionData, globalVariables, conversationHistory);
+
+      if (continuationRunId) {
+        session.metadata.currentRunId = continuationRunId;
+        // Track latest runId per branch for debug entry lookup
+        const branchRunIds = (session.metadata.branchRunIds as Record<string, string>) || {};
+        branchRunIds[activeBranchId] = continuationRunId;
+        session.metadata.branchRunIds = branchRunIds;
+      }
+
+      // Restore branch position (where V0 was when the rollback was triggered)
+      if (snapshot?.branchPosition) {
+        const bp = snapshot.branchPosition as Record<string, any>;
+        session.position = {
+          phaseIndex: (bp.phaseIndex as number) ?? session.position.phaseIndex,
+          topicIndex: (bp.topicIndex as number) ?? session.position.topicIndex,
+          actionIndex: (bp.actionIndex as number) ?? session.position.actionIndex,
+          phaseId: (bp.phaseId as string) || session.position.phaseId,
+          topicId: (bp.topicId as string) || session.position.topicId,
+          actionId: (bp.actionId as string) || session.position.actionId,
+          actionType: (bp.actionType as string) || session.position.actionType,
+        };
+        logger.info('Restored branch position from snapshot', { position: session.position });
+      }
 
       session.metadata.globalVariableDefinitions = globalVariableDefinitions;
       session.metadata.globalVariableCallback = async (name: string, value: unknown) => {
@@ -357,7 +440,8 @@ export class SessionOrchestrator {
       const prevHistoryLength = session.conversationHistory.length;
       session = await this.executeScript(script, sessionId, session, userInput);
 
-      await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevHistoryLength);
+      const branchForSave = restoreToActionId ? activeBranchId : undefined;
+      await this.repository.saveNewAIMessagesFromSession(sessionId, session, prevHistoryLength, branchForSave);
       await this.saveVariableSnapshots(session);
       await this.repository.persistSession(session, globalVariables);
 
@@ -373,6 +457,7 @@ export class SessionOrchestrator {
         aiMessageLength: result.aiMessage?.length || 0,
         executionStatus: result.executionStatus,
         position: result.position,
+        currentRunId: result.currentRunId,
       });
       return result;
     } catch (error) {
@@ -487,7 +572,7 @@ export class SessionOrchestrator {
     const sessionData = await this.repository.loadSessionById(sessionId);
     const script = await this.repository.loadScriptById(sessionData.scriptId);
 
-    const metadata = (sessionData.metadata as Record<string, any>) || {};
+    const metadata = this.parseMetadata(sessionData.metadata);
     const actionSnapshots = metadata.actionSnapshots || {};
 
     logger.info('[DEBUG-RERUN] Session metadata loaded from DB', {
@@ -542,17 +627,36 @@ export class SessionOrchestrator {
       }
     }
 
-    const msgCount: number =
-      (snapshot.messageCount as number) ?? (snapshot.conversationHistoryLength as number) ?? 0;
-    await this.repository.flagSupersededMessages(sessionId, msgCount);
+    // Create a new branch for the rollback result
+    const previousBranchId = (metadata.currentBranchId as string) || undefined;
+    const newBranchId = uuidv4();
+    const newRunId = uuidv4();
+
+    // Store branch metadata in snapshots so V0 continuation can restore state
+    if (previousBranchId) {
+      const previousPosition = (sessionData.position as Record<string, any>) || {};
+      for (const id of Object.keys(newSnapshots)) {
+        newSnapshots[id] = {
+          ...newSnapshots[id],
+          branchId: previousBranchId,
+          branchPosition: {
+            phaseIndex: previousPosition.phaseIndex,
+            topicIndex: previousPosition.topicIndex,
+            actionIndex: previousPosition.actionIndex,
+            phaseId: previousPosition.phaseId || '',
+            topicId: previousPosition.topicId || '',
+            actionId: previousPosition.actionId || '',
+            actionType: previousPosition.actionType || '',
+          },
+        };
+      }
+    }
 
     let rerunHistory = (metadata.rerunHistory || []) as any[];
     rerunHistory = rerunHistory.filter((entry: any) => {
       const entryIdx = allActionIds.indexOf(entry.actionId);
       return entryIdx >= 0 && entryIdx <= targetIdx;
     });
-
-    const newRunId = uuidv4();
 
     const restoredMetadata: Record<string, any> = {
       ...metadata,
@@ -561,6 +665,7 @@ export class SessionOrchestrator {
       rerunHistory,
       llmConfig: llmConfig || metadata.llmConfig,
       rerunConfigOverride: configOverride || undefined,
+      currentBranchId: newBranchId,
       currentRunId: newRunId,
     };
     delete restoredMetadata.actionState;
@@ -586,7 +691,11 @@ export class SessionOrchestrator {
       script.scriptName,
       sessionData.userId
     );
-    const conversationHistory = await this.repository.loadConversationHistory(sessionId);
+    // Load conversation history for the NEW branch only (old branch messages are in V0)
+    const conversationHistory = await this.repository.loadConversationHistory(
+      sessionId,
+      { branchId: newBranchId }
+    );
 
     const updatedSessionData = await this.repository.loadSessionById(sessionId);
     let session = this.restoreSession(updatedSessionData, globalVariables, conversationHistory);

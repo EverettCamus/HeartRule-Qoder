@@ -237,52 +237,52 @@ export class ScriptExecutor {
     // [Phase 1] Dependency injection first, keep default creation logic (backward compatible)
     if (llmOrchestrator) {
       this.llmOrchestrator = llmOrchestrator;
-      logger.info('✅ Using injected LLM Orchestrator');
+      logger.debug('Using injected LLM Orchestrator');
     } else {
       this.llmOrchestrator = this.createDefaultLLM();
     }
 
     if (actionFactory) {
       this.actionFactory = actionFactory;
-      logger.info('✅ Using injected ActionFactory');
+      logger.debug('Using injected ActionFactory');
     } else {
       this.actionFactory = new DefaultActionFactory(this.llmOrchestrator);
-      logger.info('✅ Created default ActionFactory');
+      logger.debug('Created default ActionFactory');
     }
 
     if (monitorOrchestrator) {
       this.monitorOrchestrator = monitorOrchestrator;
-      logger.info('✅ Using injected MonitorOrchestrator');
+      logger.debug('Using injected MonitorOrchestrator');
     } else {
       this.monitorOrchestrator = new MonitorOrchestrator(this.llmOrchestrator);
-      logger.info('✅ Created default MonitorOrchestrator');
+      logger.debug('Created default MonitorOrchestrator');
     }
 
     if (actionStateManager) {
       this.actionStateManager = actionStateManager;
-      logger.info('✅ Using injected ActionStateManager');
+      logger.debug('Using injected ActionStateManager');
     } else {
       this.actionStateManager = new ActionStateManager(this.actionFactory);
-      logger.info('✅ Created default ActionStateManager');
+      logger.debug('Created default ActionStateManager');
     }
 
     if (resultHandler) {
       this.resultHandler = resultHandler;
-      logger.info('✅ Using injected ExecutionResultHandler');
+      logger.debug('Using injected ExecutionResultHandler');
     } else {
       this.resultHandler = new ExecutionResultHandler(
         this.monitorOrchestrator,
         this.actionStateManager
       );
-      logger.info('✅ Created default ExecutionResultHandler');
+      logger.debug('Created default ExecutionResultHandler');
     }
 
     if (topicPlanner) {
       this.topicPlanner = topicPlanner;
-      logger.info('✅ Using injected TopicPlanner');
+      logger.debug('Using injected TopicPlanner');
     } else {
       this.topicPlanner = new BasicTopicPlanner();
-      logger.info('✅ Created default BasicTopicPlanner');
+      logger.debug('Created default BasicTopicPlanner');
     }
   }
 
@@ -644,7 +644,7 @@ export class ScriptExecutor {
         topicId: executionState.currentTopicId,
         actionId: action.actionId,
       };
-      logger.info('📦 Saved completed action context (handleCompletedAction)', {
+      logger.debug('Saved completed action context (handleCompletedAction)', {
         phaseId: executionState.currentPhaseId,
         topicId: executionState.currentTopicId,
         actionId: action.actionId,
@@ -654,7 +654,7 @@ export class ScriptExecutor {
     // 保存最近完成的 action 的 output 配置
     if (action?.config?.output) {
       executionState.metadata.lastCompletedActionOutput = action.config.output;
-      logger.info('🔍 保存 lastCompletedActionOutput (handleCompletedAction)', {
+      logger.debug('Saving lastCompletedActionOutput (handleCompletedAction)', {
         actionId: action.actionId,
         output: action.config.output,
       });
@@ -1007,13 +1007,13 @@ export class ScriptExecutor {
             timestamp: new Date().toISOString(),
             originalConfig: { ...actionConfig },
           };
-          logger.info(`[DEBUG-SNAPSHOT] Created snapshot for action: ${actionConfig.action_id}`, {
+          logger.debug(`[SNAPSHOT] Created for action: ${actionConfig.action_id}`, {
             snapshotKeys: Object.keys(snapshots),
             conversationHistoryLength: executionState.conversationHistory.length,
           });
         } else {
-          logger.info(
-            `[DEBUG-SNAPSHOT] Snapshot already exists for action: ${actionConfig.action_id}`,
+          logger.debug(
+            `[SNAPSHOT] Already exists for action: ${actionConfig.action_id}`,
             {
               snapshotKeys: Object.keys(snapshots),
             }
@@ -1022,8 +1022,8 @@ export class ScriptExecutor {
 
         logger.debug(`✅ Created action instance: ${action.actionId}`);
       } else {
-        logger.info(
-          `[DEBUG-SNAPSHOT] currentAction already set: ${executionState.currentAction?.actionId}, skipping creation`
+        logger.debug(
+          `[SNAPSHOT] currentAction already set: ${executionState.currentAction?.actionId}, skipping creation`
         );
       }
 
@@ -1203,7 +1203,7 @@ export class ScriptExecutor {
       topicId,
       actionId: action.actionId,
     };
-    logger.info('📦 Saved completed action context', {
+    logger.debug('Saved completed action context', {
       phaseId,
       topicId,
       actionId: action.actionId,

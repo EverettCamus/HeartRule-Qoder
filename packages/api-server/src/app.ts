@@ -21,8 +21,9 @@ config({ path: resolve(__dirname, '../../../.env') });
 export async function buildApp() {
   const app = Fastify({
     logger: {
-      level: process.env.LOG_LEVEL || 'info',
-      // 减少HTTP请求日志的内容大小
+      // Fastify pino: only warn+error to avoid "incoming request"/"request completed" spam.
+      // Component-level logging is handled by the custom Logger (createLogger).
+      level: 'warn',
       serializers: {
         req(req) {
           return { method: req.method, url: req.url };

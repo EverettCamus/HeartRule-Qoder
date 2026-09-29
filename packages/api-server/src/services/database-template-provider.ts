@@ -3,11 +3,13 @@
  * 从数据库 script_files 表中读取模板内容
  */
 
-import type { TemplateProvider, TemplateContent } from '@heartrule/core-engine';
+import { createLogger, type TemplateProvider, type TemplateContent } from '@heartrule/core-engine';
 import { eq, and } from 'drizzle-orm';
 
 import { db } from '../db/index.js';
 import { scriptFiles } from '../db/schema.js';
+
+const logger = createLogger('DatabaseTemplateProvider');
 
 /**
  * 数据库模板提供器实现
@@ -48,7 +50,7 @@ export class DatabaseTemplateProvider implements TemplateProvider {
         fileName: templateFile.fileName || '',
       };
     } catch (error) {
-      console.error(`[DatabaseTemplateProvider] Error loading template ${filePath}:`, error);
+      logger.error(`Error loading template ${filePath}:`, error);
       return null;
     }
   }
@@ -60,7 +62,7 @@ export class DatabaseTemplateProvider implements TemplateProvider {
    * @returns 是否存在
    */
   async hasTemplate(projectId: string, filePath: string): Promise<boolean> {
-    console.log(`[DatabaseTemplateProvider] 🔍 hasTemplate called:`, { projectId, filePath });
+    logger.debug('hasTemplate called', { projectId, filePath });
     try {
       const [templateFile] = await db
         .select({ id: scriptFiles.id })
@@ -74,13 +76,10 @@ export class DatabaseTemplateProvider implements TemplateProvider {
         );
 
       const exists = !!templateFile;
-      console.log(
-        `[DatabaseTemplateProvider] 📋 Result: ${exists}`,
-        templateFile ? { id: templateFile.id } : 'not found'
-      );
+      logger.debug(`Result: ${exists}`, templateFile ? { id: templateFile.id } : undefined);
       return exists;
     } catch (error) {
-      console.error(`[DatabaseTemplateProvider] Error checking template ${filePath}:`, error);
+      logger.error(`Error checking template ${filePath}:`, error);
       return false;
     }
   }

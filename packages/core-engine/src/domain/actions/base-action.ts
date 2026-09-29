@@ -30,6 +30,9 @@ import type {
 
 import type { LLMDebugInfo } from '../../engines/llm-orchestration/orchestrator.js';
 import { VariableScopeResolver } from '../../engines/variable-scope/variable-scope-resolver.js';
+import { createLogger } from '../../utils/logger.js';
+
+const baseLogger = createLogger('BaseAction');
 
 /**
  * Action 执行上下文
@@ -336,7 +339,7 @@ export abstract class BaseAction {
     if (projectId && hasTemplateProvider) {
       // 数据库模式,不需要物理路径
       // TemplateResolver在接收到空字符串时,完全依赖DatabaseTemplateProvider
-      console.log(`[BaseAction] 💾 Using database mode for project: ${projectId}`);
+      baseLogger.debug(`Using database mode for project: ${projectId}`);
       return '';
     }
 

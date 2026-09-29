@@ -72,6 +72,7 @@ export interface SessionResponse {
   error?: DetailedApiError;
   actionSnapshots?: Record<string, any>;
   rerunHistory?: any[];
+  runVersions?: Array<{ version: string; runId: string; type: string; actionId?: string; createdAt: string }>;
   orderedActionIds?: string[];
 }
 
@@ -156,6 +157,24 @@ export class SessionResponseBuilder {
       } as any,
     };
 
+    // Propagate error details when session is in error state.
+    // Without this, the client sees BACKEND_ERROR with no actionable info.
+    if (
+      session.executionStatus === ExecutionStatus.ERROR ||
+      session.executionStatus === ('error' as any)
+    ) {
+      const errorMsg =
+        (session.metadata.error as string) ||
+        (session.metadata as any)?.message ||
+        'Unknown execution error';
+      result.error = buildDetailedError(new Error(errorMsg), {
+        scriptId: script.id,
+        scriptName: script.scriptName,
+        sessionId: dbSession.id,
+        position: result.position,
+      });
+    }
+
     const currentAction = session.currentAction;
     const outputVariables: string[] = currentAction?.config?.output?.map((v: any) => v.get) || [];
 
@@ -215,6 +234,9 @@ export class SessionResponseBuilder {
     }
     if (session.metadata.rerunHistory) {
       result.rerunHistory = session.metadata.rerunHistory;
+    }
+    if (session.metadata.runVersions) {
+      result.runVersions = session.metadata.runVersions as any;
     }
 
     result.orderedActionIds = extractOrderedActionIds(script);

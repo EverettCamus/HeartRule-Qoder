@@ -53,7 +53,10 @@ export interface ISessionRepository {
   // Reads
   loadSessionById(sessionId: string): Promise<SessionData>;
   loadScriptById(scriptId: string): Promise<ScriptData>;
-  loadConversationHistory(sessionId: string): Promise<any[]>;
+  loadConversationHistory(
+    sessionId: string,
+    options?: { branchId?: string }
+  ): Promise<any[]>;
   loadGlobalVariables(
     scriptName: string,
     userId: string
@@ -65,7 +68,7 @@ export interface ISessionRepository {
   getMessageCount(sessionId: string): Promise<number>;
 
   // Writes
-  saveUserMessage(sessionId: string, userInput: string): Promise<void>;
+  saveUserMessage(sessionId: string, userInput: string, branchId?: string): Promise<void>;
   saveVariableSnapshots(snapshots: NewVariable[]): Promise<void>;
 
   // Session lifecycle
@@ -91,15 +94,13 @@ export interface ISessionRepository {
     value: unknown
   ): Promise<void>;
 
-  // Rerun support
-  flagSupersededMessages(sessionId: string, fromMessageIndex: number): Promise<void>;
-
   // Session-based persistence (Phase 2: Session domain activation)
   persistSession(session: Session, globalVariables: Record<string, any>): Promise<void>;
   saveNewAIMessagesFromSession(
     sessionId: string,
     session: Session,
-    prevHistoryLength: number
+    prevHistoryLength: number,
+    branchId?: string
   ): Promise<void>;
 
   // Route-level operations (formerly inline db.* in routes)
@@ -125,7 +126,7 @@ export interface ISessionRepository {
       messageCount: number;
     }>
   >;
-  getRawMessages(sessionId: string): Promise<any[]>;
+  getRawMessages(sessionId: string, branchId?: string): Promise<any[]>;
   listUserSessions(userId: string): Promise<SessionData[]>;
   getDebugEntries(sessionId: string, runId?: string): Promise<any[]>;
 }
@@ -152,7 +153,12 @@ export class SessionRepository implements ISessionRepository {
       executionStatus: session.executionStatus,
     });
 
-    return session as SessionData;
+    // Parse double-encoded JSONB metadata (Drizzle stores JSON as JSON-string)
+    const result = { ...session } as any;
+    if (typeof result.metadata === 'string') {
+      try { result.metadata = JSON.parse(result.metadata); } catch (_) { result.metadata = {}; }
+    }
+    return result as SessionData;
   }
 
   async loadScriptById(scriptId: string): Promise<ScriptData> {
@@ -186,26 +192,23 @@ export class SessionRepository implements ISessionRepository {
     };
   }
 
-  async loadConversationHistory(sessionId: string): Promise<any[]> {
+  async loadConversationHistory(
+    sessionId: string,
+    options?: { branchId?: string }
+  ): Promise<any[]> {
+    const conditions = [eq(messages.sessionId, sessionId)];
+    if (options?.branchId) {
+      conditions.push(eq(messages.branchId, options.branchId));
+    }
+
     const history = await db.query.messages.findMany({
-      where: eq(messages.sessionId, sessionId),
+      where: and(...conditions),
       orderBy: (fields, { asc }) => [asc(fields.timestamp)],
     });
 
-    const activeMessages = history.filter(
-      (m) => !((m.metadata as Record<string, any>)?.superseded === true)
-    );
+    logger.debug(`📋 Loaded ${history.length} messages for session ${sessionId}${options?.branchId ? ` branch=${options.branchId.substring(0,8)}` : ''}`);
 
-    logger.debug(
-      `📋 Loaded ${activeMessages.length}/${history.length} active messages from database:`,
-      {
-        aiMessages: activeMessages.filter((m) => m.role === 'assistant').length,
-        userMessages: activeMessages.filter((m) => m.role === 'user').length,
-        supersededCount: history.length - activeMessages.length,
-      }
-    );
-
-    return activeMessages.map((m) => ({
+    return history.map((m) => ({
       role: m.role,
       content: m.content,
       actionId: m.actionId || undefined,
@@ -315,11 +318,12 @@ export class SessionRepository implements ISessionRepository {
 
   // ==================== Writes ====================
 
-  async saveUserMessage(sessionId: string, userInput: string): Promise<void> {
+  async saveUserMessage(sessionId: string, userInput: string, branchId?: string): Promise<void> {
     await db.insert(messages).values({
       sessionId,
       role: 'user',
       content: userInput,
+      branchId: branchId || null,
       metadata: {},
       timestamp: new Date(),
     });
@@ -414,40 +418,6 @@ export class SessionRepository implements ISessionRepository {
         variables: { [name]: value },
       });
     }
-  }
-
-  // ==================== Rerun Support ====================
-
-  async flagSupersededMessages(sessionId: string, fromMessageIndex: number): Promise<void> {
-    const allMessages = await db
-      .select({ id: messages.id })
-      .from(messages)
-      .where(eq(messages.sessionId, sessionId))
-      .orderBy(messages.timestamp);
-
-    if (fromMessageIndex >= allMessages.length) return;
-
-    const idsToFlag = allMessages.slice(fromMessageIndex).map((m) => m.id);
-    if (idsToFlag.length === 0) return;
-
-    const supersededMeta = { superseded: true, supersededAt: new Date().toISOString() };
-
-    for (const msgId of idsToFlag) {
-      const msg = await db.query.messages.findFirst({
-        where: eq(messages.id, msgId),
-      });
-      if (msg) {
-        const existingMeta = (msg.metadata as Record<string, any>) || {};
-        await db
-          .update(messages)
-          .set({
-            metadata: { ...existingMeta, ...supersededMeta },
-          })
-          .where(eq(messages.id, msgId));
-      }
-    }
-
-    logger.debug(`🏷️ Flagged ${idsToFlag.length} messages as superseded after snapshot point`);
   }
 
   // ==================== Session-based Persistence ====================
@@ -621,9 +591,11 @@ export class SessionRepository implements ISessionRepository {
   async saveNewAIMessagesFromSession(
     sessionId: string,
     session: Session,
-    prevHistoryLength: number
+    prevHistoryLength: number,
+    branchId?: string
   ): Promise<void> {
     const newMessages = session.conversationHistory.slice(prevHistoryLength);
+    const effectiveBranchId = branchId || (session.metadata.currentBranchId as string) || undefined;
 
     for (const msg of newMessages) {
       if (msg.role === 'assistant') {
@@ -632,11 +604,13 @@ export class SessionRepository implements ISessionRepository {
           role: 'assistant',
           content: msg.content || '',
           actionId: msg.actionId,
+          branchId: effectiveBranchId || null,
           metadata: msg.metadata || {},
           timestamp: new Date(),
         });
         logger.debug('Saved AI message', {
           actionId: msg.actionId,
+          branchId: effectiveBranchId?.substring(0, 8),
           length: msg.content?.length,
         });
       }
@@ -771,9 +745,20 @@ export class SessionRepository implements ISessionRepository {
     }));
   }
 
-  async getRawMessages(sessionId: string): Promise<any[]> {
+  async getRawMessages(sessionId: string, branchId?: string): Promise<any[]> {
+    // Default to the session's currentBranchId if no explicit branch filter
+    let effectiveBranchId = branchId;
+    if (!effectiveBranchId) {
+      const session = await this.loadSessionById(sessionId);
+      const meta = (session.metadata as Record<string, any>) || {};
+      effectiveBranchId = meta.currentBranchId as string | undefined;
+    }
+    const conditions = [eq(messages.sessionId, sessionId)];
+    if (effectiveBranchId) {
+      conditions.push(eq(messages.branchId, effectiveBranchId));
+    }
     return db.query.messages.findMany({
-      where: eq(messages.sessionId, sessionId),
+      where: and(...conditions),
       orderBy: (messages, { asc }) => [asc(messages.timestamp)],
     });
   }

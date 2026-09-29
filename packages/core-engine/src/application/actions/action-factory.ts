@@ -8,8 +8,11 @@ import { AiAskAction } from '../../domain/actions/ai-ask-action.js';
 import { AiSayAction } from '../../domain/actions/ai-say-action.js';
 import type { BaseAction } from '../../domain/actions/base-action.js';
 import type { LLMOrchestrator } from '../../engines/llm-orchestration/orchestrator.js';
+import { createLogger } from '../../utils/logger.js';
 
 import { createAction } from './action-registry.js';
+
+const logger = createLogger('ActionFactory');
 
 /**
  * Action工厂接口
@@ -43,18 +46,17 @@ export class DefaultActionFactory implements ActionFactory {
    * 创建Action实例
    */
   create(actionType: string, actionId: string, config: any): BaseAction {
-    console.log(`[ActionFactory] 🏭 Creating action:`, {
+    logger.debug('Creating action', {
       actionType,
       actionId,
       hasLLM: !!this.llmOrchestrator,
-      hasRegistry: !!this.registry,
     });
 
     // 优先使用注册表（如果提供）
     if (this.registry) {
       const ActionClass = this.registry.get(actionType);
       if (ActionClass) {
-        console.log(`[ActionFactory] ✅ Using registry for: ${actionType}`);
+        logger.debug(`Using registry for: ${actionType}`);
         return new ActionClass(actionId, config);
       }
     }
@@ -75,7 +77,7 @@ export class DefaultActionFactory implements ActionFactory {
 
       default:
         // 使用通用注册表创建
-        console.log(`[ActionFactory] 🔄 Fallback to createAction for: ${actionType}`);
+          logger.debug(`Fallback to createAction for: ${actionType}`);
         return createAction(actionType, actionId, config);
     }
   }

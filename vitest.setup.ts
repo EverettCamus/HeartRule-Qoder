@@ -21,6 +21,10 @@ if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = 'test';
 }
 
+// Enable debug-level logging in tests so logger.debug() calls are visible
+process.env.LOG_LEVEL = 'debug';
+
 console.log('✅ Vitest environment setup completed');
 console.log(`📊 NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`📊 LOG_LEVEL: ${process.env.LOG_LEVEL}`);
 console.log(`🗄️  DATABASE_URL: ${process.env.DATABASE_URL ? '***configured***' : 'not set'}`);

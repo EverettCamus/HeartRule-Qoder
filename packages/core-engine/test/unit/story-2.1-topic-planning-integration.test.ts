@@ -75,7 +75,7 @@ describe('Story 2.1集成：Topic Planning Integration', () => {
     });
 
     it('应该在注入TopicPlanner时记录日志', () => {
-      const consoleSpy = vi.spyOn(console, 'info');
+      const consoleSpy = vi.spyOn(console, 'log');
       const mockPlanner: ITopicPlanner = {
         plan: vi.fn().mockResolvedValue({
           topicId: 'test',
@@ -98,7 +98,7 @@ describe('Story 2.1集成：Topic Planning Integration', () => {
     });
 
     it('应该在无参数时创建默认BasicTopicPlanner', () => {
-      const consoleSpy = vi.spyOn(console, 'info');
+      const consoleSpy = vi.spyOn(console, 'log');
 
       const executor = new ScriptExecutor(createMockLLM());
 

@@ -42,17 +42,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
                 type: 'array',
                 items: { type: 'object', additionalProperties: true },
               },
-              currentRunId: { type: 'string' },
-              error: {
-                type: 'object',
-                properties: {
-                  code: { type: 'string' },
-                  type: { type: 'string' },
-                  message: { type: 'string' },
-                  details: { type: 'string' },
-                  context: { type: 'object' },
-                  recovery: { type: 'object' },
-                },
+              runVersions: {
+                type: 'array',
+                items: { type: 'object', additionalProperties: true },
               },
             },
           },
@@ -118,6 +110,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           position: initResult.position,
           actionSnapshots: (initResult as any).actionSnapshots,
           rerunHistory: (initResult as any).rerunHistory,
+          runVersions: (initResult as any).runVersions,
         };
 
         if (initResult.error) {
@@ -261,13 +254,15 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         // 返回会话信息，包含脚本的解析内容
         const response: any = Object.assign({}, session);
         response.sessionId = session.id; // 显式添加 sessionId 字段
-        response.metadata = Object.assign({}, session.metadata || {});
-        response.metadata.script = script?.parsedContent || null;
 
-        // 从 metadata 中提取 globalVariables
-        const sessionMetadata = (session.metadata as any) || {};
-        if (sessionMetadata.globalVariables) {
-          response.globalVariables = sessionMetadata.globalVariables;
+        const rawMeta = (session.metadata as Record<string, any>) || {};
+        response.metadata = Object.assign({}, rawMeta);
+        response.metadata.script = script?.parsedContent || null;
+        if (rawMeta.currentBranchId) {
+          response.currentBranchId = rawMeta.currentBranchId;
+        }
+        if (rawMeta.globalVariables) {
+          response.globalVariables = rawMeta.globalVariables;
         }
 
         // 构建完整的 position 信息（包含 ID 字段）
@@ -345,24 +340,27 @@ export async function registerSessionRoutes(app: FastifyInstance) {
             },
           },
         },
+        querystring: {
+          type: 'object',
+          properties: {
+            runId: { type: 'string' },
+            branchId: { type: 'string' },
+          },
+        },
       },
     },
     async (request, reply) => {
       const { id } = request.params as { id: string };
+      const { branchId } = request.query as { branchId?: string };
 
       try {
         const repo = new SessionRepository();
-        const sessionMessages = await repo.getRawMessages(id);
-
-        // Filter out superseded messages (created by rerun/rollback)
-        const activeMessages = sessionMessages.filter(
-          (msg) => !((msg.metadata as Record<string, any>)?.superseded === true)
-        );
+        const sessionMessages = await repo.getRawMessages(id, branchId);
 
         // 转换为前端期望的格式
-        const formattedMessages = activeMessages.map((msg) => ({
+        const formattedMessages = sessionMessages.map((msg) => ({
           messageId: msg.id,
-          role: msg.role === 'assistant' ? 'ai' : msg.role, // 'assistant' -> 'ai'
+          role: msg.role === 'assistant' ? 'ai' : msg.role,
           content: msg.content,
           timestamp: msg.timestamp.toISOString(),
           actionId: msg.actionId,
@@ -441,7 +439,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           required: ['content'],
           properties: {
             content: { type: 'string' }, // 允许空字符串（用于 ai_say max_rounds=1 确认）
+            restoreToActionId: { type: 'string' },
           },
+          additionalProperties: true,
         },
         response: {
           200: {
@@ -503,6 +503,10 @@ export async function registerSessionRoutes(app: FastifyInstance) {
                 type: 'array',
                 items: { type: 'object', additionalProperties: true },
               },
+              runVersions: {
+                type: 'array',
+                items: { type: 'object', additionalProperties: true },
+              },
               currentRunId: { type: 'string' },
               error: {
                 type: 'object',
@@ -549,7 +553,10 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const { content } = request.body as { content: string };
+      const { content, restoreToActionId } = request.body as {
+        content: string;
+        restoreToActionId?: string;
+      };
 
       let session: any = null;
       let script: any = null;
@@ -567,8 +574,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         }
 
         if (
-          session.executionStatus === ExecutionStatus.COMPLETED ||
-          session.executionStatus === ExecutionStatus.ERROR
+          !restoreToActionId &&
+          (session.executionStatus === ExecutionStatus.COMPLETED ||
+          session.executionStatus === ExecutionStatus.ERROR)
         ) {
           reply.code(400);
           return {
@@ -600,7 +608,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
 
         // 调用 SessionOrchestrator 处理用户输入
         const orchestrator = new SessionOrchestrator();
-        const result = await orchestrator.processUserInput(id, content);
+        const result = await orchestrator.processUserInput(id, content, restoreToActionId);
 
         app.log.info(
           {
@@ -630,6 +638,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           // 回退/重运行所需字段
           actionSnapshots: (result as any).actionSnapshots,
           rerunHistory: (result as any).rerunHistory,
+          runVersions: (result as any).runVersions,
         };
 
         // 记录完整响应（特别是position字段）
@@ -751,8 +760,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         }
 
         if (
-          session.executionStatus === ExecutionStatus.COMPLETED ||
-          session.executionStatus === ExecutionStatus.ERROR
+          !restoreToActionId &&
+          (session.executionStatus === ExecutionStatus.COMPLETED ||
+          session.executionStatus === ExecutionStatus.ERROR)
         ) {
           reply.code(400);
           return {
@@ -883,6 +893,80 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           sessionId: (request.params as any)?.sessionId,
         });
         return reply.status(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
+  // Get branch state — returns messages + debug entries + position for a branch
+  app.get(
+    '/api/sessions/:id/branch-state',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string' } },
+        },
+        querystring: {
+          type: 'object',
+          properties: { branchId: { type: 'string' } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { branchId } = request.query as { branchId?: string };
+
+      try {
+        const repo = new SessionRepository();
+        const session = await repo.loadSessionById(id);
+        if (!session) return reply.status(404).send({ error: 'Session not found' });
+
+        // Get branch messages
+        const sessionMessages = await repo.getRawMessages(id, branchId);
+
+        // Find the correct runId for this branch's debug entries
+        const meta = (session.metadata as Record<string, any>) || {};
+        if (typeof meta === 'string') {
+          try { meta = JSON.parse(meta); } catch (_) { meta = {}; }
+        }
+        const rerunHistory = (meta.rerunHistory || []) as any[];
+        // Find the correct runId for this branch:
+        // - branchRunIds map tracks latest runId per branch (set during V0 continuation)
+        // - fallback: use rerunHistory[0] for historical branch, currentRunId for active
+        const branchRunIdsMap = (meta.branchRunIds as Record<string, string>) || {};
+        let branchRunId: string | undefined;
+        if (branchId) {
+          branchRunId = branchRunIdsMap[branchId] || rerunHistory[0]?.runId;
+        } else {
+          branchRunId = (session as any).currentRunId;
+        }
+
+        const formattedMessages = sessionMessages.map((msg) => ({
+          messageId: msg.id,
+          role: msg.role === 'assistant' ? 'ai' : msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp.toISOString(),
+          actionId: msg.actionId,
+          metadata: msg.metadata,
+        }));
+
+        return {
+          success: true,
+          data: {
+            messages: formattedMessages,
+            position: session.position,
+            executionStatus: session.executionStatus,
+            currentBranchId: meta.currentBranchId,
+            branchRunId,
+            actionSnapshots: meta.actionSnapshots || {},
+            rerunHistory,
+            currentRunId: (session as any).currentRunId,
+          },
+        };
+      } catch (error) {
+        app.log.error(error);
+        return reply.status(500).send({ error: 'Failed to get branch state' });
       }
     }
   );

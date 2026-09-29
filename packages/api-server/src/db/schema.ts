@@ -98,6 +98,7 @@ export const messages = pgTable(
     role: messageRoleEnum('role').notNull(),
     content: text('content').notNull(),
     actionId: varchar('action_id', { length: 255 }),
+    branchId: uuid('branch_id'),
     metadata: jsonb('metadata').notNull().default({}),
     timestamp: timestamp('timestamp').notNull().defaultNow(),
   },
