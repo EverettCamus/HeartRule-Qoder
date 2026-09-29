@@ -52,11 +52,11 @@
 
 > 来源意图：意图区「节奏系统固化」
 
-| 状态    | 类型      | 故事                                                                                                                                                                        | 关联                                                                              |
-| ------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| done    | [design]  | 文档地图与索引归位：立 `docs/README.md`（哪类文档住哪、谁是权威、下一个读者是谁）、补 `reference/` 与 `superpowers/` 的 README、ADR 注册表落表、消灭 CLAUDE.md 的第二份索引 | [文档地图](../README.md) · [设计文档状态索引](../design/README.md)                |
-| ready   | [design]  | 过程产物退场规则：在节奏系统 §7/§8 补 spec/plan 的完成与归档规则（做完标 done、被取代标 superseded、失效搬 docs-archive），据此给存量过程文档补状态                         | [开发节奏系统](../process/development-rhythm.md) §7/§8 · [文档地图](../README.md) |
-| backlog | [feature] | 把开发节奏编码为 Claude Code 项目 skill（六步流程/四选一收敛/封板规则）                                                                                                     | [开发节奏系统](../process/development-rhythm.md)                                  |
+| 状态    | 类型      | 故事                                                                                                                                                                                                                                                                                     | 关联                                                                              |
+| ------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| done    | [design]  | 文档地图与索引归位：立 `docs/README.md`（哪类文档住哪、谁是权威、下一个读者是谁）、补 `reference/` 与 `superpowers/` 的 README、ADR 注册表落表、消灭 CLAUDE.md 的第二份索引                                                                                                              | [文档地图](../README.md) · [设计文档状态索引](../design/README.md)                |
+| ready   | [design]  | 过程产物退场规则：在节奏系统 §7/§8 补 spec/plan 的完成与归档规则（做完标 done、被取代标 superseded、失效搬 docs-archive），据此给存量过程文档补状态；**范围含 `packages/**`的 30 篇包内文档**（2026-09-29 裁：退场通道不止`docs/superpowers/`，见 [A-01](../audit/mess-disposition.md)） | [开发节奏系统](../process/development-rhythm.md) §7/§8 · [文档地图](../README.md) |
+| backlog | [feature] | 把开发节奏编码为 Claude Code 项目 skill（六步流程/四选一收敛/封板规则）                                                                                                                                                                                                                  | [开发节奏系统](../process/development-rhythm.md)                                  |
 
 ### Epic D · 变量-文档主线 —— 变量职责收缩与信息点文档落地
 
@@ -90,33 +90,33 @@
 > **回退是调试的常规动作，不是终点**：改提示词 → 重跑 → 看输出 → 不满意 → 回退再改 → 再看，直到提示词或配置项定得合理。**回退之后必须能接着跑**。
 > **版本管理不在本 epic**：项目版本（`script_files` 快照、切版本、版本对比）归 Epic H。F 只管 `runId` 这条"一次尝试"的线。
 
-| 状态    | 类型      | 故事                                                                                                                             | 关联                                                                                                                                                       |
-| ------- | --------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ready   | [feature] | rerun-action 从 worktree 分支合并回主干                                                                                          | docs/superpowers/plans/2026-05-07-rerun-action.md · worktree-rerun-feature-continue · [脚本调试需求旧稿](../../docs-archive/misc/HeartRule脚本调试需求.md) |
-| backlog | [feature] | 调试里调好的改动，落回编辑器那份脚本上——提示成功就等于真的变了                                                                   | [CAP-13](../audit/capability-inventory.md) · [调试深挖 N3](../audit/deep-dive-debugging.md)                                                                |
-| backlog | [feature] | "这版改动写回去了没有"，用户看得出来                                                                                             | [CAP-13](../audit/capability-inventory.md) · [调试深挖 N4/N5](../audit/deep-dive-debugging.md)                                                             |
-| backlog | [feature] | 接着上次那局调，不用每次从头开一局                                                                                               | [CAP-13](../audit/capability-inventory.md)                                                                                                                 |
-| backlog | [feature] | 每条分支各存一套执行状态，能切回去接着跑                                                                                         | [CAP-16](../audit/capability-inventory.md) · [调试深挖 缺陷②](../audit/deep-dive-debugging.md)                                                             |
-| backlog | [feature] | 分支选择器真的能用                                                                                                               | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N1/N2/N11](../audit/deep-dive-debugging.md)                                                         |
-| backlog | [feature] | 重跑不要把历史消息标错                                                                                                           | [CAP-10](../audit/capability-inventory.md) · [调试深挖 缺陷①](../audit/deep-dive-debugging.md)                                                             |
-| backlog | [design]  | ADR：一条会话能不能同时活着多条分支——能切回某条旧分支接着往下跑，还是旧分支只作可看的历史记录；顺带给 `runId` 定个用户看得懂的名 | [CAP-16](../audit/capability-inventory.md) · [调试深挖 缺陷②](../audit/deep-dive-debugging.md) · 与 Epic I 的会话模型同题                                  |
-| backlog | [feature] | 按 ADR 落地：回退之后能接着跑（同一点可以反复回退、反复试），每次试过什么配置留得住                                              | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N1/N2](../audit/deep-dive-debugging.md)                                                             |
-| backlog | [feature] | 重跑按当时那次用的模型配置来，不凭空写死 `deepseek`                                                                              | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N6](../audit/deep-dive-debugging.md)                                                                |
-| backlog | [feature] | 换一个 action 重开，不会带着上一个的模型配置                                                                                     | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N6](../audit/deep-dive-debugging.md)                                                                |
+| 状态    | 类型      | 故事                                                                                                                             | 关联                                                                                                                      |
+| ------- | --------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| backlog | [feature] | 调试里调好的改动，落回编辑器那份脚本上——提示成功就等于真的变了                                                                   | [CAP-13](../audit/capability-inventory.md) · [调试深挖 N3](../audit/deep-dive-debugging.md)                               |
+| backlog | [feature] | "这版改动写回去了没有"，用户看得出来                                                                                             | [CAP-13](../audit/capability-inventory.md) · [调试深挖 N4/N5](../audit/deep-dive-debugging.md)                            |
+| backlog | [feature] | 接着上次那局调，不用每次从头开一局                                                                                               | [CAP-13](../audit/capability-inventory.md)                                                                                |
+| backlog | [feature] | 每条分支各存一套执行状态，能切回去接着跑                                                                                         | [CAP-16](../audit/capability-inventory.md) · [调试深挖 缺陷②](../audit/deep-dive-debugging.md)                            |
+| backlog | [feature] | 分支选择器真的能用                                                                                                               | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N1/N2/N11](../audit/deep-dive-debugging.md)                        |
+| backlog | [feature] | 重跑不要把历史消息标错                                                                                                           | [CAP-10](../audit/capability-inventory.md) · [调试深挖 缺陷①](../audit/deep-dive-debugging.md)                            |
+| backlog | [design]  | ADR：一条会话能不能同时活着多条分支——能切回某条旧分支接着往下跑，还是旧分支只作可看的历史记录；顺带给 `runId` 定个用户看得懂的名 | [CAP-16](../audit/capability-inventory.md) · [调试深挖 缺陷②](../audit/deep-dive-debugging.md) · 与 Epic I 的会话模型同题 |
+| backlog | [feature] | 按 ADR 落地：回退之后能接着跑（同一点可以反复回退、反复试），每次试过什么配置留得住                                              | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N1/N2](../audit/deep-dive-debugging.md)                            |
+| backlog | [feature] | 重跑按当时那次用的模型配置来，不凭空写死 `deepseek`                                                                              | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N6](../audit/deep-dive-debugging.md)                               |
+| backlog | [feature] | 换一个 action 重开，不会带着上一个的模型配置                                                                                     | [CAP-16](../audit/capability-inventory.md) · [调试深挖 N6](../audit/deep-dive-debugging.md)                               |
 
 ### Epic G · 编辑主线 —— 写下的就是会生效的
 
 > 来源意图：意图区「咨询师用拖拽和配置搭出咨询骨架，手写的只有提示词」
 > **DSL 单一出处是本 epic 的地基**（它在编辑器里落地，不像原先设想的游离在外）。E 管引擎侧字段、G 管编辑器侧派生，按包切不按字段切。
 
-| 状态    | 类型               | 故事                                                                                   | 关联                                                                                       |
-| ------- | ------------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| backlog | [feature]          | 编辑器的脚本模型从引擎派生：删掉死的那套词汇，活的那套不再手抄                         | [CAP-11](../audit/capability-inventory.md) · [重复报告 一](../audit/duplication-report.md) |
-| backlog | [feature]          | 拖拽换序不搬错元数据                                                                   | [CAP-11](../audit/capability-inventory.md)                                                 |
-| backlog | [feature]          | 菜单里能选的动作类型，引擎都跑得起来（`use_skill`/`show_form`/`show_pic`：接了或撤了） | [CAP-11](../audit/capability-inventory.md)                                                 |
-| backlog | [feature]          | 面板里配的字段，落盘不丢                                                               | [CAP-11](../audit/capability-inventory.md)                                                 |
-| backlog | [feature]          | 校验报错指到位置（行号）                                                               | [CAP-12](../audit/capability-inventory.md)                                                 |
-| backlog | [feature·回溯补录] | 直接编辑 YAML 文本，边写边校验                                                         | [CAP-12](../audit/capability-inventory.md)                                                 |
+| 状态    | 类型               | 故事                                                                                                                                                             | 关联                                                                                       |
+| ------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| backlog | [feature]          | 编辑器的脚本模型从引擎派生：删掉死的那套词汇，活的那套不再手抄                                                                                                   | [CAP-11](../audit/capability-inventory.md) · [重复报告 一](../audit/duplication-report.md) |
+| backlog | [feature]          | 拖拽换序不搬错元数据                                                                                                                                             | [CAP-11](../audit/capability-inventory.md)                                                 |
+| backlog | [feature]          | 菜单里能选的动作类型，引擎都跑得起来（**2026-09-29 裁：`use_skill` 撤**——schema 与菜单一起撤；`show_form`/`show_pic` 接了或撤了）                                | [CAP-11](../audit/capability-inventory.md) · [C-06](../audit/mess-disposition.md)          |
+| backlog | [feature]          | 前端实现工程隔离机制：模板与工程不再串台（[跨工程模板错乱诊断](../../packages/api-server/CROSS_PROJECT_TEMPLATE_DIAGNOSIS.md) 遗留第 2 项，2026-09-29 人裁归此） | [MESS-D-04](../audit/mess-disposition.md)                                                  |
+| backlog | [feature]          | 面板里配的字段，落盘不丢                                                                                                                                         | [CAP-11](../audit/capability-inventory.md)                                                 |
+| backlog | [feature]          | 校验报错指到位置（行号）                                                                                                                                         | [CAP-12](../audit/capability-inventory.md)                                                 |
+| backlog | [feature·回溯补录] | 直接编辑 YAML 文本，边写边校验                                                                                                                                   | [CAP-12](../audit/capability-inventory.md)                                                 |
 
 ### Epic H · 项目与版本主线 —— 切来切去不丢东西
 
@@ -156,13 +156,40 @@
 > **做事顺序**：先修**有用户影响的**——对外文档说错事实（E 类口径失真 13 条，全部是根 README / CLAUDE.md / AGENTS.md / 指南在说假话，谁读谁被误导）；其余 42 条**不逐条开故事**，一次性定归宿（直接改 / 拆故事 / 明确弃 / 归档）。
 > 修复的验收口径是"读者照做能走通"，不是"文件被打开过"。
 
-| 状态    | 类型      | 故事                                                                                                                                                      | 关联                                                                                                                                   |
-| ------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| backlog | [feature] | 根 `README.md` 不再说谎：完成度一节（前端"0%"、11 个端点、15 个测试）、项目目录树、服务端口、"六大引擎"含三个不存在的引擎                                 | [E-01/02/03/06](../audit/mess-map.md) · [CAP-01](../audit/capability-inventory.md)                                                     |
-| backlog | [feature] | `CLAUDE.md` 与 4 篇 `AGENTS.md` 对齐事实：`SessionManager` 已不存在（现为 `SessionOrchestrator`）、schema 是单文件、推荐的技能名已改名                    | [E-04/05/07](../audit/mess-map.md)                                                                                                     |
-| backlog | [feature] | 死引用与过期索引清一遍：`_system/README.md` 三处死引用 + 不存在的物理路径、`docs-archive/README.md` 自身过期、`DEV_START_GUIDE.md` 端口写反、两份索引漏项 | [E-08/10/11/13](../audit/mess-map.md)                                                                                                  |
-| backlog | [feature] | `docs/ddd/strategic-design.md` 的整改清单与代码现状对齐（M4 称"没有 `application/` 目录"，实际已存在）                                                    | [E-12](../audit/mess-map.md) · [MESS-D-05](../audit/mess-map.md)                                                                       |
-| backlog | [design]  | 其余 42 条逐条定归宿，出一份「编目项 → 归宿」对照表：直接改 / 拆故事 / 明确弃 / 归档                                                                      | [mess-map](../audit/mess-map.md) 51「否」+ 4「X」 · 含 `.qoder/` 20+ 处死引用的取舍、`application/` 三个并行目录（DDD 计划 Phase 1.4） |
+| 状态    | 类型      | 故事                                                                                                                                                                                                                                                                                                    | 关联                                                                                                                                                                        |
+| ------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| backlog | [feature] | 根 `README.md` 不再说谎：完成度一节（前端"0%"、11 个端点、15 个测试）、项目目录树、服务端口、"六大引擎"含三个不存在的引擎                                                                                                                                                                               | [E-01/02/03/06](../audit/mess-map.md) · [CAP-01](../audit/capability-inventory.md)                                                                                          |
+| backlog | [feature] | `CLAUDE.md` 与 4 篇 `AGENTS.md` 对齐事实：`SessionManager` 已不存在（现为 `SessionOrchestrator`）、schema 是单文件、推荐的技能名已改名                                                                                                                                                                  | [E-04/05/07](../audit/mess-map.md)                                                                                                                                          |
+| backlog | [feature] | 死引用与过期索引清一遍：`.qoder/` 20+ 处（含一份自称"基准架构文档"的）、`_system/README.md` 三处死引用 + 不存在的物理路径、`docs-archive/README.md` 自身过期、`DEV_START_GUIDE.md` 端口写反、两份索引漏项                                                                                               | [E-08/09/10/11/13](../audit/mess-map.md)                                                                                                                                    |
+| backlog | [feature] | `docs/ddd/strategic-design.md` 的整改清单与代码现状对齐（M4 称"没有 `application/` 目录"，实际已存在）——产出是 M1–M5+m1–m3 八条各自的重判                                                                                                                                                               | [E-12](../audit/mess-map.md) · [MESS-D-05](../audit/mess-map.md)                                                                                                            |
+| backlog | [feature] | 按[处置核对表](../audit/mess-disposition.md)把「直接改」那一批做完：归档 2 份（A-05、D-03）、删 2 类死物（C-01 死类型、`migrated_files.txt`）、补索引与元数据（B-05 80 篇 frontmatter、D-09 3 篇、B-09 互指）、改措辞（A-02 假承诺、B-04 路径、B-06 同名注记、C-08 契约、D-10 scripts 规则、F-08 脚本） | [处置核对表](../audit/mess-disposition.md)「直接改」                                                                                                                        |
+| done    | [design]  | 其余 42 条逐条定归宿，出一份「编目项 → 归宿」对照表：直接改 / 拆故事 / 明确弃 / 归档                                                                                                                                                                                                                    | [处置核对表](../audit/mess-disposition.md)（65 条全表 + 11 处人裁 2026-09-29）· 含「要不要删 `.qoder/` 目录」与 `application/` 并行目录（Phase 1.4，2026-09-29 裁：明确弃） |
+
+### Epic K · 双实现收敛 —— 引擎里同一件事不再有两份实现
+
+> 来源意图：意图区「代码-文档一致性收敛」的代码侧一半（编目 B 类）
+> **编辑器那一半不在这里**：B-01（编辑器 `YamlService` 不复用引擎 schema）已归 **Epic G**「编辑器的脚本模型从引擎派生」；本 epic 只管引擎内部的两套实现。
+> 2026-09-29 人裁：开本 epic（B-02~B-04 同一主线，内聚为一组）。
+
+| 状态    | 类型      | 故事                                                                                                              | 关联                                 |
+| ------- | --------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| backlog | [feature] | 变量替换只有一套实现：引擎里现在两处各认 3 种写法（`template-manager.ts` / `base-action.ts`），改一处得记着改两处 | [B-02](../audit/mess-disposition.md) |
+| backlog | [feature] | 监控取模板不再复刻一套两层回退（`MonitorTemplateResolver` 把 `TemplateResolver` 的逻辑抄了一遍）                  | [B-03](../audit/mess-disposition.md) |
+| backlog | [feature] | 模板路径只有一个说法：代码写 `_system/config/…`（虚拟路径），磁盘上是 `config/prompt-defaults/`，5 处读取点       | [B-04](../audit/mess-disposition.md) |
+
+### Epic L · 护栏 —— 改坏了有人拦
+
+> 来源意图：意图区「代码-文档一致性收敛」的可验证侧（编目 F 类）
+> 现状一句话：引擎侧测试很厚（697 通过），但"引擎能跑"到"用户能点通"之间那段（HTTP handler + DB 边界，约 8.3 千行）零护栏；唯一的自动关卡（lint）1239 条警告全放行，无 CI，默认测试联网打付费 API。
+> 2026-09-29 人裁：开本 epic，**F-03 先修**。测试覆盖计划（`test/TEST_COVERAGE_PLAN.md` 4 项未勾，MESS-D-08）作本 epic 输入。
+
+| 状态    | 类型      | 故事                                                                                                                            | 关联                                       |
+| ------- | --------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| backlog | [feature] | 跑测试不再偷偷花钱：默认套件不碰真实 LLM（eval 挪出默认跑）——现在 `pnpm test` 真打付费接口，单文件 62s 占全套 97%，结果还不确定 | [F-03](../audit/mess-disposition.md)       |
+| backlog | [feature] | 新环境一条命令把数据库建起来：迁移链补上断掉的那条（journal 少登记一条 `.sql`，且它的执行脚本路径也坏）                         | [F-07](../audit/mess-disposition.md)       |
+| backlog | [feature] | 改坏了有人拦：CI 跑起来，lint 与类型检查真的能阻断（1239 条警告全放行、前端 2 万行不在根 `typecheck` 里、pre-push 只跑半条）    | [F-01/02/06](../audit/mess-disposition.md) |
+| backlog | [feature] | 从 HTTP 到数据库那段有护栏：五个路由模块零贯通测试、api-server 22 个用例靠跳过                                                  | [F-04/05/10](../audit/mess-disposition.md) |
+| backlog | [feature] | 仓库里不留测试垃圾、命令都能跑：`test-results/` 移出 git 跟踪；`package.json` 8 处坏脚本（1 处断链 + 7 处指向归档）             | [F-08/09](../audit/mess-disposition.md)    |
 
 ## 智能设计议题（Exploration）
 
@@ -178,10 +205,12 @@
 
 ## 已关闭（Done）
 
-| 故事                                                                                                                                | 关闭日期   |
-| ----------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| [feature] 建立开发节奏系统 + Sprint 0 恢复                                                                                          | 2026-08-15 |
-| [design] memory-retrieval-types 封板（active → decision-recorded，006 ADR）                                                         | 2026-09-09 |
-| [design] ai-ask-memory-recall 封板（active → decision-recorded，006 ADR）                                                           | 2026-09-09 |
-| [design] ai-ask-memory-recall 二次封板（draft → decision-recorded，008 ADR；09-19 曾退回收敛）                                      | 2026-09-29 |
-| [design] 「反问轮走哪个 move」定案：默认模板与夹具加策略表第 8 行「反问·求方案」（含两处枚举同步），判定段 ③ 锚到该行——复测读数待记 | 2026-09-29 |
+| 故事                                                                                                                                                                                               | 关闭日期   |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| [feature] rerun-action 从 worktree 分支合并回主干（2026-09-29 核出：早已合并——`worktree-rerun-action` 565c448、`worktree-rerun-feature-continue` 5df889c 均已并入 main，只是状态没更新；分支已清） | 2026-05-18 |
+| [feature] 建立开发节奏系统 + Sprint 0 恢复                                                                                                                                                         | 2026-08-15 |
+| [design] memory-retrieval-types 封板（active → decision-recorded，006 ADR）                                                                                                                        | 2026-09-09 |
+| [design] ai-ask-memory-recall 封板（active → decision-recorded，006 ADR）                                                                                                                          | 2026-09-09 |
+| [design] ai-ask-memory-recall 二次封板（draft → decision-recorded，008 ADR；09-19 曾退回收敛）                                                                                                     | 2026-09-29 |
+| [design] 「反问轮走哪个 move」定案：默认模板与夹具加策略表第 8 行「反问·求方案」（含两处枚举同步），判定段 ③ 锚到该行——复测读数待记                                                                | 2026-09-29 |
+| [design] 编目 65 条逐条定归宿：产出[处置核对表](../audit/mess-disposition.md)（65 行全表 + 11 处人裁，2026-09-29）                                                                                 | 2026-09-29 |
