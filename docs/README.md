@@ -24,20 +24,21 @@
 
 分区内容少且稳定，由本页直接列出，不另设 README。
 
-**`audit/`** — 2026-09-28 一次性的代码编目战役产出（read-only，只诊断不修复）。它**不是常设分区**：backlog 的故事行大量 `关联` 到这里，"story 从哪来"的来路靠它保存。
+**`audit/`** — 2026-09-28 一次性的代码编目战役产出（诊断与处置对照，**不修**）。它**不是常设分区**：backlog 的故事行大量 `关联` 到这里，"story 从哪来"的来路靠它保存。
 
-| 文件                                                          | 一句话                                                    |
-| ------------------------------------------------------------- | --------------------------------------------------------- |
-| [capability-inventory](audit/capability-inventory.md)         | 能力清单 CAP-01..17：用户能做什么 + 实现度分级（坐标系）  |
-| [mess-map](audit/mess-map.md)                                 | 混乱制图：六类混乱各在哪、量级、是否已被 backlog 登记     |
-| [domain-ledger](audit/domain-ledger.md)                       | 领域清算：战略/战术设计概念的实际分布表，每概念权威是哪份 |
-| [duplication-report](audit/duplication-report.md)             | 重复与名实检测：双实现、同概念多名、同名多实、死概念      |
-| [runnability-baseline](audit/runnability-baseline.md)         | 可运行基线：现在能不能跑、跑到哪断、护栏覆盖哪些执行路径  |
-| [deep-dive-execution-core](audit/deep-dive-execution-core.md) | 深挖：执行内核（consulting-session 上下文）               |
-| [deep-dive-session-state](audit/deep-dive-session-state.md)   | 深挖：会话状态与断点恢复                                  |
-| [deep-dive-debugging](audit/deep-dive-debugging.md)           | 深挖：调试闭环（runId 分支、重跑、回写）                  |
-| [deep-dive-authoring](audit/deep-dive-authoring.md)           | 深挖：脚本编写与编辑器                                    |
-| [deep-dive-platform](audit/deep-dive-platform.md)             | 深挖：项目与版本、供应商、模板                            |
+| 文件                                                          | 一句话                                                      |
+| ------------------------------------------------------------- | ----------------------------------------------------------- |
+| [capability-inventory](audit/capability-inventory.md)         | 能力清单 CAP-01..17：用户能做什么 + 实现度分级（坐标系）    |
+| [mess-map](audit/mess-map.md)                                 | 混乱制图：六类混乱各在哪、量级、是否已被 backlog 登记       |
+| [mess-disposition](audit/mess-disposition.md)                 | 混乱处置核对表：65 条逐条的判断与归宿，待人核对（中间那层） |
+| [domain-ledger](audit/domain-ledger.md)                       | 领域清算：战略/战术设计概念的实际分布表，每概念权威是哪份   |
+| [duplication-report](audit/duplication-report.md)             | 重复与名实检测：双实现、同概念多名、同名多实、死概念        |
+| [runnability-baseline](audit/runnability-baseline.md)         | 可运行基线：现在能不能跑、跑到哪断、护栏覆盖哪些执行路径    |
+| [deep-dive-execution-core](audit/deep-dive-execution-core.md) | 深挖：执行内核（consulting-session 上下文）                 |
+| [deep-dive-session-state](audit/deep-dive-session-state.md)   | 深挖：会话状态与断点恢复                                    |
+| [deep-dive-debugging](audit/deep-dive-debugging.md)           | 深挖：调试闭环（runId 分支、重跑、回写）                    |
+| [deep-dive-authoring](audit/deep-dive-authoring.md)           | 深挖：脚本编写与编辑器                                      |
+| [deep-dive-platform](audit/deep-dive-platform.md)             | 深挖：项目与版本、供应商、模板                              |
 
 **退场条件**：`audit/` 的存在只为服务"这批 story 从哪来"。当关联它的故事全部 done、`关联` 列不再需要指向它时，整体转 [`docs-archive/`](../docs-archive/)——它正好是[归档通道](../docs-archive/README.md)的第一个客户。
 
