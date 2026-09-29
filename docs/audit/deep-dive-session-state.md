@@ -4,6 +4,7 @@
 > 范围：`docs/audit/capability-inventory.md` 中「会话与状态」簇的四条能力
 > 口径：「实现程度」按**用户能用到什么**算，不看代码写了多少。三档：端到端可用 / 部分可用（写清缺口）/ 桩或不可达。
 > 方法：只读静态分析（读源码 + 读设计文档）。本环境 Docker/PostgreSQL/Redis/Hindsight 均不可达，未跑 `pnpm test`（会真实调用付费 LLM）、未跑 `pnpm dev`。凡「端到端可用」的判断均标注为**代码路径成立、未经运行时验证**。
+> **⚠️ 2026-09-29 数字订正（独立验收发现）**：`SessionManager` 在 `CLAUDE.md` 的引用数是 **7 处**（本文件 3 处写作 9）；HTTP 路由测试是 **451 行**（本文件写作 308），均已改。订正依据见 [`mess-disposition.md`](mess-disposition.md) E-04 / F-05 行。
 
 ---
 
@@ -140,7 +141,7 @@
     - `SessionResponseBuilder`（约 240 行）= 出参组装 + 变量轮次 diff；
     - `session-variable-utils.ts` = 纯函数工具。
   - 即：**拆分是把「一个类」拆成了「一个领域服务 + 三个技术助手」，应用服务层没有变薄**。`docs/ddd/strategic-design.md:266-270` 的 M1「SessionOrchestrator 职责过重」已明确指出六种职责混杂，并建议抽 `MemoryLifecycleService` + `SessionPersistenceService`——**该建议未落地**（`session-orchestrator.ts` 里 `recall` 在 `:254`、`retain` 在 `:379`、`reflect` 在 `:676`，记忆时序仍内联在编排里）。
-  - **命名两说**：`docs/ddd/strategic-design.md:180` 写 `SessionOrchestrator`，`docs/design/foundation/architecture-constraints.md:22`（A7）导仍写 `持久化只在 SessionManager`，`CLAUDE.md` 9 处写 `SessionManager` 并列出 `restoreExecutionState` / `updateSessionState` 两个**已不存在**的方法。`grep -rn 'class SessionManager' packages/*/src` 零命中。（`docs/audit/mess-map.md:125` MESS-E-04 已记；本次确认 A7 仍未改。）
+  - **命名两说**：`docs/ddd/strategic-design.md:180` 写 `SessionOrchestrator`，`docs/design/foundation/architecture-constraints.md:22`（A7）导仍写 `持久化只在 SessionManager`，`CLAUDE.md` 7 处写 `SessionManager` 并列出 `restoreExecutionState` / `updateSessionState` 两个**已不存在**的方法。`grep -rn 'class SessionManager' packages/*/src` 零命中。（`docs/audit/mess-map.md:125` MESS-E-04 已记；本次确认 A7 仍未改。）
 
 **战术层**
 
@@ -178,8 +179,8 @@
 - **【没做】无会话锁。** 两个并发 `POST /:id/messages` 各自 `loadSessionById` → 各自执行 → 各自 `persistSession` 全量覆盖（`session-repository.ts:497-517` 是无条件 `update ... set`）。后者覆盖前者，无乐观锁（`db/schema.ts:57-86` 无 `version` 列）。
 - **【做了但接不上】`prevVariableSnapshots` 在路由层永远为空。** 该 Map 是 `SessionOrchestrator` 的**实例字段**（`session-orchestrator.ts:39`），而路由每次请求 `new SessionOrchestrator()`（`routes/sessions.ts:96`、`:602`、`:768`、`:868`）。于是 `session-response-builder.ts:189` 的 `prevVariableSnapshots.get(dbSession.id)` 恒为 `undefined`，`:193` 的 `calculateRoundChanges(prevSnapshot || null, ...)` 永远以 `null` 为基准。**只有 `routes/chat.ts:6` 的模块级单例能保住这个 Map**——同一条业务链路两个入口行为不一致。
 - **【没做】断点粒度是 Action，不是「对话轮」。** `resumeCurrentActionIfNeeded`（`script-executor.ts:449-457`、`:535-543`）只能在 Action 边界恢复。用户在一次 `ai_ask` 的多轮追问中间关掉页面再回来，恢复的是整个 Action（多轮计数在 metadata 里），没有「回到第 3 轮」的语义。这对产品是否可接受，无文档裁决。
-- **【口径失真】`CLAUDE.md` 用 9 处、两个已不存在的方法名描述本能力**（`restoreExecutionState` / `updateSessionState`），并把它叫 `SessionManager`。红线 A7（`architecture-constraints.md:22`）同样未更新。
-- **【未验证】HTTP 路由层零测试。** 2,872 行路由 vs 308 行测试（`docs/audit/runnability-baseline.md` §3）。「端到端可用」目前是静态推论。
+- **【口径失真】`CLAUDE.md` 用 7 处、两个已不存在的方法名描述本能力**（`restoreExecutionState` / `updateSessionState`），并把它叫 `SessionManager`。红线 A7（`architecture-constraints.md:22`）同样未更新。
+- **【未验证】HTTP 路由层零测试。** 2,872 行路由 vs 451 行测试（`docs/audit/runnability-baseline.md` §3）。「端到端可用」目前是静态推论。
 
 ---
 
@@ -417,5 +418,5 @@
 10. **【CAP-09·最大块】ADR 007 决策 2 的执行故事在哪里。** global 层、`user_global_variables` 表、脚本全局声明、四层解析器、`variable-memory-bridge` 存量——ADR（`007:77`）自己说需要独立 feature 故事，**故事不存在**。同时 `docs/ddd/contexts/variable-system.md:32-45,63` 与 `ubiquitous-language.md:106` 需要随 007 一起改（现在它们在教读者四层）。这是本簇唯一一块「已封板但未排期」的工作。
 11. **【CAP-09】`session` 层与 `phase` 层该由谁写。** 现在没有任何写入方，`determineScope` 只能产出 TOPIC/GLOBAL。若四层是设计意图，需要一条「变量落在哪一层」的声明通路（脚本声明？Action 配置？提取规则？）——`setVariableDefinitions` 批量接口已存在但生产链路无人调用（`variable-scope-resolver.ts:226`，仅测试命中）。**若三层是设计意图（红线 B3），那要拆的是 GLOBAL，而 SESSION/PHASE 的写入通路仍缺——两条路都缺一块。**
 12. **【CAP-09】`variables` 表的存废。** 纯写放大、无读者、`round`/`scope`/`variableName` 三列语义与写入内容不符。是接上（作为变量调试面板的事实源，同时修 `prevVariableSnapshots` 的实例态问题）还是删掉？需要裁决。
-13. **【口径】红线 A7 与 `CLAUDE.md` 的 `SessionManager` 未更新。** `architecture-constraints.md:22` 与 `CLAUDE.md` 9 处引用一个不存在的类，且 `CLAUDE.md` 列出的 `restoreExecutionState` / `updateSessionState` 两个方法已不存在。这是「文档门面」问题，但它挡住的正是本簇（会话与状态）的入口。
+13. **【口径】红线 A7 与 `CLAUDE.md` 的 `SessionManager` 未更新。** `architecture-constraints.md:22` 与 `CLAUDE.md` 7 处引用一个不存在的类，且 `CLAUDE.md` 列出的 `restoreExecutionState` / `updateSessionState` 两个方法已不存在。这是「文档门面」问题，但它挡住的正是本簇（会话与状态）的入口。
 14. **【方法】本簇全部结论为静态分析。** 本环境 PostgreSQL / Redis / Hindsight 均不可达，`pnpm test` 禁用（会真实调用付费 LLM），HTTP 路由层 2,872 行零测试。CAP-07「端到端可用」、CAP-08「降级不可观测」两条结论**未经运行时验证**，建议在可运行环境用一条真实会话复核。

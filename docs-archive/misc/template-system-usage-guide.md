@@ -1,3 +1,23 @@
+---
+document_id: 'docs-archive-misc-template-system-usage-guide'
+authority: 'historical'
+status: 'archived'
+archived_date: '2026-09-29'
+source: '_system'
+path: '_system/README.md'
+tags: ['historical', 'reference', 'archived', 'misc']
+search_priority: 'medium'
+---
+
+> **⚠️ 归档说明（2026-09-29，MESS-A-06）**：本文档原在仓库根 `_system/README.md`。`_system/` 目录**除本文档外没有任何文件**，代码里 `_system/config/…` 也只是**数据库虚拟路径字符串**（`api-server/src/db/schema.ts:174-175`、`routes/projects.ts`），从无文件系统读取点——所以它不是运行时目录，是遗留目录，已随本文档一并移除。
+>
+> **本文档两类内容已失效，勿照做**：
+>
+> 1. **物理路径写错**：文中 `config/templates/default/` 不存在；实际默认模板在仓库根 **`config/prompt-defaults/`**（`ai_ask_v1.md` / `ai_say_v1.md` / `ai_ask_monitor_v1.md` / `ai_say_monitor_v1.md`）。
+> 2. **JSON 输出格式一节（`EXIT`/`BRIEF`/`safety_risk` 那套）已被取代**——现行契约见模板自身 `config/prompt-defaults/ai_ask_v1.md:119-124`（`response_plan`/`content`/`exit`）与 ADR 008。**照本文写模板会写出不被识别的字段**；`ai_say` 的退出字段静默丢失（MESS 复核 #1）就出在这条线上。
+>
+> **仍然成立的部分**：「虚拟路径 vs 物理路径」这个区分本身（全仓库仅此一处说明）、回退机制（custom → default → 抛错）、模板文件名固定、FAQ。这些的**正确版本由 backlog 故事 B-04 承接**（目标已重写为「说清哪个是虚拟路径、哪个是物理路径」），写进 `docs/design/`。
+
 # 模板系统使用指南
 
 ## 概述

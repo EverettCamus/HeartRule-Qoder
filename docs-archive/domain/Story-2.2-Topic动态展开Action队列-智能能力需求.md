@@ -5,21 +5,8 @@ status: 'archived'
 archived_date: '2026-03-13'
 source: 'docs'
 path: 'docs/design/thinking/Story-2.2-Topic动态展开Action队列-智能能力需求.md'
-migrated_to: '' # 如果已迁移到openspec，填写openspec路径
 tags: ['historical', 'reference', 'archived', 'domain']
 search_priority: 'medium'
-ai_retrieval_hint: '⚠️ 此文档已归档，请优先参考OpenSpec文档'
----
-
-# ⚠️ ARCHIVED DOCUMENT
-
-**此文档已归档，仅供参考和历史记录。**
-**当前开发请参考OpenSpec文档：\`openspec/specs/\`**
-
-**归档原因**: 文档已迁移到OpenSpec结构或不再维护
-**归档日期**: 2026-03-13
-**原始路径**: docs/design/thinking/Story-2.2-Topic动态展开Action队列-智能能力需求.md
-
 ---
 
 > **文档状态**：本文档已根据 2026-03-06 重构设计更新。原始"二分类决策+单提示词"架构已演进为"两阶段 LLM Pipeline"架构。详见：[重构设计文档](../plans/2026-03-06-topic-dynamic-action-queue-two-stage-llm-refactor-design.md)

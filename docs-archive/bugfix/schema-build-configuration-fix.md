@@ -5,36 +5,8 @@ status: 'archived'
 archived_date: '2026-03-13'
 source: 'docs'
 path: 'docs/bugfix/schema-build-configuration-fix.md'
-migrated_to: '' # 如果已迁移到openspec，填写openspec路径
 tags: ['historical', 'reference', 'archived', 'bugfix']
 search_priority: 'medium'
-ai_retrieval_hint: '⚠️ 此文档已归档，请优先参考OpenSpec文档'
----
-
-# ⚠️ ARCHIVED DOCUMENT
-
-**此文档已归档，仅供参考和历史记录。**
-**当前开发请参考OpenSpec文档：\`openspec/specs/\`**
-
-**归档原因**: 文档已迁移到OpenSpec结构或不再维护
-**归档日期**: 2026-03-13
-**原始路径**: docs/bugfix/schema-build-configuration-fix.md
-
----
-
----
-
-document_id: docs-bugfix-schema-build-configuration-fix-md
-authority: historical
-status: archived
-version: 1.0.0
-last_updated: 2026-01-29
-archived_date: 2026-03-12
-source: docs
-path: bugfix/schema-build-configuration-fix.md
-tags: [historical, reference, archived, bugfix]
-search_priority: low
-
 ---
 
 # Schema 构建配置修复 - 解决编辑器缓存问题

@@ -18,15 +18,20 @@ coverage/
 .nyc_output/
 
 # Playwright E2E 测试
-packages\script-editor\e2e\playwright-report
-packages\script-editor\e2e\test-results
 packages/script-editor/e2e/playwright-report/
 packages/script-editor/e2e/test-results/
+# Playwright 也会把 test-results/ 落在包根（非 e2e）——曾因此漏掉 2 个文件入库
+packages/*/test-results/
 packages/api-server/test-project-id.txt
 .playwright/
 
-# 数据库备份
+# 测试命令的输出残留（曾入库 7 个：api-server 3 · core-engine 1 · script-editor 3）
+packages/*/test-output.*
+packages/*/test-result.*
+
+# 数据库备份（数据文件不入库；说明文档入库）
 backups/
+!backups/README.md
 
 # 环境变量
 .env

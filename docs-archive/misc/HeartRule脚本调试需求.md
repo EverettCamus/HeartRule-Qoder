@@ -5,36 +5,8 @@ status: 'archived'
 archived_date: '2026-03-13'
 source: 'docs'
 path: 'docs/design/thinking/HeartRule脚本调试需求.md'
-migrated_to: '' # 如果已迁移到openspec，填写openspec路径
 tags: ['historical', 'reference', 'archived', 'misc']
 search_priority: 'medium'
-ai_retrieval_hint: '⚠️ 此文档已归档，请优先参考OpenSpec文档'
----
-
-# ⚠️ ARCHIVED DOCUMENT
-
-**此文档已归档，仅供参考和历史记录。**
-**当前开发请参考OpenSpec文档：\`openspec/specs/\`**
-
-**归档原因**: 文档已迁移到OpenSpec结构或不再维护
-**归档日期**: 2026-03-13
-**原始路径**: docs/design/thinking/HeartRule脚本调试需求.md
-
----
-
----
-
-document_id: docs-design-thinking-HeartRule脚本调试需求-md
-authority: historical
-status: archived
-version: 0.9.0
-last_updated: 2026-02-10
-archived_date: 2026-03-12
-source: docs
-path: design/thinking/HeartRule脚本调试需求.md
-tags: [historical, reference, archived]
-search_priority: medium
-
 ---
 
 # 脚本调试需求
@@ -128,7 +100,6 @@ ai_ask提示词的优化是脚本工作的最重要环节和最高频的环节�
     9.  forms（咨询师笔记，用户作业进度等）
     10. session\stage\goal名称
     11. 当前的action类型和内容
-
 
         ### 还原快照
 

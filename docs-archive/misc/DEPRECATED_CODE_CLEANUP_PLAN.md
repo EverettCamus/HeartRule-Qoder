@@ -1,3 +1,20 @@
+---
+document_id: 'docs-archive-misc-deprecated-code-cleanup-plan'
+authority: 'historical'
+status: 'archived'
+archived_date: '2026-09-29'
+source: 'packages/core-engine'
+path: 'packages/core-engine/DEPRECATED_CODE_CLEANUP_PLAN.md'
+tags: ['historical', 'reference', 'archived', 'misc']
+search_priority: 'medium'
+---
+
+> **⚠️ 归档说明（2026-09-29，MESS-D-03）**：本文档原在 `packages/core-engine/` 包根，生成于 2026-02-09。**计划本身已过期，勿照做**。
+
+> 其 Phase 2 两项决策始终未结案，清单已与现状脱节。2026-09-29 重判时发现**未决项已失去对象**——本文档等待评估的 `execution-context.ts` 已不在仓库中。裁定：**未决两项都不必做了**，本文档整体退场。
+
+> 现行「什么算废弃代码」以代码本身与 `docs/design/foundation/architecture-constraints.md` 为准。
+
 # Core Engine 废弃代码清理计划
 
 > 生成时间：2026-02-09  

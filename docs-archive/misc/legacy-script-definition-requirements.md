@@ -1,19 +1,12 @@
 ---
-document_id: docs-design-thinking-Heart-Rule脚本定义需求-md
-authority: legacy
-status: archived
-version: 0.9.0
-last_updated: 2026-02-10
-archived_date: 2026-03-12
-source: docs
-original_path: design/thinking/Heart Rule脚本定义需求.md
-archive_location: docs-archive/misc/legacy-script-definition-requirements.md
-previous_location: openspec/specs/_global/archive/legacy-script-definition-requirements.md
-tags: [legacy, archived, historical-reference, outdated-script-format, unified-archive]
-search_priority: low
-language: zh
-category: archive/legacy
-archive_reason: 'Outdated script definition requirements - script format has been updated. Moved to unified docs-archive/ directory on 2026-03-13.'
+document_id: 'docs-archive-misc-legacy-script-definition-requirements'
+authority: 'historical'
+status: 'archived'
+archived_date: '2026-03-12'
+source: 'docs'
+path: 'docs/design/thinking/Heart Rule脚本定义需求.md'
+tags: ['historical', 'reference', 'archived', 'misc']
+search_priority: 'medium'
 ---
 
 # Heart Rule脚本定义需求

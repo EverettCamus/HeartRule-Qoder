@@ -1,3 +1,23 @@
+---
+document_id: 'docs-archive-misc-ddd-hexagonal-refactoring-plan'
+authority: 'historical'
+status: 'archived'
+archived_date: '2026-09-29'
+source: 'packages/core-engine'
+path: 'packages/core-engine/DDD_HEXAGONAL_REFACTORING_PLAN.md'
+tags: ['historical', 'reference', 'archived', 'misc']
+search_priority: 'medium'
+---
+
+> **⚠️ 归档说明（2026-09-29，MESS-B-07）**：本文档原在 `packages/core-engine/` 包根，是 **2026-02** 的 core-engine 分层重构方案。它与后来的 `docs/superpowers/plans/ddd-refactoring-plan.md` 是**两套并行方案、描述同一件事**——**以较晚那份为准，本文档仅作历史**。
+
+> **勿照做**：文中两个阶段**从未执行**，且 2026-09-29 已裁定**明确弃**（属「用户零感知的、为目录而重构」）：
+>
+> - **Phase 1.1**「创建入站端口」——实测 `application/ports/` 下至今只有 `outbound/`，入站端口从未建；
+> - **Phase 1.4**「收拢应用层分散目录」——`monitors/` 与 `orchestrators/` 至今并排，文中要建的 `application/monitoring/` 从未存在。
+>
+> 其中未勾选的事项不再逐条落实。另：文中标注的「基准架构文档」`.qoder/rules/quest-aligns-with-DDD.md` **已不存在**（`.qoder/` 目录已删）。
+
 # Core-Engine DDD 六边形架构重构执行方案
 
 > **基准架构文档**：`.qoder/rules/quest-aligns-with-DDD.md`  
@@ -10,27 +30,27 @@
 
 ### 🔴 P0 - 严重违规（必须立即修复）
 
-| 违规项 | 严重性 | 影响范围 | 根因 |
-|--------|--------|----------|------|
-| **LLM Provider 适配器污染领域层** | **Critical** | engines/llm-orchestration | 具体实现（openai-provider/volcano-provider）混入 core-engine |
-| **应用层职责分散** | High | state/handlers/orchestration/orchestrators/monitors | 5个顶级目录散落应用层逻辑，缺乏边界表达 |
-| **Actions 定位模糊** | High | actions/* | 领域行为与应用工厂混合，平级于 domain 造成语义不清 |
+| 违规项                            | 严重性       | 影响范围                                            | 根因                                                         |
+| --------------------------------- | ------------ | --------------------------------------------------- | ------------------------------------------------------------ |
+| **LLM Provider 适配器污染领域层** | **Critical** | engines/llm-orchestration                           | 具体实现（openai-provider/volcano-provider）混入 core-engine |
+| **应用层职责分散**                | High         | state/handlers/orchestration/orchestrators/monitors | 5个顶级目录散落应用层逻辑，缺乏边界表达                      |
+| **Actions 定位模糊**              | High         | actions/\*                                          | 领域行为与应用工厂混合，平级于 domain 造成语义不清           |
 
 ### 🟡 P1 - 中度违规（影响可扩展性）
 
-| 违规项 | 严重性 | 影响范围 | 根因 |
-|--------|--------|----------|------|
-| **Schema 验证层次不明** | Medium | schemas/* | 入站适配器职责未显式表达，与领域层平级 |
-| **测试结构与架构脱节** | Medium | test/* | 测试文件平铺，未按 hex 边界组织 |
-| **端口定义缺失** | Medium | 缺少 ports/ 目录 | 出站依赖（ILLMProvider等）未显式抽象为端口 |
+| 违规项                  | 严重性 | 影响范围         | 根因                                       |
+| ----------------------- | ------ | ---------------- | ------------------------------------------ |
+| **Schema 验证层次不明** | Medium | schemas/\*       | 入站适配器职责未显式表达，与领域层平级     |
+| **测试结构与架构脱节**  | Medium | test/\*          | 测试文件平铺，未按 hex 边界组织            |
+| **端口定义缺失**        | Medium | 缺少 ports/ 目录 | 出站依赖（ILLMProvider等）未显式抽象为端口 |
 
 ### 🟢 P2 - 长期优化（架构演进方向）
 
-| 项目 | 目标 | 价值 |
-|------|------|------|
-| **聚合根按聚合拆分** | domain/session/, domain/script/ | 更清晰的限界上下文边界 |
-| **领域事件机制** | domain/events/ | 解耦跨聚合协作 |
-| **LLM 适配器完全外移** | 移至 api-server/adapters/outbound/llm | 彻底隔离基础设施 |
+| 项目                   | 目标                                  | 价值                   |
+| ---------------------- | ------------------------------------- | ---------------------- |
+| **聚合根按聚合拆分**   | domain/session/, domain/script/       | 更清晰的限界上下文边界 |
+| **领域事件机制**       | domain/events/                        | 解耦跨聚合协作         |
+| **LLM 适配器完全外移** | 移至 api-server/adapters/outbound/llm | 彻底隔离基础设施       |
 
 ---
 
@@ -101,6 +121,7 @@ export interface LLMResponse {
 **当前状态**：接口定义在实现文件 `application/session-application-service.ts` 中
 
 **目标状态**：
+
 - 接口独立到 `application/ports/inbound/`
 - 实现类移至 `application/usecases/`
 
@@ -135,10 +156,12 @@ export class SessionApplicationService implements ISessionApplicationService { .
 ### 1.3 重构 LLMOrchestrator 依赖端口而非具体实现
 
 **当前问题**：
+
 - `engines/llm-orchestration/orchestrator.ts` 直接依赖 `openai-provider.ts` 等具体实现
 - `providers.ts` 在 core-engine 内注册具体 Provider
 
 **目标**：
+
 - `LLMOrchestrator` 构造函数接受 `ILLMProvider` 接口
 - 具体 Provider 通过依赖注入传入
 
@@ -164,6 +187,7 @@ export class LLMOrchestrator {
 3. 让这些 Provider 实现 `ILLMProvider` 接口
 
 **验证**：
+
 - 编译通过
 - 修改 `session-application-service.ts` 的构造函数，接受注入的 LLMOrchestrator
 
@@ -191,13 +215,13 @@ mkdir -p packages/core-engine/src/application/monitoring
 
 2. **文件移动映射**：
 
-| 原路径 | 新路径 |
-|--------|--------|
-| `src/state/action-state-manager.ts` | `src/application/state/action-state-manager.ts` |
-| `src/handlers/execution-result-handler.ts` | `src/application/handlers/execution-result-handler.ts` |
+| 原路径                                           | 新路径                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------ |
+| `src/state/action-state-manager.ts`              | `src/application/state/action-state-manager.ts`              |
+| `src/handlers/execution-result-handler.ts`       | `src/application/handlers/execution-result-handler.ts`       |
 | `src/orchestration/topic-action-orchestrator.ts` | `src/application/orchestration/topic-action-orchestrator.ts` |
-| `src/orchestrators/monitor-orchestrator.ts` | `src/application/monitoring/monitor-orchestrator.ts` |
-| `src/monitors/*` | `src/application/monitoring/monitors/*` |
+| `src/orchestrators/monitor-orchestrator.ts`      | `src/application/monitoring/monitor-orchestrator.ts`         |
+| `src/monitors/*`                                 | `src/application/monitoring/monitors/*`                      |
 
 3. **批量移动命令**（PowerShell）：
 
@@ -236,6 +260,7 @@ from './handlers/execution-result-handler.js'
 ```
 
 **验证**：
+
 - 运行 `pnpm -C packages/core-engine build` 编译成功
 - 运行 `pnpm -C packages/core-engine test` 所有测试通过
 
@@ -255,6 +280,7 @@ from './handlers/execution-result-handler.js'
 **质量门禁**：Phase 1 完成后必须通过上述检查，才能进入 Phase 2
 
 **架构审查要点**：
+
 - [ ] 确认 SessionApplicationService 已移至 `application/usecases/`
 - [ ] 确认端口接口与实现类物理分离
 - [ ] 确认 application/ 层内部结构清晰（ports / usecases / state / handlers / orchestration / monitoring）
@@ -268,13 +294,16 @@ from './handlers/execution-result-handler.js'
 ## 2.1 Actions 领域行为归位 domain/actions
 
 **当前问题**：
+
 - `src/actions/` 包含领域行为（ai-ask/ai-say/ai-think）和应用工厂（action-factory/action-registry）
 
 **目标**：
+
 - 领域行为（具体 Action 实现）→ `src/domain/actions/`
 - 应用工厂（factory/registry）→ `src/application/actions/`
 
 **⚠️ 重要说明**：
+
 - BaseAction 如果仅定义接口/抽象类 → 归入 `domain/actions/`
 - 如果 BaseAction 包含执行框架协调逻辑（与 ExecutionContext 深度耦合）→ 需拆分为领域接口 + 应用层执行框架
 - **本次 Phase 2 暂按"BaseAction 为领域抽象"处理，后续 P2 阶段根据实际代码审查再细化**
@@ -290,13 +319,13 @@ mkdir -p packages/core-engine/src/application/actions
 
 2. **文件移动映射**：
 
-| 原路径 | 新路径 |
-|--------|--------|
-| `src/actions/base-action.ts` | `src/domain/actions/base-action.ts` |
-| `src/actions/ai-ask-action.ts` | `src/domain/actions/ai-ask-action.ts` |
-| `src/actions/ai-say-action.ts` | `src/domain/actions/ai-say-action.ts` |
-| `src/actions/ai-think-action.ts` | `src/domain/actions/ai-think-action.ts` |
-| `src/actions/action-factory.ts` | `src/application/actions/action-factory.ts` |
+| 原路径                           | 新路径                                       |
+| -------------------------------- | -------------------------------------------- |
+| `src/actions/base-action.ts`     | `src/domain/actions/base-action.ts`          |
+| `src/actions/ai-ask-action.ts`   | `src/domain/actions/ai-ask-action.ts`        |
+| `src/actions/ai-say-action.ts`   | `src/domain/actions/ai-say-action.ts`        |
+| `src/actions/ai-think-action.ts` | `src/domain/actions/ai-think-action.ts`      |
+| `src/actions/action-factory.ts`  | `src/application/actions/action-factory.ts`  |
 | `src/actions/action-registry.ts` | `src/application/actions/action-registry.ts` |
 
 3. **批量移动**：
@@ -366,6 +395,7 @@ from './schemas/validators/schema-validator.js'
 **目标**：将 `domain/*.ts` 按聚合组织
 
 **当前状态**：
+
 ```
 domain/
 ├── session.ts
@@ -375,6 +405,7 @@ domain/
 ```
 
 **目标状态**（可选）：
+
 ```
 domain/
 ├── session/
@@ -413,6 +444,7 @@ export * from './application/state/action-state-manager.js';
 ```
 
 **验证**：
+
 - 编译成功
 - api-server 中的导入不报错
 
@@ -485,22 +517,22 @@ mkdir -p packages/core-engine/test/fixtures/mocks
 
 ### 3.2 测试文件迁移映射表
 
-| 原路径 | 新路径 | 分类 |
-|--------|--------|------|
-| `variable-extraction.test.ts` | `unit/engines/variable-extraction.test.ts` | 单元 |
-| `variable-scope-structure.test.ts` | `unit/engines/variable-scope-resolver.test.ts` | 单元 |
-| `prompt-template.test.ts` | `unit/engines/prompt-template.test.ts` | 单元 |
-| `template-resolver.test.ts` | `unit/engines/template-resolver.test.ts` | 单元 |
-| `phase6-action-state-manager.test.ts` | `unit/application/action-state-manager.test.ts` | 单元 |
+| 原路径                                    | 新路径                                              | 分类 |
+| ----------------------------------------- | --------------------------------------------------- | ---- |
+| `variable-extraction.test.ts`             | `unit/engines/variable-extraction.test.ts`          | 单元 |
+| `variable-scope-structure.test.ts`        | `unit/engines/variable-scope-resolver.test.ts`      | 单元 |
+| `prompt-template.test.ts`                 | `unit/engines/prompt-template.test.ts`              | 单元 |
+| `template-resolver.test.ts`               | `unit/engines/template-resolver.test.ts`            | 单元 |
+| `phase6-action-state-manager.test.ts`     | `unit/application/action-state-manager.test.ts`     | 单元 |
 | `phase8-execution-result-handler.test.ts` | `unit/application/execution-result-handler.test.ts` | 单元 |
-| `session-application-service.test.ts` | `integration/session-application-service.test.ts` | 集成 |
-| `ai-ask-incomplete-action.test.ts` | `integration/ai-ask-multi-round-flow.test.ts` | 集成 |
-| `multi-round-exit-decision.test.ts` | `integration/multi-round-exit-decision.test.ts` | 集成 |
-| `output-list.test.ts` | `integration/output-list.test.ts` | 集成 |
-| `safety-boundary-detection.test.ts` | `integration/safety-boundary-detection.test.ts` | 集成 |
-| `version-compatibility.test.ts` | `integration/version-compatibility.test.ts` | 集成 |
-| `variable-migration.test.ts` | `regression/variable-migration-regression.test.ts` | 回归 |
-| `monitors/monitor-handler.test.ts` | `monitoring/monitor-handler.test.ts` | 监控 |
+| `session-application-service.test.ts`     | `integration/session-application-service.test.ts`   | 集成 |
+| `ai-ask-incomplete-action.test.ts`        | `integration/ai-ask-multi-round-flow.test.ts`       | 集成 |
+| `multi-round-exit-decision.test.ts`       | `integration/multi-round-exit-decision.test.ts`     | 集成 |
+| `output-list.test.ts`                     | `integration/output-list.test.ts`                   | 集成 |
+| `safety-boundary-detection.test.ts`       | `integration/safety-boundary-detection.test.ts`     | 集成 |
+| `version-compatibility.test.ts`           | `integration/version-compatibility.test.ts`         | 集成 |
+| `variable-migration.test.ts`              | `regression/variable-migration-regression.test.ts`  | 回归 |
+| `monitors/monitor-handler.test.ts`        | `monitoring/monitor-handler.test.ts`                | 监控 |
 
 **批量移动脚本**：
 
@@ -549,6 +581,7 @@ import { VariableExtractor } from '../../../src/engines/variable-extraction/extr
 ```
 
 **批量处理**：
+
 - 使用 IDE 的"移动文件并更新引用"功能
 - 或手动检查每个迁移的测试文件
 
@@ -644,8 +677,8 @@ export class DependencyContainer {
   constructor() {
     // 根据配置选择 Provider
     const providerType = process.env.LLM_PROVIDER || 'openai';
-    this.llmProvider = providerType === 'openai' 
-      ? new OpenAIAdapter() 
+    this.llmProvider = providerType === 'openai'
+      ? new OpenAIAdapter()
       : new VolcanoAdapter();
 
     // 构造 LLMOrchestrator
@@ -701,13 +734,13 @@ const service = container.getSessionApplicationService(); // 从容器获取
 
 ### 🛡️ 风险矩阵
 
-| 风险点 | 概率 | 影响 | 缓解措施 | 回滚方案 |
-|--------|------|------|----------|----------|
-| **导入路径错误导致编译失败** | High | High | 每个 Phase 完成后立即编译验证 | Git revert 到上一个 commit |
-| **测试失败（功能回归）** | Medium | Critical | 每次变更后运行测试套件 | 回滚文件变更，补充缺失测试 |
-| **循环依赖** | Low | High | 使用 `madge` 工具检测循环依赖 | 重新设计依赖关系 |
-| **api-server 集成失败** | Medium | High | Phase 4 前先在沙盒环境验证 | 保持 Phase 3 的可用版本 |
-| **E2E 测试环境污染** | Low | Medium | 使用独立测试数据库 | 重置测试环境 |
+| 风险点                       | 概率   | 影响     | 缓解措施                      | 回滚方案                   |
+| ---------------------------- | ------ | -------- | ----------------------------- | -------------------------- |
+| **导入路径错误导致编译失败** | High   | High     | 每个 Phase 完成后立即编译验证 | Git revert 到上一个 commit |
+| **测试失败（功能回归）**     | Medium | Critical | 每次变更后运行测试套件        | 回滚文件变更，补充缺失测试 |
+| **循环依赖**                 | Low    | High     | 使用 `madge` 工具检测循环依赖 | 重新设计依赖关系           |
+| **api-server 集成失败**      | Medium | High     | Phase 4 前先在沙盒环境验证    | 保持 Phase 3 的可用版本    |
+| **E2E 测试环境污染**         | Low    | Medium   | 使用独立测试数据库            | 重置测试环境               |
 
 ### 🔄 回滚策略
 
@@ -824,24 +857,24 @@ pnpm dev
 
 ### 📅 时间线（工作日）
 
-| Phase | 任务 | 时间 | 累计 | 里程碑 |
-|-------|------|------|------|--------|
-| **Phase 1** | 端口层创建 | 0.5天 | 0.5天 | |
-| | 接口抽离 | 0.5天 | 1天 | |
-| | LLMOrchestrator 重构 | 1天 | 2天 | |
-| | 应用层收拢 | 1天 | 3天 | ✅ M1：端口层建立 |
-| **Phase 2** | Actions 归位 | 1天 | 4天 | |
-| | Schema 移动 | 0.5天 | 4.5天 | |
-| | index.ts 更新 | 0.5天 | 5天 | |
-| | api-server 验证 | 1天 | 6天 | ✅ M2：目录结构合规 |
-| **Phase 3** | 测试目录创建 | 0.5天 | 6.5天 | |
-| | 测试迁移 | 1天 | 7.5天 | |
-| | 导入路径修复 | 0.5天 | 8天 | ✅ M3：测试结构对齐 |
-| **Phase 4** | LLM 适配器外移 | 1天 | 9天 | |
-| | 依赖注入容器 | 1天 | 10天 | |
-| | API 路由更新 | 0.5天 | 10.5天 | |
-| | E2E 验证 | 0.5天 | 11天 | ✅ M4：依赖注入完成 |
-| **Buffer** | 风险预留 | 1天 | 12天 | |
+| Phase       | 任务                 | 时间  | 累计   | 里程碑              |
+| ----------- | -------------------- | ----- | ------ | ------------------- |
+| **Phase 1** | 端口层创建           | 0.5天 | 0.5天  |                     |
+|             | 接口抽离             | 0.5天 | 1天    |                     |
+|             | LLMOrchestrator 重构 | 1天   | 2天    |                     |
+|             | 应用层收拢           | 1天   | 3天    | ✅ M1：端口层建立   |
+| **Phase 2** | Actions 归位         | 1天   | 4天    |                     |
+|             | Schema 移动          | 0.5天 | 4.5天  |                     |
+|             | index.ts 更新        | 0.5天 | 5天    |                     |
+|             | api-server 验证      | 1天   | 6天    | ✅ M2：目录结构合规 |
+| **Phase 3** | 测试目录创建         | 0.5天 | 6.5天  |                     |
+|             | 测试迁移             | 1天   | 7.5天  |                     |
+|             | 导入路径修复         | 0.5天 | 8天    | ✅ M3：测试结构对齐 |
+| **Phase 4** | LLM 适配器外移       | 1天   | 9天    |                     |
+|             | 依赖注入容器         | 1天   | 10天   |                     |
+|             | API 路由更新         | 0.5天 | 10.5天 |                     |
+|             | E2E 验证             | 0.5天 | 11天   | ✅ M4：依赖注入完成 |
+| **Buffer**  | 风险预留             | 1天   | 12天   |                     |
 
 **总工期**：12 个工作日（约 2.5 周）
 
@@ -850,15 +883,12 @@ pnpm dev
 - **M1**：端口层建立，应用层边界清晰
   - 交付物：端口接口文件、重构后的 LLMOrchestrator
   - 验收：编译通过 + 单元测试通过
-  
 - **M2**：目录结构符合六边形架构
   - 交付物：重组后的 src/ 目录、更新的 index.ts
   - 验收：monorepo 完整构建通过
-  
 - **M3**：测试代码与架构对齐
   - 交付物：重组的 test/ 目录
   - 验收：测试覆盖率不降低
-  
 - **M4**：完整的端口-适配器模式落地
   - 交付物：api-server 依赖注入容器、外移的 LLM 适配器
   - 验收：E2E 测试通过 + 功能验证通过

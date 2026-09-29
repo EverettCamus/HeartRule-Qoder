@@ -7,6 +7,20 @@
 > **扫描日期**：2026-09-28
 > **扫描范围**：`docs/`（ddd 6 篇 · design 22 篇 · design/decisions 7 篇 · process/reference/scrum/superpowers）· `docs-archive/`（domain 3 · architecture 2 · product 1 · misc 60 · research 5 · bugfix 7 · test 3 · temp 2）· `packages/**/*.md`（30 篇）· 根 `README.md` / `CLAUDE.md` / `QUICK_START_GUIDE.md` / `DEV_START_GUIDE.md` / `_system/README.md`
 
+> **⚠️ 2026-09-29 追注（搬迁后）**：本表成文后，`packages/core-engine/` 下三份计划已搬进 `docs-archive/misc/`——`SCRIPT_EXECUTOR_PHASE5_REFACTORING_PLAN.md`、`DDD_HEXAGONAL_REFACTORING_PLAN.md`、`DEPRECATED_CODE_CLEANUP_PLAN.md`。本表下方引用里凡出现 `packages/core-engine/<那三个文件名>:行号`，**文件请改到 `docs-archive/misc/<同名>` 找**。
+>
+> **但行号已经不能用了——本表曾写「行号不变」，那句是错的。** 实测：搬迁在每份文首插入 8 字段 frontmatter（+11 行），此后又各补了一段「归档说明」横幅（+3 / +8 / +5 行），**三份的当前偏移各不相同**：
+>
+> | 文件                                         | 当前 `旧行号 → 新行号` |
+> | -------------------------------------------- | ---------------------- |
+> | `SCRIPT_EXECUTOR_PHASE5_REFACTORING_PLAN.md` | **+14**                |
+> | `DDD_HEXAGONAL_REFACTORING_PLAN.md`          | **+19**                |
+> | `DEPRECATED_CODE_CLEANUP_PLAN.md`            | **+16**                |
+>
+> 偏移经抽样复核**逐行均匀**（三份各抽 215/236/303 行，命中率 100%）。**且任何后续编辑都会再改变它**——所以定位请**按内容搜索原文，不要按行号跳**。
+>
+> 本表仍按扫描当日的位置记录，不改写历史。
+
 ---
 
 ## 第一部分 · 战略设计分布表

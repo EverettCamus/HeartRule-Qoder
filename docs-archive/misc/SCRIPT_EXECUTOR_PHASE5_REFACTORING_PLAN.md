@@ -1,3 +1,18 @@
+---
+document_id: 'docs-archive-misc-script-executor-phase5-refactoring-plan'
+authority: 'historical'
+status: 'archived'
+archived_date: '2026-09-29'
+source: 'packages/core-engine'
+path: 'packages/core-engine/SCRIPT_EXECUTOR_PHASE5_REFACTORING_PLAN.md'
+tags: ['historical', 'reference', 'archived', 'misc']
+search_priority: 'medium'
+---
+
+> **⚠️ 归档说明（2026-09-29，MESS-A-05）**：本文档原在 `packages/core-engine/` 包根，开篇自述「**状态**：已归档……现已全部完成」，却一直没进任何归档通道。现搬入 `docs-archive/misc/`，与其前序的 Phase 1-4 同族归档 `script-executor-refactoring-plan.md`（同目录）会合。
+
+> **本文档是已完成工作的历史记录，勿照做**：它描述的是 Phase 5-8 的重构方案，作者自述已全部完成。包内目录此后又经过重构调整，**不要按文中路径找文件**；现行的 ScriptExecutor 结构以 `packages/core-engine/src/` 的代码与 `docs/design/` 为准。
+
 # ScriptExecutor Phase 5-8 重构历史文档
 
 > **状态**: 已归档。本文档记录了 Phase 5-8 重构的设计方案，现已全部完成。  

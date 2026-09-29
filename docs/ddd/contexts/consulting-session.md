@@ -14,13 +14,13 @@ Session 是唯一聚合根。管理：
 
 - 状态机 (`ExecutionStatus`: RUNNING → WAITING_INPUT ↔ RUNNING → COMPLETED | ERROR)
 - 执行位置 (`position`: phaseIndex/topicIndex/actionIndex)
-- 变量存储 (`variableStore`: 4 层作用域)
+- 变量存储 (`variableStore`: 作用域层数见 [variable-system](variable-system.md)——**设计为 3 层** session/phase/topic，**代码仍为 4 层**含 global)
 - 对话历史 (`conversationHistory`: ConversationEntry[])
 - 元数据 (`metadata`: actionSnapshots, rerunHistory, memoryContext, sessionConfig 等)
 
 **工厂方法:**
 
-- `Session.fromSessionData(data, { globalVariables, conversationHistory })` — 从 DB 行重建
+- `Session.fromSessionData(data, { globalVariables, conversationHistory })` — 从 DB 行重建（`globalVariables` 是 ADR 007 决策 2 待取消的第 4 层）
 - `session.toExecutionState()` — 转换为引擎状态对象
 - `session.applyExecutionResult(state)` — 应用引擎执行结果
 

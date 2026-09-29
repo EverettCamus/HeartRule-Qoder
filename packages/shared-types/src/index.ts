@@ -10,7 +10,6 @@ export * from './domain/message.js';
 export * from './domain/script.js';
 export * from './domain/variable.js';
 export * from './domain/exit-decision.js';
-export * from './domain/topic-decision-v2.js';
 export * from './domain/ai-ask-output.js';
 
 // API接口类型

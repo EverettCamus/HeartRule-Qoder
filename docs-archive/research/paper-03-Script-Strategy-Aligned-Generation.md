@@ -1,3 +1,14 @@
+---
+document_id: 'docs-archive-research-paper-03-script-strategy-aligned-generation'
+authority: 'historical'
+status: 'archived'
+archived_date: '2026-03-13'
+source: 'docs'
+path: 'docs/papers/paper-03-Script-Strategy-Aligned-Generation.md'
+tags: ['historical', 'reference', 'archived', 'research']
+search_priority: 'medium'
+---
+
 # 脚本-策略对齐生成
 
 ## 将LLM与专家撰写的对话脚本和治疗策略对齐以进行心理治疗

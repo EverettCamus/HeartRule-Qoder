@@ -5,21 +5,8 @@ status: 'archived'
 archived_date: '2026-03-13'
 source: 'docs'
 path: 'docs/design/thinking/ai_say提示词模板示例.md'
-migrated_to: '' # 如果已迁移到openspec，填写openspec路径
 tags: ['historical', 'reference', 'archived', 'misc']
 search_priority: 'medium'
-ai_retrieval_hint: '⚠️ 此文档已归档，请优先参考OpenSpec文档'
----
-
-# ⚠️ ARCHIVED DOCUMENT
-
-**此文档已归档，仅供参考和历史记录。**
-**当前开发请参考OpenSpec文档：\`openspec/specs/\`**
-
-**归档原因**: 文档已迁移到OpenSpec结构或不再维护
-**归档日期**: 2026-03-13
-**原始路径**: docs/design/thinking/ai_say提示词模板示例.md
-
 ---
 
 # ai_say 功能设计规范与应用场景示例

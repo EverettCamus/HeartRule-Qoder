@@ -3,7 +3,10 @@
 > **分析范围:** 全工程 (`packages/*`)
 > **分析日期:** 2026-06-05
 > **校准:** 2026-09-08 — Conversational Memory 上下文语言随 ADR 005 更新：三网络（World/Experience/Observation）+ mental model，opinions 概念移除
+> **校准:** 2026-09-29 — Variable System 作用域随 ADR 007 决策 2 由 4 层改为 3 层（取消 global）；跨会话状态走信息点文档
 > **状态:** 战略设计完成，待重构清单已记录
+>
+> **本目录与 [`docs/design/`](../design/README.md) 的分工**：这里放**平台侧建模**——限界上下文怎么划、彼此怎么映射、战术快照长什么样；**领域模型的真相源在 `docs/design/`**（领域建模、本体、引擎机制、横切约束）。两者是同一件事的两个视角，不是两份权威：**边界与关系的最终依据看 `docs/design/foundation/architecture-constraints.md` 的红线表**，本目录随其校准。
 
 ---
 
@@ -44,7 +47,7 @@
 | 上下文                    | 分类           | 理由                                                                                       |
 | ------------------------- | -------------- | ------------------------------------------------------------------------------------------ |
 | **Consulting Session**    | 🔴 Core Domain | 咨询流程编排是 HeartRule 的核心竞争力 — YAML→Phase→Topic→Action 的 DSL 引擎 + ExitDecision |
-| **Variable System**       | 🟡 Supporting  | 支撑核心领域但没有独立业务价值 — 4 层作用域 + 3 种提取方法                                 |
+| **Variable System**       | 🟡 Supporting  | 支撑核心领域但没有独立业务价值 — 3 层作用域 + 3 种提取方法                                 |
 | **Conversational Memory** | 🟡 Supporting  | 提升咨询质量的关键能力，但不是 HeartRule 独有的 — 基于 Hindsight 的通用记忆基础设施        |
 | **Prompt Engineering**    | 🟡 Supporting  | 模板管理支撑 LLM 交互质量，但可以独立演进                                                  |
 | **Script Authoring**      | 🟡 Supporting  | 脚本编辑器 + 项目版本管理 — 咨询师的工具链                                                 |
@@ -72,14 +75,15 @@
 #### Variable System (Supporting)
 
 **包:** `@heartrule/core-engine` (同 Consulting Session 包，但内部边界清晰)
-**领域语言:** VariableScope (global/session/phase/topic), extractionMethod (direct/pattern/llm), VariableState, VariableValue
+**领域语言:** VariableScope (session/phase/topic), extractionMethod (direct/pattern/llm), VariableState, VariableValue
 **实体:** `VariableState`
 **领域服务:** `VariableScopeResolver`, `VariableExtractor`
 **关键不变性:**
 
-- 读取优先级: topic > phase > session > global
+- 读取优先级: topic > phase > session
 - 写入位置由 `determineScope()` 决定，不可跨层写入
-- global 变量变更必须触发 `onGlobalVariableChange` 回调
+- 变量只在单次会谈内生效；跨会话状态写入信息点文档，不经变量系统（[ADR 007](../design/decisions/007-variable-document-boundary.md) 决策 2）
+- ⚠️ 实现仍为 4 层（含 global 与 `user_global_variables` 表），落后于上述设计，收口归 Epic D
 
 #### Conversational Memory (Supporting)
 

@@ -33,7 +33,6 @@
     "docker:down": "docker-compose -f docker-compose.dev.yml down",
     "db:migrate": "pnpm --filter api-server db:migrate",
     "db:studio": "pnpm --filter api-server db:studio",
-    "create:sample": "node packages/api-server/create-sample-project.mjs",
     "start:dev": "powershell -ExecutionPolicy Bypass -File ./scripts/start-dev.ps1"
   },
   "devDependencies": {
