@@ -20,7 +20,7 @@
 | [feature]      | ai_ask 的追问循环有硬上限：缺省脚本也保证终止                                                                                                                                     | 「配错脚本也不会无限追问」的测试全绿 + lint/typecheck 通过 + 代码已提交推送 + 本表标 done                       | —           |
 | [feature]      | ai_say 的配置字段只有一个名字（编辑器 / YAML / 引擎三处同名）                                                                                                                     | 三处同名可验证（改一处三处一致）+ lint/typecheck 通过 + 代码已提交推送 + 本表标 done                            | —           |
 
-> 故事 1 来自 Epic A（跨 sprint 结转，关联图纸 `design/memory/ai-ask-memory-recall.md`，该文件目前 `draft`）；故事 2–4 来自 Epic E 的前三条。
+> 故事 1 来自 Epic A（跨 sprint 结转，关联图纸 `design/memory/ai-ask-memory-recall.md`，该图纸已于 2026-09-29 封板 `decision-recorded`——008 ADR，本故事剩实现）；故事 2–4 来自 Epic E 的前三条。
 > 排列顺序 = 执行顺序：故事 1 是结转的 `[intelligence]`，先量尺再谈做多少；故事 2 是本 sprint 的主线。
 
 ## 节奏回顾（Sprint 结束时填）

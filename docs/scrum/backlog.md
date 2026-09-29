@@ -179,8 +179,9 @@
 
 ## 已关闭（Done）
 
-| 故事                                                                        | 关闭日期   |
-| --------------------------------------------------------------------------- | ---------- |
-| [feature] 建立开发节奏系统 + Sprint 0 恢复                                  | 2026-08-15 |
-| [design] memory-retrieval-types 封板（active → decision-recorded，006 ADR） | 2026-09-09 |
-| [design] ai-ask-memory-recall 封板（active → decision-recorded，006 ADR）   | 2026-09-09 |
+| 故事                                                                                           | 关闭日期   |
+| ---------------------------------------------------------------------------------------------- | ---------- |
+| [feature] 建立开发节奏系统 + Sprint 0 恢复                                                     | 2026-08-15 |
+| [design] memory-retrieval-types 封板（active → decision-recorded，006 ADR）                    | 2026-09-09 |
+| [design] ai-ask-memory-recall 封板（active → decision-recorded，006 ADR）                      | 2026-09-09 |
+| [design] ai-ask-memory-recall 二次封板（draft → decision-recorded，008 ADR；09-19 曾退回收敛） | 2026-09-29 |

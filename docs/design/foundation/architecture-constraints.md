@@ -46,7 +46,7 @@ last_updated: 2026-09-08
 - **D3 会话不因记忆失败中断**：retain 是 fire-and-forget；recall 失败返回空上下文。出处：[strategic-design](../../ddd/strategic-design.md) §1.3
 - **D4 SDK 隔离**：端口不泄漏 Hindsight SDK 类型；预 1.0 API 的耦合收敛在适配器内，适配器负责映射。出处：[004 记忆数据模型校准](../decisions/004-memory-model-calibration.md) 决策 6
 - **D5 来源标注经 retain 的 metadata 写入**（`source_channel` / `source_credibility`）。出处：[004 记忆数据模型校准](../decisions/004-memory-model-calibration.md) 决策 4
-- **D6 快通道检索零 LLM**：ai_ask 快通道 recall 查询构造走规则，≤200ms 预算内不做任何 LLM 调用；命中率不足时的升级路径是慢通道（意识触发），不在快通道内加 LLM。出处：[006 检索层范围收敛](../decisions/006-retrieval-layer-scope.md) 决策 3 · [004 记忆数据模型校准](../decisions/004-memory-model-calibration.md)
+- **D6 快通道不新增 LLM 调用**：ai_ask 快通道不新增 LLM 调用、不占 ≤200ms 检索预算的往返——判定并入主线那次生成（输出开头的判定字段），收集前回顾的检索词由代码拼词、零 LLM；命中率不足时的升级路径是慢通道（意识触发），不在快通道内加调用。出处：[008 ai_ask 判定字段](../decisions/008-ai-ask-judgment-field.md) 决策 1/5 · [006 检索层范围收敛](../decisions/006-retrieval-layer-scope.md) 决策 3 · [004 记忆数据模型校准](../decisions/004-memory-model-calibration.md)
 
 ## E. 时间机制
 
