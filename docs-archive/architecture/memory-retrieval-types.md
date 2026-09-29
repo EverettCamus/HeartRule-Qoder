@@ -1,6 +1,21 @@
 ---
-status: decision-recorded
-last_updated: 2026-09-08
+document_id: 'docs-archive-architecture-memory-retrieval-types'
+authority: 'historical'
+status: 'archived'
+archived_date: '2026-09-29'
+source: 'docs'
+path: 'docs/design/memory/memory-retrieval-types.md'
+tags: ['historical', 'reference', 'archived', 'memory', 'retrieval']
+search_priority: 'medium'
+---
+
+# ⚠️ ARCHIVED DOCUMENT
+
+**此文档已归档，仅供参考和历史记录；当前设计权威在 [docs/design/](../../docs/design/README.md)。**
+
+**归档原因**：通用调取抽象路线放弃、九轴坐标系未被使用、三路查询明确弃——决定见 [009 ADR](../../docs/design/decisions/009-nine-axes-retirement.md)。
+**归档日期**：2026-09-29
+
 ---
 
 # 记忆调取机制
