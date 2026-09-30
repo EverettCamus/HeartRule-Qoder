@@ -4,7 +4,6 @@ import { fileURLToPath } from 'url';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
-import websocket from '@fastify/websocket';
 import { config } from 'dotenv';
 import Fastify from 'fastify';
 
@@ -68,13 +67,6 @@ export async function buildApp() {
     uiConfig: {
       docExpansion: 'list',
       deepLinking: true,
-    },
-  });
-
-  // 注册WebSocket插件
-  await app.register(websocket, {
-    options: {
-      maxPayload: 1048576, // 1MB
     },
   });
 

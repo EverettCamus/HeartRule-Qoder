@@ -134,22 +134,9 @@ export async function registerScriptRoutes(app: FastifyInstance) {
       schema: {
         tags: ['scripts'],
         description: '列出所有脚本',
-        querystring: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', enum: ['session', 'technique', 'awareness'] },
-            status: { type: 'string', enum: ['draft', 'published', 'archived'] },
-          },
-        },
       },
     },
     async (_request, reply) => {
-      // TODO: 实现type和status过滤
-      // const { type, status } = _request.query as {
-      //   type?: 'session' | 'technique' | 'awareness';
-      //   status?: 'draft' | 'published' | 'archived';
-      // };
-
       try {
         const repo = new ScriptRepository();
         const allScripts = await repo.listAll();

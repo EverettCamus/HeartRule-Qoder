@@ -54,7 +54,7 @@ HeartRule-Qoder is an AI consulting workflow engine. Domain experts define consu
 | -------------------------- | ------------------------------------------------------- |
 | `@heartrule/shared-types`  | Shared Zod schemas and TypeScript types (no logic)      |
 | `@heartrule/core-engine`   | Six-engine headless core (no HTTP, no database)         |
-| `@heartrule/api-server`    | Fastify REST API + WebSocket, Drizzle ORM, Redis        |
+| `@heartrule/api-server`    | Fastify REST API, Drizzle ORM                           |
 | `@heartrule/script-editor` | React 18 + Ant Design frontend for editing YAML scripts |
 
 ### Core Engine — Six Engines
@@ -398,7 +398,6 @@ Fastify server in `packages/api-server/src/`:
 - Routes: `/api/sessions`, `/api/chat`, `/api/scripts`, `/api/projects`, `/api/versions`
 - API docs: Swagger UI at `/docs` (`@fastify/swagger` + `@fastify/swagger-ui`, registered in `src/app.ts`)
 - Database: PostgreSQL 16 via Drizzle ORM (schema in `src/db/schema.ts`)
-- Cache: Redis via ioredis
 
 #### SessionManager: State Bridge
 
