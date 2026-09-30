@@ -65,7 +65,7 @@ Each archived document carries a YAML frontmatter block:
 > 按 `version:` 键判会**漏**（三键块没有这个键）；按「说明块之后还出现过 `---`」判会**几乎全中**——正文里的 `---` 分隔线到处都是，79 就是这么来的。
 > 上表按**逐篇行级 diff 实际删掉的内容**数：删到 **≥3 条 `---`** = 说明块 + 第二层（43 篇）；**只删到 1 条** = 只有块（37 篇）。加不加 `-w` 读数一致。
 
-**已废弃字段**：`migrated_to`（原 OpenSpec 迁移方案遗留；字段值要么为空、要么指向不存在的路径）、`ai_retrieval_hint`（内容统一是"请优先参考 OpenSpec 文档"，指向已删目录）。**另**：老 frontmatter 里的 `previous_location` / `archived_to` 同属这一类，已一并归并。全部字段已于 2026-09-29 移除，**全档 86 篇统一为上方 8 字段**。
+**已废弃字段**：`migrated_to`（原 OpenSpec 迁移方案遗留；字段值要么为空、要么指向不存在的路径）、`ai_retrieval_hint`（内容统一是"请优先参考 OpenSpec 文档"，指向已删目录）。**另**：老 frontmatter 里的 `previous_location` / `archived_to` 同属这一类，已一并归并。全部字段已于 2026-09-29 移除，**全档 86 篇统一为上方 8 字段**（2026-09-30 增至 **89 篇**，见下）。
 
 **2026-09-29 新收 4 篇**（原先散在包根或仓库根、不属任何索引）：
 
@@ -80,14 +80,29 @@ Each archived document carries a YAML frontmatter block:
 
 同批删除：`research/SSAG介绍.md`、`research/VRM-Verbal-Response-Modes-Translation.md`（`misc/` 已有逐字节相同的另一份）。
 
+**2026-09-30 再收 4 篇**（根 `CLAUDE.md` + 4 篇包级 `AGENTS.md` 五套指令载体的收口，MESS-B-08）：
+
+| 文档                           | 为什么收进来                                    |
+| ------------------------------ | ----------------------------------------------- |
+| `misc/AGENTS-api-server.md`    | 原 `packages/api-server/AGENTS.md`（172 行）    |
+| `misc/AGENTS-core-engine.md`   | 原 `packages/core-engine/AGENTS.md`（210 行）   |
+| `misc/AGENTS-script-editor.md` | 原 `packages/script-editor/AGENTS.md`（255 行） |
+| `misc/AGENTS-shared-types.md`  | 原 `packages/shared-types/AGENTS.md`（262 行）  |
+
+四篇同属一个 commit `c03cce8`（2026-03-01），与 `.opencode/` 目录同批引入，**此后 7 个月零更新**——是 opencode 时期的 agent 指令残留，不是本仓库现行载体（现行只有根 `CLAUDE.md` 与 `.claude/skills/heartrule-*/`）。因四篇原名都叫 `AGENTS.md`，归档时按包名改名；`source` 记 `packages/<包>`，`path` 记原路径。
+
+> **引用它们行号的老文档要注意**：归档时在正文前插了 frontmatter + 归档横幅，**原第 N 行现在位于 N + 偏移**。偏移量：`api-server` **+23**、`core-engine` **+23**、`script-editor` **+22**、`shared-types` **+21**。`docs/audit/` 里按行号引用这四篇的地方按此换算。
+
+同批删除：`misc/Heart Rule脚本定义需求.md`（与 `legacy-script-definition-requirements.md` 正文逐字节相同）。
+
 > **正文里出现 `openspec` 是正常的**（如 `misc/2026-03-11-document-restructure-design.md` 本身就在讲 OpenSpec 方案）——要清的是**元数据层**的死引用，不是正文内容。
 
 ### 已知重复（去重记录）
 
-| 文档                                                                                | 处置                                                                    |
-| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `SSAG介绍.md`、`VRM-…Translation.md`                                                | `research/` 的裸副本已删，留 `misc/` 带归档包装那份（剥壳后逐字节相同） |
-| `misc/Heart Rule脚本定义需求.md` vs `misc/legacy-script-definition-requirements.md` | **同一文档两份（正文逐字节相同）**，尚未去重，待裁                      |
+| 文档                                                                                | 处置                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SSAG介绍.md`、`VRM-…Translation.md`                                                | `research/` 的裸副本已删，留 `misc/` 带归档包装那份（剥壳后逐字节相同）                                                                                                                                                                                                                                |
+| `misc/Heart Rule脚本定义需求.md` vs `misc/legacy-script-definition-requirements.md` | **已去重**（2026-09-30）：剥壳后正文逐字节相同（54,168 字节、md5 一致），删带空格的中文名那份，留 ASCII 名的 `legacy-…`。**副作用**：全仓含空格文件名就此归零，MESS-X-01 那个「`find \| xargs wc` 遇空格静默出错」的实例在 HEAD 上不复存在（教训本身仍有效，见 `docs/audit/mess-map.md` 顶部扫描纪律） |
 
 ## Related Documents
 

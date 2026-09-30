@@ -7,6 +7,11 @@
 > **扫描日期**：2026-09-28
 > **扫描范围**：`docs/`（ddd 6 篇 · design 22 篇 · design/decisions 7 篇 · process/reference/scrum/superpowers）· `docs-archive/`（domain 3 · architecture 2 · product 1 · misc 60 · research 5 · bugfix 7 · test 3 · temp 2）· `packages/**/*.md`（30 篇）· 根 `README.md` / `CLAUDE.md` / `QUICK_START_GUIDE.md` / `DEV_START_GUIDE.md` / `_system/README.md`
 
+> **⚠️ 2026-09-30 追注（再搬迁）**：本表成文后又有两批变动，**本表下方路径与行号一律按扫描当日记录，未逐处改写**：
+>
+> 1. **4 篇包级 `AGENTS.md` 已归档**到 `docs-archive/misc/`，并按包名改名：`packages/{api-server,core-engine,script-editor,shared-types}/AGENTS.md` → `docs-archive/misc/AGENTS-{同包名}.md`（MESS-B-08 裁决）。归档时文首插入了 frontmatter + 归档横幅，**原第 N 行现位于 N + 偏移**：`api-server` **+23**、`core-engine` **+23**、`script-editor` **+22**、`shared-types` **+21**。只引路径不引行号的地方，换路径即可。
+> 2. **`docs-archive/misc/Heart Rule脚本定义需求.md` 已删除**——与 `legacy-script-definition-requirements.md` 剥壳后正文逐字节相同（54,168 字节、md5 一致）。本表引用它的地方，内容改看 `legacy-script-definition-requirements.md`。顺带一提：**全仓含空格文件名就此归零**。
+>
 > **⚠️ 2026-09-29 追注（搬迁后）**：本表成文后，`packages/core-engine/` 下三份计划已搬进 `docs-archive/misc/`——`SCRIPT_EXECUTOR_PHASE5_REFACTORING_PLAN.md`、`DDD_HEXAGONAL_REFACTORING_PLAN.md`、`DEPRECATED_CODE_CLEANUP_PLAN.md`。本表下方引用里凡出现 `packages/core-engine/<那三个文件名>:行号`，**文件请改到 `docs-archive/misc/<同名>` 找**。
 >
 > **但行号已经不能用了——本表曾写「行号不变」，那句是错的。** 实测：搬迁在每份文首插入 8 字段 frontmatter（+11 行），此后又各补了一段「归档说明」横幅（+3 / +8 / +5 行），**三份的当前偏移各不相同**：

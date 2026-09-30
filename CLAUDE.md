@@ -396,7 +396,8 @@ If specific → scripts. If universal → code.
 Fastify server in `packages/api-server/src/`:
 
 - Routes: `/api/sessions`, `/api/chat`, `/api/scripts`, `/api/projects`, `/api/versions`
-- Database: PostgreSQL 16 via Drizzle ORM (schema in `src/db/schema/`)
+- API docs: Swagger UI at `/docs` (`@fastify/swagger` + `@fastify/swagger-ui`, registered in `src/app.ts`)
+- Database: PostgreSQL 16 via Drizzle ORM (schema in `src/db/schema.ts`)
 - Cache: Redis via ioredis
 
 #### SessionManager: State Bridge

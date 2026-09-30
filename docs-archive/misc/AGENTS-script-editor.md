@@ -1,3 +1,26 @@
+---
+document_id: 'docs-archive-misc-agents-script-editor'
+authority: 'historical'
+status: 'archived'
+archived_date: '2026-09-30'
+source: 'packages/script-editor'
+path: 'packages/script-editor/AGENTS.md'
+tags: ['historical', 'reference', 'archived', 'misc']
+search_priority: 'medium'
+---
+
+> **⚠️ 归档说明（2026-09-30，MESS-B-08 · 待裁第三轮 #1 裁决）**：本文档原在 `packages/script-editor/AGENTS.md`。
+> 四篇包级 `AGENTS.md`（合计 899 行）写于 **2026-03-01 同一个 commit `c03cce8`**，与 `.opencode/` 目录同批引入，
+> **此后 7 个月零更新**——它们是 opencode 时期的 agent 指令残留，不是本仓库现行的指令载体。
+> 现行载体只有根 `CLAUDE.md` 与 `.claude/skills/heartrule-*/`。现整批搬入 `docs-archive/misc/`。
+>
+> **本文档已失效的部分（逐条实测）**：
+>
+> - `:9`、`:88`、`:174`、`:255` 称前端技术栈是 **Tailwind CSS 3.x**——`packages/script-editor/package.json` 里 **tailwind 依赖 0 处**，编辑器用的是 **Ant Design**（见根 `CLAUDE.md` 的包表）。
+> - `:241` 起的「专门技能推荐」技能名已全部不存在（同 api-server 篇，MESS-E-07）。
+>
+> **权威版本在哪**：包与仓库的架构、命令、目录约定以根 `CLAUDE.md` 为准；设计与领域模型以 `docs/design/` 为准（`docs/design/README.md` 是状态表 + ADR 注册表）。**本文档最后更新于 2026-03-01，不要照做。**
+
 # AGENTS.md - 前端编辑器层
 
 ## 技术栈特性

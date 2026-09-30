@@ -5,6 +5,11 @@
 > **证据**：每条结论带 `文件:行号`。本文只读，未改动任何代码与已有文档；唯一新增文件即本篇。
 > **读法**：与清单不一致处已显式标出（CAP-02 档位、CAP-03「三策略」口径）。跨能力的「模板模式 vs 非模板模式」对照单列一节（清单 §4.4 交办）。
 > **未覆盖**：会话状态桥（CAP-07）、变量四级作用域（CAP-09）、记忆（CAP-08）、监控反馈（清单 §二第 3 行）、安全兜底（CAP-06）分属同批其他簇；本文只在它们与 CAP-01~04 直接相交时引用。
+>
+> **⚠️ 2026-09-30 追注（再搬迁）**：本表成文后又有两批变动，**本表下方路径与行号一律按扫描当日记录，未逐处改写**：
+>
+> 1. **4 篇包级 `AGENTS.md` 已归档**到 `docs-archive/misc/`，并按包名改名：`packages/{api-server,core-engine,script-editor,shared-types}/AGENTS.md` → `docs-archive/misc/AGENTS-{同包名}.md`（MESS-B-08 裁决）。归档时文首插入了 frontmatter + 归档横幅，**原第 N 行现位于 N + 偏移**：`api-server` **+23**、`core-engine` **+23**、`script-editor` **+22**、`shared-types` **+21**。只引路径不引行号的地方，换路径即可。
+> 2. **`docs-archive/misc/Heart Rule脚本定义需求.md` 已删除**——与 `legacy-script-definition-requirements.md` 剥壳后正文逐字节相同（54,168 字节、md5 一致）。本表引用它的地方，内容改看 `legacy-script-definition-requirements.md`。顺带一提：**全仓含空格文件名就此归零**。
 
 ---
 

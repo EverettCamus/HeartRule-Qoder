@@ -4,6 +4,11 @@
 > 主依赖：`docs/audit/domain-ledger.md`（领域设计分布）、`docs/audit/mess-map.md`（混乱地图）、`docs/audit/capability-inventory.md`（能力清单）。
 > 口径：每条给出**两侧 `file:line`**；"活的是哪侧"以 `packages/*/src` 与 `packages/*/test` 的 grep 调用点为准（**不含 `dist/` 构建产物**）；差异性质二分为**抄错/抄漏**（同一份东西被复制后未同步）与**演化分叉**（同一职责先后长出两套，各自都对过当时的需求）。
 
+> **⚠️ 2026-09-30 追注（再搬迁）**：本表成文后又有两批变动，**本表下方路径与行号一律按扫描当日记录，未逐处改写**：
+>
+> 1. **4 篇包级 `AGENTS.md` 已归档**到 `docs-archive/misc/`，并按包名改名：`packages/{api-server,core-engine,script-editor,shared-types}/AGENTS.md` → `docs-archive/misc/AGENTS-{同包名}.md`（MESS-B-08 裁决）。归档时文首插入了 frontmatter + 归档横幅，**原第 N 行现位于 N + 偏移**：`api-server` **+23**、`core-engine` **+23**、`script-editor` **+22**、`shared-types` **+21**。只引路径不引行号的地方，换路径即可。
+> 2. **`docs-archive/misc/Heart Rule脚本定义需求.md` 已删除**——与 `legacy-script-definition-requirements.md` 剥壳后正文逐字节相同（54,168 字节、md5 一致）。本表引用它的地方，内容改看 `legacy-script-definition-requirements.md`。顺带一提：**全仓含空格文件名就此归零**。
+
 ## 总述
 
 同一件事被定义两次以上的实例，本报告记 **27 对**，分布在五类：双实现 7、同概念多名 5、同名多实 5（其中 3 条是纯文档侧）、文档重复 5（另有一条实测为"无重复"，见四-5）、层级重复 5（其中 3 条与双实现/同名多实是同一对的两面，已交叉标注）。
