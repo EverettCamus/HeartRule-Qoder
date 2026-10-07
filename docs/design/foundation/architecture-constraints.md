@@ -26,7 +26,7 @@ last_updated: 2026-09-08
 - **B1 script-execution 是唯一编排器**：六引擎由 `ScriptExecutor` 调用，引擎之间无循环依赖。出处：CLAUDE.md
 - **B2 模板两层解析**：Custom scheme 优先 → Default 兜底；变量替换两层：系统变量 `{%var%}` → 脚本变量 `{{var}}`。出处：[strategic-design](../../ddd/strategic-design.md) §1.3 Prompt Engineering
 - **B3 变量作用域三层**：读取优先级 topic > phase > session；写入位置由 `determineScope()` 决定，不可跨层写入。global 层取消——跨会话状态唯一权威为信息点文档（[007 ADR](../decisions/007-variable-document-boundary.md) 决策 2）。出处：[strategic-design](../../ddd/strategic-design.md) §1.3 Variable System · `../decisions/007-variable-document-boundary.md`
-- **B4 代码-vs-脚本边界**：所有咨询领域通用的能力进代码（core-engine/api-server）；领域特定内容进 YAML scripts + templates，不在 TypeScript 硬编码咨询逻辑。出处：CLAUDE.md 设计哲学原则 1
+- **B4 代码-vs-脚本边界**：所有咨询领域通用的能力进代码（core-engine/api-server）；领域特定内容（术语、规则、阈值、处置脚本）经配置层 / 脚本层进入（YAML scripts + templates），不在 TypeScript 硬编码咨询逻辑；引擎侧只留通道与槽位契约——心理咨询是验证案例，不是产品边界。出处：CLAUDE.md 设计哲学原则 1 · [consulting-intelligence-mechanism](consulting-intelligence-mechanism.md)《安全通道》
 - **B5 智能实现仍守 DDD 结构纪律**：引擎机制的实现代码遵守限界上下文、端口、战术设计，照样进 spec。出处：[development-rhythm](../../process/development-rhythm.md) §6
 
 ## C. 引擎机制不变量
